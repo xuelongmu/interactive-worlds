@@ -310,6 +310,9 @@ export class WorldModelScenePlayer {
 
   private async startFallback(): Promise<void> {
     const { manifest, onStatus } = this.opts;
+    // a partial live connect may have bound its MediaStream to the element;
+    // it would shadow src and the fallback would never advance
+    this.video.srcObject = null;
     const url = manifest.assets.fallbackVideo;
     let playable = false;
     if (url) {

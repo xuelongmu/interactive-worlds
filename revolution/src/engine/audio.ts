@@ -12,6 +12,7 @@ export class AudioEngine {
   private ctx: AudioContext | null = null;
   private buses = new Map<BusName, GainNode>();
   private ambienceSources: AudioBufferSourceNode[] = [];
+  private ambienceGeneration = 0;
   private bufferCache = new Map<string, AudioBuffer | null>();
   onSubtitle: (text: string | null) => void = () => {};
 
@@ -90,8 +91,12 @@ export class AudioEngine {
   async playAmbience(urls: string[]) {
     const ctx = this.ensure();
     this.stopAmbience();
+    const generation = this.ambienceGeneration;
     for (const url of urls) {
       const buffer = await this.load(url);
+      // a scene change while the bed was still loading wins; don't start
+      // the previous scene's loop over the new chapter
+      if (generation !== this.ambienceGeneration) return;
       if (!buffer) continue;
       const source = ctx.createBufferSource();
       source.buffer = buffer;
@@ -103,6 +108,7 @@ export class AudioEngine {
   }
 
   stopAmbience() {
+    this.ambienceGeneration++;
     for (const s of this.ambienceSources) {
       try { s.stop(); } catch { /* already stopped */ }
     }

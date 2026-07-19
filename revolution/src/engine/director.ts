@@ -281,12 +281,19 @@ export class Director {
         const video = document.createElement("video");
         video.className = "cutscene-video";
         video.src = url;
-        video.autoplay = true;
         video.playsInline = true;
         this.videoHost.appendChild(video);
         this.videoHost.classList.add("visible");
-        video.addEventListener("ended", () => { video.remove(); done(); });
-        video.addEventListener("error", () => { video.remove(); done(); });
+        const finish = () => { video.remove(); done(); };
+        video.addEventListener("ended", finish, { once: true });
+        video.addEventListener("error", finish, { once: true });
+        // start playback explicitly: if the gesture token has expired the
+        // unmuted play() rejects — retry muted, and bail rather than hold
+        // controls locked forever
+        void video.play().catch(async () => {
+          video.muted = true;
+          try { await video.play(); } catch { finish(); }
+        });
         this.fadeTo(0);
       });
       await this.fadeTo(1);
