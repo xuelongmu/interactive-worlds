@@ -5,6 +5,7 @@ import {
   canDispatchWorldModelAction,
   bindWorldModelKeys,
   createReactorWorldModel,
+  formatSessionRetryAfter,
   formatWorldModelError,
   frameHasVisibleContent,
   isGroundedWorldModelEvent,
@@ -78,9 +79,13 @@ describe("Reactor world-model selection", () => {
     );
   });
 
-  it("recognizes an HTTP 503 without matching unrelated numbers", () => {
+  it("recognizes capacity statuses without matching unrelated errors", () => {
     expect(isReactorCapacityErrorStatus("token mint failed: 503 capacity exhausted")).toBe(true);
+    expect(isReactorCapacityErrorStatus(
+      "Live connection failed: Live session limit reached. Try again in about 1 hour."
+    )).toBe(true);
     expect(isReactorCapacityErrorStatus("error 1503")).toBe(false);
+    expect(isReactorCapacityErrorStatus("Live connection failed: token mint failed (429)")).toBe(false);
   });
 });
 
@@ -324,6 +329,34 @@ describe("WorldModelSession lifecycle", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("shows a clear retry message when session admission is full", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(
+      { error: "session capacity reached", code: "session_capacity_reached" },
+      { status: 429, headers: { "retry-after": "3600" } }
+    )));
+
+    await expect(WorldModelSession.mintJwt()).rejects.toThrow(
+      "Live session limit reached. Try again in about 1 hour."
+    );
+  });
+
+  it("does not label an unrelated intermediary 429 as session capacity", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(
+      { error: "edge rate limit", code: "edge_rate_limited" },
+      { status: 429, headers: { "retry-after": "60" } }
+    )));
+
+    await expect(WorldModelSession.mintJwt()).rejects.toThrow("token mint failed (429)");
+  });
+
+  it("formats client-window and daily-limit retry durations", () => {
+    expect(formatSessionRetryAfter("45")).toBe("45 seconds");
+    expect(formatSessionRetryAfter("600")).toBe("10 minutes");
+    expect(formatSessionRetryAfter("7200")).toBe("2 hours");
+    expect(formatSessionRetryAfter("86460")).toBe("1 day");
+    expect(formatSessionRetryAfter("invalid")).toBeNull();
   });
 
   it("prepares transport and conditions without starting generation", async () => {
@@ -894,6 +927,23 @@ describe("presentation and rollover gates", () => {
     expect(onStatus).toHaveBeenCalledOnce();
     expect(onStatus).toHaveBeenLastCalledWith(
       "Live connection failed: token mint failed: 503 capacity exhausted"
+    );
+  });
+
+  it("keeps broker session-limit guidance visible while fallback playback starts", () => {
+    const onStatus = vi.fn();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.opts = { onStatus };
+    player.stickyCapacityStatus = null;
+
+    player.reportStatus(
+      "Live connection failed: Live session limit reached. Try again in about 1 hour."
+    );
+    player.reportStatus("playing pre-rendered fallback");
+
+    expect(onStatus).toHaveBeenCalledOnce();
+    expect(onStatus).toHaveBeenLastCalledWith(
+      "Live connection failed: Live session limit reached. Try again in about 1 hour."
     );
   });
 

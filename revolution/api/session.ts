@@ -518,7 +518,7 @@ function limitResponse(admission: Admission, config: BrokerConfig, now: Date): R
     : secondsUntilNextUtcDay(now);
   return json(
     429,
-    { error: "session capacity reached" },
+    { error: "session capacity reached", code: "session_capacity_reached" },
     { "retry-after": String(retryAfter) }
   );
 }
