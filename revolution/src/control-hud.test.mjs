@@ -5,7 +5,8 @@ import {
   defaultControlHandoff,
   instructionHudMarkup,
   InstructionHudModel,
-  withBranchPresentation,
+  publishControlHandoff,
+  publishPauseState,
 } from "./control-hud.ts";
 import {
   createBranchState,
@@ -83,7 +84,7 @@ test("renderer transitions reset demonstrated guidance and pause suppresses the 
 
   model.transition({
     ...defaultControlHandoff("tea-party", "worldmodel"),
-    transitionKey: "tea-party:wake:worldmodel",
+    transitionKey: 1,
   });
   assert.equal(model.snapshot().reason, "early");
   model.setPaused(true);
@@ -111,10 +112,12 @@ test("paused or disabled input is not credited as demonstrated", () => {
 
 test("#52 branch presentation supplies exact actions without leaking into subtitles", () => {
   const base = defaultControlHandoff("delaware", "worldmodel");
-  const choice = withBranchPresentation(
-    base,
-    getBranchPresentation(createBranchState(), "delaware-pole-choice")
-  );
+  const presentation = getBranchPresentation(createBranchState(), "delaware-pole-choice");
+  const choice = {
+    ...base,
+    action: presentation.action,
+    acknowledgement: presentation.acknowledgement,
+  };
   assert.deepEqual(choice.action, {
     binding: "E",
     label: "Pole from the bow",
@@ -122,19 +125,23 @@ test("#52 branch presentation supplies exact actions without leaking into subtit
   });
   assert.equal(choice.acknowledgement, null);
 
-  const outOfRange = withBranchPresentation(
-    { ...base, action: { binding: "E", label: "Interact", usable: true } },
-    getBranchPresentation(createBranchState(), "out-of-range")
-  );
+  const neutral = getBranchPresentation(createBranchState(), "out-of-range");
+  const outOfRange = {
+    ...base,
+    action: neutral.action,
+    acknowledgement: neutral.acknowledgement,
+  };
   assert.equal(outOfRange.action, null);
 });
 
 test("Trenton acknowledgement and usable action share only the instruction layer", () => {
   const selected = selectDelawareDuty(createBranchState(), "clear-ice");
-  const controls = withBranchPresentation(
-    defaultControlHandoff("trenton", "worldmodel"),
-    getBranchPresentation(selected, "trenton-duty-callback")
-  );
+  const presentation = getBranchPresentation(selected, "trenton-duty-callback");
+  const controls = {
+    ...defaultControlHandoff("trenton", "worldmodel"),
+    action: presentation.action,
+    acknowledgement: presentation.acknowledgement,
+  };
   const model = new InstructionHudModel();
   model.transition(controls);
   const snapshot = model.snapshot();
@@ -146,9 +153,63 @@ test("Trenton acknowledgement and usable action share only the instruction layer
     label: "Clear the gun path",
     usable: true,
   }]);
+  assert.equal(snapshot.bindings[0], presentation.action);
   assert.equal(
     controlAnnouncement(snapshot),
     "Instruction. At the crossing, you chose to clear ice from the hull. " +
       "Action available. E — Clear the gun path."
   );
+});
+
+test("Director callback bridge preserves exact control and pause detail", () => {
+  const branch = getBranchPresentation(
+    selectDelawareDuty(createBranchState(), "pole"),
+    "trenton-duty-callback"
+  );
+  const detail = {
+    sceneId: "trenton",
+    renderer: "worldmodel",
+    controlsEnabled: true,
+    movement: { binding: "WASD", label: "Move" },
+    look: { binding: "Mouse", label: "Look" },
+    action: branch.action,
+    acknowledgement: branch.acknowledgement ?? undefined,
+    transitionKey: 9,
+  };
+  const events = [];
+  const target = {
+    dispatchEvent(event) {
+      events.push(event);
+      return true;
+    },
+  };
+
+  assert.equal(publishControlHandoff(detail, target), true);
+  assert.equal(events[0].type, "revolution:control-handoff");
+  assert.equal(events[0].detail, detail);
+  assert.equal(events[0].detail.action, branch.action);
+
+  const pause = { paused: true, canResumePointerInput: true };
+  assert.equal(publishPauseState(pause, target), true);
+  assert.equal(events[1].type, "revolution:pause-state");
+  assert.equal(events[1].detail, pause);
+});
+
+test("unusable and null #58 actions never become prompts", () => {
+  const model = new InstructionHudModel();
+  const state = createBranchState();
+  const unusable = getBranchPresentation(state, "delaware-clear-ice-choice", false);
+  model.transition({
+    ...defaultControlHandoff("delaware", "worldmodel"),
+    action: unusable.action,
+  });
+  assert.ok(model.snapshot().bindings.every((binding) => binding.binding !== "E"));
+
+  const neutral = getBranchPresentation(state, "out-of-range");
+  model.transition({
+    ...defaultControlHandoff("delaware", "worldmodel"),
+    action: neutral.action,
+    transitionKey: 2,
+  });
+  assert.ok(model.snapshot().bindings.every((binding) => binding.binding !== "E"));
 });

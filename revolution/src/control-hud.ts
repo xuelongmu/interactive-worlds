@@ -1,9 +1,12 @@
-import type { SceneManifest } from "./engine/types";
-import type { BranchPresentationState } from "./branch-state";
+import type {
+  ControlHandoffDetail as RuntimeControlHandoffDetail,
+  RuntimePauseDetail,
+  SceneManifest,
+} from "./engine/types";
 
 export const CONTROL_STALL_DELAY_MS = 10_000;
 
-export type ControlRenderer = SceneManifest["renderer"] | "cutscene";
+export type ControlRenderer = RuntimeControlHandoffDetail["renderer"];
 export type ControlModality = "keyboard-mouse" | "touch" | "controller";
 
 export interface ControlBinding {
@@ -19,11 +22,10 @@ export interface ContextualActionBinding extends ControlBinding {
 
 /** Typed presentation seam owned by the shell. Renderers/director lifecycle
  * code may publish this state without owning any HUD markup or copy. */
-export interface ControlHandoffDetail {
-  sceneId: string;
-  renderer: ControlRenderer;
-  transitionKey: string | number;
-  controlsEnabled: boolean;
+export interface ControlHandoffDetail extends Omit<
+  RuntimeControlHandoffDetail,
+  "movement" | "look" | "action" | "acknowledgement"
+> {
   movement?: ControlBinding;
   look?: ControlBinding;
   action?: ContextualActionBinding | null;
@@ -31,16 +33,37 @@ export interface ControlHandoffDetail {
   fallbacks?: ControlBinding[];
 }
 
-export interface PauseStateDetail {
-  paused: boolean;
-  canResumePointerInput: boolean;
-}
+export type PauseStateDetail = RuntimePauseDetail;
 
 declare global {
   interface WindowEventMap {
     "revolution:control-handoff": CustomEvent<ControlHandoffDetail>;
     "revolution:pause-state": CustomEvent<PauseStateDetail>;
   }
+}
+
+interface HudEventTarget {
+  dispatchEvent(event: Event): boolean;
+}
+
+export function publishControlHandoff(
+  detail: RuntimeControlHandoffDetail,
+  target: HudEventTarget = window
+): boolean {
+  return target.dispatchEvent(new CustomEvent<ControlHandoffDetail>(
+    "revolution:control-handoff",
+    { detail }
+  ));
+}
+
+export function publishPauseState(
+  detail: RuntimePauseDetail,
+  target: HudEventTarget = window
+): boolean {
+  return target.dispatchEvent(new CustomEvent<PauseStateDetail>(
+    "revolution:pause-state",
+    { detail }
+  ));
 }
 
 export type InstructionReason = "hidden" | "early" | "stalled" | "guidance" | "action";
@@ -61,23 +84,10 @@ export function defaultControlHandoff(
   return {
     sceneId,
     renderer,
-    transitionKey: `${sceneId}:${renderer}:initial`,
+    transitionKey: 0,
     controlsEnabled: true,
     movement: locomotion ? { binding: "W A S D", label: "Move", modality: "keyboard-mouse" } : undefined,
     look: locomotion ? { binding: "Mouse", label: "Look", modality: "keyboard-mouse" } : undefined,
-  };
-}
-
-/** #52 owns branch selection and copy. The HUD only combines its typed output
- * with #37's live renderer availability; it never derives branch context. */
-export function withBranchPresentation(
-  controls: ControlHandoffDetail,
-  branch: BranchPresentationState
-): ControlHandoffDetail {
-  return {
-    ...controls,
-    action: branch.action,
-    acknowledgement: branch.acknowledgement,
   };
 }
 
@@ -356,10 +366,9 @@ export function labelSpokenContent(element: HTMLElement) {
   element.setAttribute("aria-atomic", "true");
 }
 
-/** Compatibility bridge while #37 owns the director lifecycle. Existing
- * beat guidance is moved into the instruction region, and the pause dialog's
- * visibility suppresses the HUD. Neither legacy element remains exposed as
- * a competing accessibility layer. */
+/** Existing beat guidance is moved into the instruction region. Neither
+ * legacy guidance element remains exposed as a competing accessibility
+ * layer; runtime control and pause state arrive only through DirectorOptions. */
 export function bridgeDirectorChrome(
   stage: HTMLElement,
   controller: InstructionHudController
@@ -391,15 +400,9 @@ export function bridgeDirectorChrome(
     subtree: true,
   });
 
-  const pause = stage.querySelector<HTMLElement>(".pause-overlay");
-  const syncPause = () => controller.setPaused(!(pause?.hidden ?? true));
-  const pauseObserver = pause ? new MutationObserver(syncPause) : null;
-  pauseObserver?.observe(pause!, { attributes: true, attributeFilter: ["hidden"] });
   syncGuidance();
-  syncPause();
 
   return () => {
     guidanceObserver?.disconnect();
-    pauseObserver?.disconnect();
   };
 }

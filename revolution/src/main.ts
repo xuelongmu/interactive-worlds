@@ -22,8 +22,9 @@ import {
 } from "./shell";
 import {
   bridgeDirectorChrome,
-  defaultControlHandoff,
   mountInstructionHud,
+  publishControlHandoff,
+  publishPauseState,
   type InstructionHudController,
 } from "./control-hud";
 
@@ -61,6 +62,8 @@ async function play(sceneId: string, newStory = false) {
     container: app,
     reviewMode,
     ...soundHooks,
+    onControlHandoff: (detail) => { publishControlHandoff(detail); },
+    onPauseState: (detail) => { publishPauseState(detail); },
     onExit: (target = "title") => {
       disconnectChromeBridge?.();
       disconnectChromeBridge = null;
@@ -80,9 +83,6 @@ async function play(sceneId: string, newStory = false) {
   disconnectChromeBridge = bridgeDirectorChrome(stage, instructionHud);
   if (scene) enhancePausePresentation(stage, splitChapterHeading(scene.title));
   await nextDirector.start(sceneId);
-  if (scene && instructionHud) {
-    instructionHud.update(defaultControlHandoff(scene.id, scene.renderer));
-  }
 }
 
 function shellHeader(backTarget?: ShellView) {

@@ -75,10 +75,6 @@ export function hasChapterDevOverride(search: string): boolean {
   return new URLSearchParams(search).get("unlock") === "chapters";
 }
 
-export function isPauseToggleCode(code: string): boolean {
-  return code === "Escape" || code === "KeyP";
-}
-
 /** Presentation-only pause enhancement. The director continues to own pause
  * state, navigation, input release, focus trapping, and settings lifecycle. */
 export function enhancePausePresentation(stage: HTMLElement, heading: ChapterHeading) {
