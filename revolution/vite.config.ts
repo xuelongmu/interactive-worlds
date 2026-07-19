@@ -4,7 +4,11 @@ import { resolve } from "node:path";
 
 const root = __dirname;
 const DEFAULT_REACTOR_MODEL = "reactor/lingbot-world-2";
-const ALLOWED_REACTOR_MODELS = new Set([DEFAULT_REACTOR_MODEL, "reactor/lingbot"]);
+const ALLOWED_REACTOR_MODELS = new Set([
+  DEFAULT_REACTOR_MODEL,
+  "reactor/lingbot",
+  "reactor/helios",
+]);
 
 /** Read a key from process.env, ./.env, or the parent workspace .env. */
 function readEnvValue(name: string): string {
