@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .env
+.env.local
+production.env
 # generated, reproducible via pipeline/
 public/assets/
 public/reference/
