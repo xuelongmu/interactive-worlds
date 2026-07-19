@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  assertConditioningFrameAvailable,
   reusablePinnedWorldId,
   worldAssetCacheMatches,
   worldGenerationSignature,
@@ -41,6 +42,17 @@ test("a conditioning-frame correction invalidates a Marble take", () => {
     worldGenerationSignature(conditioned, [originalFrame]),
     worldGenerationSignature(conditioned, [correctedFrame]),
   );
+});
+
+test("a missing configured frame fails instead of permitting text-only generation", () => {
+  const conditioned = { ...entry, image: "public/reference/example.jpg" };
+
+  assert.throws(
+    () => assertConditioningFrameAvailable(conditioned, false),
+    /run pipeline:frames before pipeline:worlds \(refusing text-only generation\)/,
+  );
+  assert.doesNotThrow(() => assertConditioningFrameAvailable(conditioned, true));
+  assert.doesNotThrow(() => assertConditioningFrameAvailable(entry, false));
 });
 
 test("legacy or stale local assets do not satisfy the world cache", () => {

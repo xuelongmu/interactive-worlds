@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { frames } from "./frames.mjs";
 import { visualSources } from "./visual-sources.mjs";
 
-const expectedFrames = ["assembly-room.jpg", "delaware.jpg", "griffins-wharf.jpg", "lexington.jpg", "saratoga-charge.jpg", "surrender-field.jpg", "teaparty-deck.jpg", "treaty-paris.jpg", "trenton.jpg", "valley-forge.jpg", "yorktown-redoubt.jpg"];
+const expectedFrames = frames.map((frame) => frame.file);
 
 test("every generated frame has committed visual provenance", () => {
   assert.deepEqual(Object.keys(visualSources).sort(), expectedFrames.sort());

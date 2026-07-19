@@ -11,6 +11,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { requireKey, projectRoot, download, pollUntil } from "./lib.mjs";
 import {
+  assertConditioningFrameAvailable,
   reusablePinnedWorldId,
   WORLD_MODEL,
   worldAssetCacheMatches,
@@ -59,10 +60,14 @@ async function generateWorld(entry) {
   let worldId = worldIdFlag ?? pinnedWorldId;
 
   if (!worldId) {
-    // Image-prompted when a starting frame exists (pipeline/frames.mjs),
-    // text-only otherwise. marble-1.1-plus = larger worlds.
+    const imageAvailable = entry.image
+      ? existsSync(resolve(projectRoot, entry.image))
+      : false;
+    assertConditioningFrameAvailable(entry, imageAvailable);
+    // Configured scenes are image-prompted from pipeline/frames.mjs; scenes
+    // without an image remain text-only. marble-1.1-plus = larger worlds.
     let worldPrompt = { type: "text", text_prompt: entry.prompt };
-    if (entry.image && existsSync(resolve(projectRoot, entry.image))) {
+    if (entry.image) {
       console.log(`uploading starting frame ${entry.image}…`);
       const assetId = await uploadMediaAsset(entry.image);
       worldPrompt = {
@@ -70,8 +75,6 @@ async function generateWorld(entry) {
         image_prompt: { source: "media_asset", media_asset_id: assetId },
         text_prompt: entry.prompt,
       };
-    } else if (entry.image) {
-      console.log(`(starting frame ${entry.image} not found — run pipeline:frames first; using text prompt)`);
     }
     console.log("generating (typically ~5 minutes)…");
     const res = await fetch(`${API}/worlds:generate`, {

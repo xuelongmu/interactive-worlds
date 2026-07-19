@@ -4,6 +4,16 @@ import { hash } from "./lib.mjs";
 
 export const WORLD_MODEL = "marble-1.1-plus";
 
+/** Never substitute text-only generation for a configured conditioning frame. */
+export function assertConditioningFrameAvailable(entry, imageAvailable) {
+  if (entry.image && !imageAvailable) {
+    throw new Error(
+      `${entry.scene}: starting frame ${entry.image} is required; ` +
+      `run pipeline:frames before pipeline:worlds (refusing text-only generation)`,
+    );
+  }
+}
+
 /** Hash every committed input that identifies a Marble take. */
 export function worldGenerationSignature(entry, frameDefinitions = frames) {
   const imageFile = entry.image ? basename(entry.image) : null;
