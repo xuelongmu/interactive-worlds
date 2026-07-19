@@ -6,7 +6,7 @@
     "splat": "/assets/worlds/griffins-wharf.spz",
     "collider": "/assets/worlds/griffins-wharf-collider.glb",
     "referenceImage": "/reference/teaparty-deck.jpg",
-    "prompt": "First-person view on the deck of an 18th century merchant ship at night, moored at a Boston wharf in December 1773. Men loosely disguised with blankets, soot-darkened faces and feathers hoist heavy wooden tea chests from the hold with block and tackle, break them open at the rail with hatchets, and pour the tea into the dark harbor water below. Lantern light, cold breath, a huge silent crowd on the wharf beyond. No modern objects. Realistic, very low light.",
+    "prompt": "First-person view on the deck of an 18th century merchant ship at night, moored at a Boston wharf in December 1773. Organized work parties in varied loose disguises—blankets and soot-darkened faces, with feathers neither uniform nor dominant—hoist heavy wooden tea chests from the hold with block and tackle, break them open at the rail with hatchets, and pour the tea into the dark harbor below. Lantern light, cold breath, a huge silent crowd on the wharf beyond. No modern objects. Realistic, very low light.",
     "fallbackVideo": "/assets/video/teaparty-deck.mp4"
   },
   "locomotion": { "eyeHeight": 1.65, "speed": 1.2 },

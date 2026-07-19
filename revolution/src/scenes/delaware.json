@@ -4,7 +4,7 @@
   "renderer": "worldmodel",
   "assets": {
     "referenceImage": "/reference/delaware.jpg",
-    "prompt": "First-person view from inside a crowded wooden Durham boat crossing a wide dark river at night in winter. Chunks of ice float on black water. Sleet and snow fall. Continental Army soldiers in 1776 uniforms and blankets huddle low in the boat; boatmen pole and row. Other boats are barely visible in the dark. No modern objects. Grim, cold, realistic, very low light.",
+    "prompt": "First-person view low inside a broad, high-sided 40–60-foot wooden Durham freight boat crossing a wide dark river at night in winter. Chunks of ice float on black water. Sleet and snow fall. Continental Army soldiers in 1776 uniforms and blankets huddle low in the boat; experienced watermen pole and row. Other full-sized freight boats are barely visible in the dark. No modern objects. Grim, cold, realistic, very low light.",
     "fallbackVideo": "/assets/video/delaware-crossing.mp4"
   },
   "zones": [],

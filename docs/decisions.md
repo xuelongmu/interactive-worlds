@@ -21,6 +21,13 @@ camera never enjoys it. Applies to all world-model prompts, cutscene edits,
 and generated frames. Classroom use is in the audience statement — when in
 doubt, restrain.
 
+**Visual evidence before atmosphere.** Keep the established photorealistic
+aesthetic, but generated frames and worlds must be conditioned by authoritative
+visual references wherever paintings, maps, restored rooms, or collection
+objects exist. A later history painting is explicitly bounded interpretation,
+not an eyewitness camera. Every source records what it may support, its date,
+and its reuse status; invented architecture or material culture is corrected.
+
 **The signing.** The player signs as a 57th signer, lower-right among the 56
 genuine signatures — the trespass is the point. Refusing to sign is allowed
 and unremarked; the Treaty finale then shows the historical document only,

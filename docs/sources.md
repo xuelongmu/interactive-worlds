@@ -174,6 +174,31 @@ base for drafting and external review is:
 | Native nations | Native nations were not parties to the Paris negotiations; Britain purported to cede lands it did not possess by Native consent. NPS and the National Museum of the American Indian describe ensuing dispossession and distinct national choices during the war. [NPS, Native primary-source teaching guide][par-native-nps] [NMAI, Haudenosaunee aftermath][par-nmai] | Name specific nations and treaties where possible. Do not render Native nations as a single bloc or as vanished victims. Native-led review is required. |
 | Loyalists | Articles 5 and 6 only required Congress to recommend restitution and prevent future persecution; implementation depended on states. Large-scale Loyalist migration followed. [National Archives, Treaty text][par-na] [NPS, Revolution timeline][par-timeline] | Distinguish Loyalists who stayed, white refugees, Black Loyalists, and Native allies. Avoid an equivalence frame that erases slavery or Indigenous sovereignty. Loyalist-descendant input can supplement, not replace, historical review. |
 
+## Visual-source ledger
+
+Generated frames are not historical evidence. The committed machine-readable
+ledger in `revolution/pipeline/visual-sources.mjs` conditions each generation
+with an institutional image and limits what that object may support. Paintings
+made after the event remain interpretations; maps and restored rooms have their
+own uncertainty. The runtime never presents a generated frame as archival.
+
+| Frame | Primary visual evidence | Permitted use and caveat |
+|---|---|---|
+| Tea Party wharf/deck | LOC, Sarony & Major, *The Destruction of Tea at Boston Harbor* (1846) | Shipboard labor, tools, vessel and crowd scale only; reject daylight, spectacle, and uniform disguises. |
+| Lexington | LOC, Amos Doolittle after Ralph Earl, *The Battle of Lexington* (1775) | Near-contemporary landmarks and broad placement; not exact tactical geometry. |
+| Assembly Room | NPS evidence-based restoration and its Pine/Savage research | Room proportions, frieze, tables, baize, and chairs; seating remains conjectural, and the 1779 Rising Sun chair is excluded. |
+| Delaware | Met Open Access, Leutze, *Washington Crossing the Delaware* (1851) | Used as the familiar myth to contradict, not as vessel, light, flag, ice, or posture evidence. |
+| Trenton | LOC, Wiederholdt eyewitness engagement map (1776) | Streets, approaches, and unit relationships; not weather, dress, or visibility. |
+| Saratoga | Architect of the Capitol, Trumbull, *Surrender of General Burgoyne* (1821) | Portrait-informed uniform variety and autumn palette; not charge geometry or surrender choreography. |
+| Valley Forge | Museum of the American Revolution, Trego, *The March to Valley Forge* (1883), checked against NPS hut orders | Material wear and human condition; the painting exaggerates snow and does not establish camp architecture. |
+| Yorktown redoubt | U.S. Army Art Collection, McBarron, *Yorktown, 14 October 1781* (1972) | Researched earthwork, abatis, weapons, and clothing; a modern reconstruction. |
+| Yorktown surrender | Architect of the Capitol, Trumbull, *Surrender of Lord Cornwallis* (1819–20) | Line distinction, flags, portraits, and palette; commemorative choreography is compressed. |
+| Treaty | LOC/Winterthur, West, *American Commissioners of the Preliminary Peace Negotiations* (ca. 1783) | Actual five sitters and unfinished field; preliminary negotiations, not a September 1783 signing. The LOC scan is conditioning-only pending reproduction clearance. |
+
+Each generated file's cache signature includes its complete provenance entry,
+so a source or caveat change forces regeneration instead of silently reusing an
+older text-only frame.
+
 ## Open findings for external review
 
 The following are the highest-priority blockers identified in this internal

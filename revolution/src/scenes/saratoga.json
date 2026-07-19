@@ -4,7 +4,7 @@
   "renderer": "gameplay",
   "assets": {
     "referenceImage": "/reference/saratoga-charge.jpg",
-    "prompt": "First-person view riding a galloping horse across an autumn battlefield in upstate New York, 1777, toward a log-and-earth fortification, among charging Continental soldiers, musket smoke drifting across stubble fields and wooded hills in fall color. Late golden afternoon light. Realistic, kinetic.",
+    "prompt": "First-person view riding a galloping horse across an autumn battlefield in upstate New York, 1777, toward the substantial log-and-earth Breymann fortification, among charging Continental soldiers, musket smoke drifting across stubble fields and wooded hills in fall color. Late golden afternoon light. Realistic, kinetic.",
     "fallbackVideo": "/assets/video/saratoga-charge.mp4"
   },
   "zones": [],
