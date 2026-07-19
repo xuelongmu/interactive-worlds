@@ -11,6 +11,10 @@ const models = [
   { file: "inkwell.glb", prompt: "A small 18th century glass and pewter inkwell with dark iron gall ink, realistic" },
   { file: "parchment.glb", prompt: "A large aged parchment document laid flat, slightly curled edges, 18th century, realistic" },
   { file: "writing-desk.glb", prompt: "An 18th century mahogany writing table with green baize top, colonial American, realistic" },
+  // Saratoga / Yorktown sand tables (spikes/sandtable)
+  { file: "unit-block-infantry.glb", prompt: "A small rectangular wooden military unit block for an 18th century war-room sand table, painted wood with a hand-painted stripe on top, slightly worn edges, realistic" },
+  { file: "unit-block-command.glb", prompt: "A small square wooden command marker block for an 18th century war-room sand table, painted wood with a hand-painted crown emblem on top, slightly worn, realistic" },
+  { file: "map-table.glb", prompt: "A large 18th century military campaign map table, heavy oak with a raised wooden rim around a flat sand tray top, iron corner fittings, realistic" },
 ];
 
 const key = requireKey("TRIPO_API_KEY", "3D model generation");
