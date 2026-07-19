@@ -1,4 +1,4 @@
-export const STALL_HINT_DELAY_MS = 20_000;
+export const STALL_HINT_DELAY_MS = 10_000;
 
 export interface StallTimerScheduler {
   set(callback: () => void, delayMs: number): unknown;

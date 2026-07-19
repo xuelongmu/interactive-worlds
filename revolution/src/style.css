@@ -369,6 +369,50 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   transition: opacity 500ms ease, transform 500ms ease;
 }
 .stall-hint.visible { opacity: 1; transform: translate(-50%, 0); }
+.beat-guidance {
+  position: absolute;
+  left: 50%;
+  bottom: calc(3vh + 44px);
+  z-index: 70;
+  width: min(520px, calc(100% - 32px));
+  transform: translate(-50%, 6px);
+  padding: 10px 14px;
+  color: #f1eadc;
+  background: rgba(8, 7, 6, 0.88);
+  border: 1px solid rgba(228, 222, 209, 0.34);
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 350ms ease, transform 350ms ease;
+}
+.beat-guidance.visible { opacity: 1; transform: translate(-50%, 0); }
+.review-controls {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  color: #e4ded1;
+  background: rgba(8, 7, 6, 0.88);
+  border: 1px solid rgba(228, 222, 209, 0.3);
+  font-size: 12px;
+}
+.review-controls span { color: #bfa66b; text-transform: uppercase; letter-spacing: 0.1em; }
+.review-controls select,
+.review-controls button {
+  min-height: 32px;
+  padding: 5px 9px;
+  color: #e4ded1;
+  background: #24211c;
+  border: 1px solid #766a54;
+}
+.review-controls button:hover,
+.review-controls button:focus-visible { border-color: #d0b879; }
 .pause-overlay {
   position: absolute;
   inset: 0;
@@ -473,6 +517,8 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 @media (max-width: 800px) {
   .chapter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .review-controls { left: 12px; right: 12px; flex-wrap: wrap; }
+  .review-controls select { flex: 1 1 160px; }
 }
 @media (max-width: 540px) {
   .chapter-grid { grid-template-columns: 1fr; }

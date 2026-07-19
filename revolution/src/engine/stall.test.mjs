@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { renderStallHint, STALL_HINT_DELAY_MS, StallHintTimer } from "./stall.ts";
 
-test("stall hint reveals after twenty seconds and activity immediately hides and rearms it", () => {
+test("stall hint reveals after ten seconds and activity immediately hides and rearms it", () => {
   const callbacks = [];
   const cleared = [];
   const visibility = [];

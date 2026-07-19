@@ -25,7 +25,7 @@
       "subtitle": "Around eleven, a nor'easter came up the river — rain, sleet, and snow together. The storm slowed the crossing by three hours. It also hid it." },
     { "id": "DEL-040", "trigger": { "type": "model-event", "name": "landing" },
       "subtitle": "The last boats landed at three in the morning. Trenton lay nine miles away. The army marched through the storm to reach it. Two soldiers froze to death on the road." },
-    { "id": "DEL-041", "trigger": { "type": "model-event", "name": "column-formed", "orTimer": 260 },
+    { "id": "DEL-041", "trigger": { "type": "model-event", "name": "column-formed", "orTimer": 180 },
       "subtitle": "Near dawn came word that the storm had soaked the muskets. Most of the army could not fire a shot. Washington's answer passed back down the column, man to man: use the bayonet. He was resolved to take Trenton.",
       "then": "scene:trenton" }
   ],
@@ -38,12 +38,12 @@
     ]
   },
   "modelEvents": [
-    { "at": 45, "name": "knox" },
-    { "at": 90, "name": "storm",
+    { "at": 30, "name": "knox" },
+    { "at": 60, "name": "storm",
       "prompt": "Same boat, same river at night, but the storm intensifies: heavy sleet and driving snow, wind whipping the water into chop, ice grinding against the hull, near whiteout darkness. Soldiers hunch lower. Realistic, very low light." },
-    { "at": 180, "name": "landing",
+    { "at": 120, "name": "landing",
       "prompt": "The wooden boat reaches a dark snowy riverbank at night. Soldiers in 1776 Continental uniforms climb out into shallow water and snow, forming a column on the shore, sleet falling. Realistic, very low light." },
-    { "at": 215, "name": "column-formed" }
+    { "at": 150, "name": "column-formed" }
   ],
   "next": { "scene": "trenton", "preloadAt": "DEL-032" }
 }

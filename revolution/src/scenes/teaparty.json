@@ -18,11 +18,14 @@
   "cues": [
     { "id": "TEA-010", "trigger": { "type": "scene-start" },
       "subtitle": "December 16th, 1773. Griffin's Wharf, Boston. Three merchant ships ride at their moorings, loaded with tea belonging to the East India Company. On the wharf, in the dark, several thousand people stand watching. Almost no one speaks." },
-    { "id": "TEA-020", "trigger": { "type": "zone-enter", "zone": "crowd" },
+    { "id": "TEA-020", "trigger": { "type": "zone-enter", "zone": "crowd", "orAfterPrevious": 6 },
+      "guidance": "Walk toward the crowd gathered along the wharf.",
       "subtitle": "They have come from a meeting at the Old South Church — the largest gathering Boston has ever seen. For weeks the town has refused to let this tea be landed, because landing it means paying the King's tax on it. Tonight the last legal deadline runs out." },
-    { "id": "TEA-030", "trigger": { "type": "dwell", "zone": "ships-view", "seconds": 2 },
+    { "id": "TEA-030", "trigger": { "type": "dwell", "zone": "ships-view", "seconds": 2, "orAfterPrevious": 8 },
+      "guidance": "Move closer to the ships and pause to take them in.",
       "subtitle": "Dartmouth. Eleanor. Beaver. Three hundred and forty-two chests between them — about ninety thousand pounds of tea. The governor has refused to let the ships leave. The town has refused to let them unload. Something has to give." },
-    { "id": "TEA-040", "trigger": { "type": "zone-enter", "zone": "gangway", "orTimer": 300 },
+    { "id": "TEA-040", "trigger": { "type": "zone-enter", "zone": "gangway", "orTimer": 90, "orAfterPrevious": 8 },
+      "guidance": "Follow the wharf toward the gangway and board the ships.",
       "subtitle": "Around six-thirty, men began arriving at the wharf in loose disguise — blankets, soot, feathers, faces darkened. It was a statement: tonight we are not the King's subjects. They went aboard in silence.",
       "lockControls": true, "then": "wake:worldmodel" },
     { "id": "TEA-050", "trigger": { "type": "action", "name": "control-granted" },
@@ -30,20 +33,23 @@
       "diegeticSubtitle": "Hoist the chests up from the hold. Break them open at the rail — the tea goes over the side.",
       "subtitle": "They worked in teams, one ship to a team, with block and tackle and hatchets. It took about three hours." },
     { "id": "TEA-060", "trigger": { "type": "model-event", "name": "chest-open" },
+      "guidance": "Break open a tea chest at the rail.",
       "subtitle": "The tea was worth more than nine thousand pounds sterling — a fortune. It went into the harbor a chest at a time, and the crowd on the wharf watched it go, still nearly silent. The tide was out. By the end, tea lay heaped on the mudflats like hay." },
-    { "id": "TEA-070", "trigger": { "type": "model-event", "name": "chests-done", "orTimer": 540 },
+    { "id": "TEA-070", "trigger": { "type": "model-event", "name": "chests-done", "orTimer": 150 },
+      "guidance": "Keep working the chests over the rail.",
       "subtitle": "Nothing else was touched. No one was hurt, nothing was stolen, and a padlock they broke was replaced the next day. The men swept the decks before they left. It was, witnesses said, the quietest destruction they had ever seen." },
-    { "id": "TEA-080", "trigger": { "type": "model-event", "name": "deck-clear", "orTimer": 600 },
+    { "id": "TEA-080", "trigger": { "type": "model-event", "name": "deck-clear", "orTimer": 210 },
+      "guidance": "Help clear the last chests and leave the deck clean.",
       "subtitle": "Parliament's answer came in the spring. Boston's port was closed, its charter gutted, its government handed to the army. The other colonies were expected to take the lesson. Instead they began raising militias. Sixteen months later, the war began on a village green west of Boston.",
       "then": "scene:lexington" }
   ],
   "audio": { "ambience": ["/assets/audio/amb/wharf-night.mp3"] },
   "modelEvents": [
-    { "at": 30, "name": "chest-open",
+    { "at": 15, "name": "chest-open",
       "prompt": "Same ship deck at night: the viewer's own hands swing a hatchet into a large wooden tea chest at the rail, splitting it open, then tip it so loose black tea pours over the side into dark harbor water. Other disguised men do the same along the rail. Lantern light, sleet, cold breath. Realistic, very low light." },
-    { "at": 150, "name": "chests-done",
+    { "at": 60, "name": "chests-done",
       "prompt": "Same ship deck at night, nearly cleared: the last broken tea chests go over the rail, men sweep the deck planks with brooms, the harbor water below dark with floating tea. The silent crowd still watches from the wharf. Lantern light. Realistic, very low light." },
-    { "at": 210, "name": "deck-clear" }
+    { "at": 90, "name": "deck-clear" }
   ],
   "next": { "scene": "lexington", "preloadAt": "TEA-060" }
 }

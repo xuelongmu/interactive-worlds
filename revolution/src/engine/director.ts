@@ -68,6 +68,7 @@ export class Director {
   private stallTimer: StallHintTimer;
   private stallCleanup: (() => void) | null = null;
   private stallMessage = "";
+  private guidanceCancel: (() => void) | null = null;
   private focusBeforePause: HTMLElement | null = null;
   private sceneBackground: HTMLElement[] = [];
 
@@ -79,11 +80,14 @@ export class Director {
   private cardEl: HTMLElement;
   private statusEl: HTMLElement;
   private stallEl: HTMLElement;
+  private guidanceEl: HTMLElement;
   private pauseEl: HTMLElement;
+  private reviewControlsEl: HTMLElement | null;
 
   constructor(private opts: {
     container: HTMLElement;
     onExit: (target?: DirectorExitTarget) => void;
+    reviewMode?: boolean;
   }) {
     opts.container.innerHTML = `
       <div class="stage">
@@ -97,7 +101,18 @@ export class Director {
           <p class="card-date"></p>
           <p class="card-status"></p>
         </div>
+        <p class="beat-guidance" aria-live="polite" aria-hidden="true"></p>
         <p class="stall-hint" aria-live="off" aria-hidden="true"></p>
+        ${opts.reviewMode ? `
+          <div class="review-controls" aria-label="Development review controls">
+            <span>Review mode</span>
+            <select data-review-scene aria-label="Scene to review">
+              ${scenes.map((scene) => `<option value="${scene.id}">${splitChapterHeading(scene.title).title}</option>`).join("")}
+            </select>
+            <button data-review-action="jump">Go to scene</button>
+            <button data-review-action="beat">Next beat</button>
+            <button data-review-action="scene">Skip scene</button>
+          </div>` : ""}
         <div class="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden>
           <section class="pause-panel">
             <div class="pause-menu">
@@ -128,8 +143,10 @@ export class Director {
     this.fadeEl = this.stage.querySelector(".fade-layer")!;
     this.cardEl = this.stage.querySelector(".title-card")!;
     this.statusEl = this.stage.querySelector(".card-status")!;
+    this.guidanceEl = this.stage.querySelector(".beat-guidance")!;
     this.stallEl = this.stage.querySelector(".stall-hint")!;
     this.pauseEl = this.stage.querySelector(".pause-overlay")!;
+    this.reviewControlsEl = this.stage.querySelector(".review-controls");
     configureLoadingSemantics(this.cardEl);
     setPauseDialogView(this.pauseEl, "menu");
     this.stallTimer = new StallHintTimer((visible) => {
@@ -138,6 +155,7 @@ export class Director {
     this.audio.onSubtitle = (text) => { this.subtitleEl.textContent = text ?? ""; };
     document.addEventListener("keydown", this.onPauseKeyDown);
     this.pauseEl.addEventListener("click", this.onPauseAction);
+    this.reviewControlsEl?.addEventListener("click", this.onReviewAction);
   }
 
   /** Entry point — call from a user gesture (audio autoplay policy). */
@@ -156,6 +174,8 @@ export class Director {
     await this.teardownScene();
     this.current = manifest;
     setCurrentScene(manifest.id);
+    const reviewSceneSelect = this.reviewControlsEl?.querySelector<HTMLSelectElement>("[data-review-scene]");
+    if (reviewSceneSelect) reviewSceneSelect.value = manifest.id;
 
     const chapter = scenes.indexOf(manifest);
     const heading = splitChapterHeading(manifest.title);
@@ -187,9 +207,12 @@ export class Director {
       // audio-first: the visual consequence lands on the last word — and a
       // failed VO load still advances the story
       after: (cue) => {
-        if (this.cueEngine === cueEngine) void this.runThen(cue);
+        if (this.cueEngine !== cueEngine) return;
+        void this.runThen(cue);
+        if (!cue.then && !cueEngine.hasQueuedPlayback()) this.armBeatGuidance(cueEngine);
       },
       action: (cue) => {
+        this.hideBeatGuidance();
         if (cue.lockControls) this.runner?.setControlsLocked(true);
         if (manifest.next?.preloadAt === cue.id) this.preloadNext(manifest);
       },
@@ -223,6 +246,7 @@ export class Director {
   private async teardownScene() {
     this.sceneReady = false;
     this.disarmStallHint();
+    this.hideBeatGuidance();
     this.sceneTimers.cancelAll();
     this.finishActiveCutscene?.(true);
     this.finishActiveCutscene = null;
@@ -245,6 +269,7 @@ export class Director {
     this.disposed = true;
     document.removeEventListener("keydown", this.onPauseKeyDown);
     this.pauseEl.removeEventListener("click", this.onPauseAction);
+    this.reviewControlsEl?.removeEventListener("click", this.onReviewAction);
     await this.teardownScene();
     await this.audio.dispose();
   }
@@ -278,6 +303,30 @@ export class Director {
       case "settings-back":
         this.closePauseSettings(true);
         break;
+    }
+  };
+
+  private onReviewAction = (event: Event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-review-action]");
+    if (!button || !this.opts.reviewMode) return;
+    event.preventDefault();
+    switch (button.dataset.reviewAction) {
+      case "beat":
+        this.hideBeatGuidance();
+        this.cueEngine?.fireNextPending();
+        break;
+      case "scene": {
+        const next = this.current?.next && sceneById.get(this.current.next.scene);
+        if (next) void this.runScene(next.id);
+        else void this.exitTo("chapters");
+        break;
+      }
+      case "jump": {
+        const sceneId = this.reviewControlsEl
+          ?.querySelector<HTMLSelectElement>("[data-review-scene]")?.value;
+        if (sceneId && sceneById.has(sceneId)) void this.runScene(sceneId);
+        break;
+      }
     }
   };
 
@@ -376,7 +425,7 @@ export class Director {
   }
 
   /** The only in-scene chrome beyond subtitles. Activity immediately hides
-   * the reminder and restarts its twenty-second idle clock. */
+   * the reminder and restarts its ten-second idle clock. */
   private armStallHint(renderer: SceneManifest["renderer"]) {
     this.disarmStallHint();
     this.stallMessage = renderer === "splat"
@@ -399,6 +448,44 @@ export class Director {
     this.stallTimer?.stop();
     this.stallCleanup?.();
     this.stallCleanup = null;
+  }
+
+  /** After narration finishes, tell the viewer what advances the next beat.
+   * Unlike the idle reminder, this still appears while someone is actively
+   * exploring, so movement cannot hide a progression dead end forever. */
+  private armBeatGuidance(cueEngine: CueEngine) {
+    this.hideBeatGuidance();
+    const next = cueEngine.nextPendingCue();
+    if (!next) return;
+    const message = next.guidance ?? this.defaultGuidance(next);
+    if (!message) return;
+    this.guidanceCancel = this.sceneTimers.schedule(() => {
+      if (this.cueEngine !== cueEngine || this.paused) return;
+      this.guidanceEl.textContent = message;
+      this.guidanceEl.classList.add("visible");
+      this.guidanceEl.setAttribute("aria-hidden", "false");
+    }, 3_000);
+  }
+
+  private defaultGuidance(cue: Cue): string | null {
+    const trigger = cue.trigger;
+    const place = trigger.zone?.replaceAll("-", " ");
+    switch (trigger.type) {
+      case "zone-enter": return place ? `Walk toward the ${place} to continue` : "Keep exploring to continue";
+      case "dwell": return place ? `Pause near the ${place} to continue` : "Pause and take in the scene";
+      case "action": return "Interact with the scene to continue";
+      case "model-event": return "Keep moving — the next moment is beginning";
+      case "timer": return "The next moment will continue shortly";
+      default: return null;
+    }
+  }
+
+  private hideBeatGuidance() {
+    this.guidanceCancel?.();
+    this.guidanceCancel = null;
+    this.guidanceEl?.classList.remove("visible");
+    this.guidanceEl?.setAttribute("aria-hidden", "true");
+    if (this.guidanceEl) this.guidanceEl.textContent = "";
   }
 
   // ---- renderers -------------------------------------------------------

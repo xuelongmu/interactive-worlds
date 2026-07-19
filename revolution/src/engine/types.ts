@@ -20,6 +20,9 @@ export interface CueTrigger {
   /** fallback timer (seconds from scene start) that fires the cue even if the
    *  primary trigger never happens — e.g. LEX-060's 4-minute failsafe */
   orTimer?: number;
+  /** Fallback delay after the preceding cue finishes. This keeps exploratory
+   * scenes moving when a viewer misses an authored zone. */
+  orAfterPrevious?: number;
 }
 
 export interface Cue {
@@ -28,6 +31,9 @@ export interface Cue {
   /** VO file path relative to /audio — defaults to vo/<ID>.mp3 when subtitle text exists */
   vo?: string;
   subtitle?: string;
+  /** Short direction shown after the preceding voiceover while this cue is
+   * still waiting for a viewer-triggered action. */
+  guidance?: string;
   /** diegetic line (spatialized, separate voice) rather than narrator */
   diegetic?: boolean;
   /** a cast diegetic line that plays BEFORE this cue's narrator line —
