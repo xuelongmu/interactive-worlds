@@ -1,4 +1,10 @@
-import type { Cue, EngineEvent, SceneManifest } from "./types";
+import type {
+  ControlHandoffDetail,
+  Cue,
+  EngineEvent,
+  RuntimePauseDetail,
+  SceneManifest,
+} from "./types";
 import { CueEngine } from "./cues";
 import { AudioEngine, type BusName } from "./audio";
 import { assetExists, preloadSceneAssets } from "./assets";
@@ -6,6 +12,7 @@ import { loadState, markSceneComplete, setCurrentScene } from "./state";
 import { scenes, sceneById } from "../scenes";
 import { SplatScene } from "../renderers/splat";
 import { WorldModelScenePlayer } from "../renderers/worldmodel";
+import { prewarmDirectiveAt, WorldModelPrewarmController } from "./worldmodel-prewarm";
 import { splitChapterHeading } from "../shell";
 import { renderStallHint, StallHintTimer } from "./stall";
 import { PausableTimeouts } from "./timers";
@@ -24,12 +31,24 @@ interface Runner {
   dispose(): void | Promise<void>;
   setControlsLocked(locked: boolean): void;
   hasMovementInput?(): boolean;
+  /** Whether the currently presented runner can reclaim pointer input. */
+  canResumePointerInput?(): boolean;
   setPaused(paused: boolean): void;
   /** current rendered frame, for splat -> world-model conditioning */
   captureFrame?(): Promise<Blob | null>;
 }
 
 export type DirectorExitTarget = "title" | "chapters" | "settings";
+export type EngineEventObserver = (event: EngineEvent, sceneId: string) => void;
+
+export interface DirectorOptions {
+  container: HTMLElement;
+  onExit: (target?: DirectorExitTarget) => void;
+  onEngineEvent?: EngineEventObserver;
+  onControlHandoff?: (detail: ControlHandoffDetail) => void;
+  onPauseState?: (detail: RuntimePauseDetail) => void;
+  reviewMode?: boolean;
+}
 
 const CHAPTER_WORDS = [
   "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
@@ -41,9 +60,50 @@ export function runnerHasMovementInput(
   return runner?.hasMovementInput?.() === true;
 }
 
+export function runnerCanResumePointerInput(
+  runner: { canResumePointerInput?(): boolean } | null
+): boolean {
+  return runner?.canResumePointerInput?.() === true;
+}
+
+export function activeRunnerCanResumePointerInput(
+  renderer: ControlHandoffDetail["renderer"] | null,
+  runner: { canResumePointerInput?(): boolean } | null
+): boolean {
+  return (renderer === "splat" || renderer === "worldmodel")
+    && runnerCanResumePointerInput(runner);
+}
+
 export function completeCutsceneHandoff(emitAftermath: () => void, unlock: () => void) {
   emitAftermath();
   unlock();
+}
+
+/** Stable fan-out seam for non-story reactions such as event-driven SFX.
+ * The cue engine remains authoritative; observers cannot suppress the event. */
+export function dispatchEngineEvent(
+  event: EngineEvent,
+  consume: ((event: EngineEvent) => void) | undefined,
+  observe: EngineEventObserver | undefined,
+  sceneId: string | undefined
+): void {
+  consume?.(event);
+  if (sceneId) observe?.(event, sceneId);
+}
+
+export function canPrewarmWorldModelTarget(
+  target: SceneManifest | undefined,
+  strategy: NonNullable<SceneManifest["livePrewarm"]>[number]["strategy"]
+): target is SceneManifest {
+  return !!target && (strategy === "transport" || target.renderer === "worldmodel");
+}
+
+export function controlHandoffForScene(
+  sceneId: string,
+  transitionKey: number,
+  detail: Omit<ControlHandoffDetail, "sceneId" | "transitionKey">
+): ControlHandoffDetail {
+  return { sceneId, transitionKey, ...detail };
 }
 
 const SYSTEM_ACTIONS = new Set([
@@ -94,6 +154,11 @@ export class Director {
   private focusBeforePause: HTMLElement | null = null;
   private sceneBackground: HTMLElement[] = [];
   private reviewTransitioning = false;
+  private controlTransitionKey = 0;
+  private activeRenderer: ControlHandoffDetail["renderer"] | null = null;
+  private worldModelPrewarm = new WorldModelPrewarmController({
+    onTelemetry: (event) => console.debug("[worldmodel:telemetry]", event),
+  });
 
   private stage: HTMLElement;
   private canvasHost: HTMLElement;
@@ -107,11 +172,7 @@ export class Director {
   private pauseEl: HTMLElement;
   private reviewControlsEl: HTMLElement | null;
 
-  constructor(private opts: {
-    container: HTMLElement;
-    onExit: (target?: DirectorExitTarget) => void;
-    reviewMode?: boolean;
-  }) {
+  constructor(private opts: DirectorOptions) {
     opts.container.innerHTML = `
       <div class="stage">
         <div class="canvas-host"></div>
@@ -198,8 +259,10 @@ export class Director {
 
     try {
       await this.fadeTo(1);
-      await this.teardownScene();
+      await this.teardownScene(id);
       this.current = manifest;
+      this.controlTransitionKey += 1;
+      this.emitControlHandoff({ renderer: manifest.renderer, controlsEnabled: false });
       setCurrentScene(manifest.id);
       const reviewSceneSelect = this.reviewControlsEl?.querySelector<HTMLSelectElement>("[data-review-scene]");
       if (reviewSceneSelect) reviewSceneSelect.value = manifest.id;
@@ -245,6 +308,8 @@ export class Director {
           this.hideBeatGuidance();
           if (cue.lockControls) this.runner?.setControlsLocked(true);
           if (manifest.next?.preloadAt === cue.id) this.preloadNext(manifest);
+          const livePrewarm = prewarmDirectiveAt(manifest, cue.id);
+          if (livePrewarm) this.prewarmWorldModel(livePrewarm);
         },
       });
       this.cueEngine = cueEngine;
@@ -254,7 +319,7 @@ export class Director {
 
       if (manifest.audio.ambience?.length) void this.audio.playAmbience(manifest.audio.ambience);
       // narration over black is the loading screen — start the scene now
-      cueEngine.handleEvent({ type: "scene-start" });
+      this.emitEngineEvent({ type: "scene-start" });
 
       const minHold = new Promise((r) => setTimeout(r, 2500));
       await Promise.all([this.createRunner(manifest), minHold]);
@@ -265,7 +330,23 @@ export class Director {
       this.cardEl.classList.remove("visible");
       await this.fadeTo(0);
       this.sceneReady = true;
+      if (manifest.renderer === "splat") {
+        this.emitControlHandoff({
+          renderer: "splat",
+          controlsEnabled: true,
+          movement: { binding: "WASD", label: "Move" },
+          look: { binding: "Mouse", label: "Look" },
+        });
+      } else if (manifest.renderer === "gameplay") {
+        this.emitControlHandoff({
+          renderer: "gameplay",
+          controlsEnabled: true,
+        });
+      }
       this.armStallHint(manifest.renderer);
+    } catch (error) {
+      await this.worldModelPrewarm.cancel("scene-failure");
+      throw error;
     } finally {
       this.setReviewTransitioning(false);
     }
@@ -284,8 +365,41 @@ export class Director {
     if (next) preloadSceneAssets(next);
   }
 
-  private async teardownScene() {
+  private emitEngineEvent(event: EngineEvent): void {
+    dispatchEngineEvent(
+      event,
+      (next) => this.cueEngine?.handleEvent(next),
+      this.opts.onEngineEvent,
+      this.current?.id
+    );
+  }
+
+  private emitControlHandoff(
+    detail: Omit<ControlHandoffDetail, "sceneId" | "transitionKey">
+  ): void {
+    if (!this.current) return;
+    this.activeRenderer = detail.renderer;
+    this.opts.onControlHandoff?.(
+      controlHandoffForScene(this.current.id, this.controlTransitionKey, detail)
+    );
+  }
+
+  private prewarmWorldModel(directive: NonNullable<SceneManifest["livePrewarm"]>[number]) {
+    const target = sceneById.get(directive.target);
+    if (!canPrewarmWorldModelTarget(target, directive.strategy)) {
+      console.warn(`[director] invalid live prewarm target "${directive.target}"`);
+      return;
+    }
+    void this.worldModelPrewarm.prewarm({
+      scene: target,
+      strategy: directive.strategy,
+      ttlMs: directive.ttlMs,
+    });
+  }
+
+  private async teardownScene(preservePrewarmFor?: string) {
     this.sceneReady = false;
+    if (this.current) this.emitControlHandoff({ renderer: this.current.renderer, controlsEnabled: false });
     this.disarmStallHint();
     this.hideBeatGuidance();
     this.sceneTimers.cancelAll();
@@ -299,6 +413,11 @@ export class Director {
     this.audio.stopAll();
     await this.runner?.dispose();
     this.runner = null;
+    if (preservePrewarmFor) {
+      await this.worldModelPrewarm.cancelUnlessTarget(preservePrewarmFor, "route-changed");
+    } else {
+      await this.worldModelPrewarm.cancel("scene-teardown");
+    }
     this.canvasHost.innerHTML = "";
     this.videoHost.innerHTML = "";
     this.videoHost.classList.remove("visible");
@@ -320,7 +439,10 @@ export class Director {
       if (trapFocus(this.pauseEl, document.activeElement, event.shiftKey)) event.preventDefault();
       return;
     }
-    if (event.code !== "Escape" || !this.sceneReady || !this.current) return;
+    const target = event.target as HTMLElement | null;
+    const typing = !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+    if (event.code === "KeyP" && typing) return;
+    if (!["Escape", "KeyP"].includes(event.code) || !this.sceneReady || !this.current) return;
     event.preventDefault();
     void this.setPaused(!this.paused);
   };
@@ -376,6 +498,10 @@ export class Director {
     this.paused = paused;
     this.pauseEl.hidden = !paused;
     this.runner?.setPaused(paused);
+    this.opts.onPauseState?.({
+      paused,
+      canResumePointerInput: activeRunnerCanResumePointerInput(this.activeRenderer, this.runner),
+    });
 
     if (paused) {
       this.focusBeforePause = document.activeElement instanceof HTMLElement
@@ -397,7 +523,6 @@ export class Director {
     // Resume is a direct click gesture, so Witness scenes may reclaim pointer
     // lock without a second click. Browsers that decline simply resume with
     // the next click, which the renderer already handles.
-    if (this.current?.renderer === "splat") void this.canvasHost.requestPointerLock();
     await this.audio.resume();
     this.sceneTimers.resume();
     if (this.activeCutscene?.paused) void this.activeCutscene.play().catch(() => undefined);
@@ -550,7 +675,7 @@ export class Director {
       const scene = new SplatScene({
         container: this.canvasHost,
         manifest: effective,
-        onEvent: (event) => this.cueEngine?.handleEvent(event),
+        onEvent: (event) => this.emitEngineEvent(event),
         onReady: present,
       });
       // don't let a stalled download hold the title card forever
@@ -572,9 +697,11 @@ export class Director {
           if (!locked) this.armResumeWalk();
         },
         hasMovementInput: () => scene.hasMovementInput(),
+        canResumePointerInput: () => true,
         setPaused: (value) => {
           paused = value;
           applyControlLock();
+          if (!value) void this.canvasHost.requestPointerLock();
         },
         captureFrame: () => scene.captureFrame(),
       };
@@ -585,17 +712,24 @@ export class Director {
     manifest: SceneManifest,
     conditioningFrame?: Blob
   ): Promise<void> {
+    const strategy = conditioningFrame ? "transport" : "conditioned";
+    await this.worldModelPrewarm.cancelUnless(manifest.id, strategy, "strategy-changed");
+    const preparedSession = await this.worldModelPrewarm.adopt(manifest.id, strategy);
     const player = new WorldModelScenePlayer({
       container: this.videoHost,
       manifest,
       conditioningFrame,
-      onEvent: (event) => this.cueEngine?.handleEvent(event),
-      onStatus: () => { this.statusEl.textContent = "Preparing the live scene"; },
+      preparedSession: preparedSession ?? undefined,
+      onEvent: (event) => this.emitEngineEvent(event),
+      onStatus: (status) => { this.statusEl.textContent = status; },
+      onTelemetry: (event) => console.debug("[worldmodel:telemetry]", event),
+      onControlHandoff: (detail) => this.emitControlHandoff(detail),
     });
     this.videoHost.classList.add("visible");
     this.runner = {
       dispose: () => player.dispose(),
-      setControlsLocked: () => { /* live input mapping has no lock yet */ },
+      setControlsLocked: (locked) => player.setControlsLocked(locked),
+      canResumePointerInput: () => player.canResumePointerInput(),
       setPaused: (paused) => player.setPaused(paused),
     };
     await player.start();
@@ -627,7 +761,7 @@ export class Director {
       button.className = "secondary";
       button.textContent = name;
       button.addEventListener("click", () => gate.dispatch(() =>
-        this.cueEngine?.handleEvent({ type: "action", name })
+        this.emitEngineEvent({ type: "action", name })
       ));
       buttons.push(button);
       actionsEl.appendChild(button);
@@ -686,6 +820,7 @@ export class Director {
    *  scene grammar still plays. Emits `cutscene-<id>-complete`. */
   private async playCutscene(id: string) {
     const url = `/assets/video/${id}.mp4`;
+    this.emitControlHandoff({ renderer: "cutscene", controlsEnabled: false });
     await this.fadeTo(1);
     let completed = true;
     if (await assetExists(url)) {
@@ -730,9 +865,17 @@ export class Director {
     }
     await this.fadeTo(0);
     completeCutsceneHandoff(
-      () => this.cueEngine?.handleEvent({ type: "action", name: `cutscene-${id}-complete` }),
+      () => this.emitEngineEvent({ type: "action", name: `cutscene-${id}-complete` }),
       () => this.runner?.setControlsLocked(false)
     );
+    if (this.current?.renderer === "splat") {
+      this.emitControlHandoff({
+        renderer: "splat",
+        controlsEnabled: true,
+        movement: { binding: "WASD", label: "Move" },
+        look: { binding: "Mouse", label: "Look" },
+      });
+    }
   }
 
   /** Repeatable diegetic bark pool (mariner calls across the water):
@@ -759,7 +902,7 @@ export class Director {
     const fire = () => {
       if (this.paused) return;
       cleanup();
-      this.cueEngine?.handleEvent({ type: "action", name: "resume-walk" });
+      this.emitEngineEvent({ type: "action", name: "resume-walk" });
     };
     const onKey = (e: KeyboardEvent) => {
       if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) fire();
@@ -797,6 +940,12 @@ export class Director {
     this.videoHost.classList.remove("visible");
     await this.createSplatRunner(this.current);
     await this.fadeTo(0);
+    this.emitControlHandoff({
+      renderer: "splat",
+      controlsEnabled: true,
+      movement: { binding: "WASD", label: "Move" },
+      look: { binding: "Mouse", label: "Look" },
+    });
   }
 
   /** The Declaration signature, aged 47 years, under glass. Payoff is
@@ -837,7 +986,7 @@ export class Director {
     }
 
     this.sceneTimers.schedule(
-      () => this.cueEngine?.handleEvent({ type: "action", name: "signature-dwell" }),
+      () => this.emitEngineEvent({ type: "action", name: "signature-dwell" }),
       10_000
     );
     this.teardownFns.push(() => overlay.remove());
