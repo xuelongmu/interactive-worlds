@@ -57,6 +57,38 @@ export interface ZoneDef {
   size: [number, number, number];
 }
 
+export type WorldModelPrewarmStrategy = "conditioned" | "transport";
+
+/** A late, explicit live-session preparation cue. This is deliberately
+ * separate from `next.preloadAt`, which only warms static HTTP assets. */
+export interface WorldModelPrewarmDirective {
+  /** Cue whose action phase begins preparation. */
+  at: string;
+  /** Scene that may adopt the prepared session. */
+  target: string;
+  /** Prepare both conditions, or only the transport for a captured frame. */
+  strategy: WorldModelPrewarmStrategy;
+  /** Disconnect an unadopted session after this many milliseconds. */
+  ttlMs?: number;
+}
+
+/** Runtime-only control availability. Presentation layers may translate this
+ * callback into UI events without coupling the director to HUD markup. */
+export interface ControlHandoffDetail {
+  sceneId: string;
+  renderer: "splat" | "worldmodel" | "gameplay" | "cutscene";
+  controlsEnabled: boolean;
+  movement?: { binding: string; label: string };
+  look?: { binding: string; label: string };
+  action?: { binding: string; label: string; usable: boolean };
+  transitionKey: number;
+}
+
+export interface RuntimePauseDetail {
+  paused: boolean;
+  canResumePointerInput: boolean;
+}
+
 export interface SceneManifest {
   id: string;
   title: string;
@@ -85,5 +117,8 @@ export interface SceneManifest {
   };
   /** scripted world-model beats: seconds into the scene -> model-event name + steering prompt */
   modelEvents?: { at: number; name: string; prompt?: string }[];
+  /** Billable live preparation policy, intentionally independent from static
+   * asset preloading. Authored activation lives with the scene manifest. */
+  livePrewarm?: WorldModelPrewarmDirective[];
   next?: { scene: string; preloadAt?: string };
 }
