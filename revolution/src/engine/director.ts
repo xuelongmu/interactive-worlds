@@ -46,6 +46,28 @@ export function completeCutsceneHandoff(emitAftermath: () => void, unlock: () =>
   unlock();
 }
 
+const SYSTEM_ACTIONS = new Set([
+  "boarded",
+  "control-granted",
+  "cutscene-volley-complete",
+  "signature-dwell",
+]);
+
+export function defaultGuidanceForCue(cue: Cue): string | null {
+  const trigger = cue.trigger;
+  const place = trigger.zone?.replaceAll("-", " ");
+  switch (trigger.type) {
+    case "zone-enter": return place ? `Walk toward the ${place} to continue` : "Keep exploring to continue";
+    case "dwell": return place ? `Pause near the ${place} to continue` : "Pause and take in the scene";
+    case "action": return trigger.name && SYSTEM_ACTIONS.has(trigger.name)
+      ? null
+      : "Interact with the scene to continue";
+    case "model-event": return "Keep moving — the next moment is beginning";
+    case "timer": return "The next moment will continue shortly";
+    default: return null;
+  }
+}
+
 /** Runs the story: loads a manifest, instantiates its renderer, wires the
  *  cue + audio engines, and executes `then:` directives. Linear order makes
  *  prediction exact — the next scene preloads while the current one plays,
@@ -68,8 +90,10 @@ export class Director {
   private stallTimer: StallHintTimer;
   private stallCleanup: (() => void) | null = null;
   private stallMessage = "";
+  private guidanceCancel: (() => void) | null = null;
   private focusBeforePause: HTMLElement | null = null;
   private sceneBackground: HTMLElement[] = [];
+  private reviewTransitioning = false;
 
   private stage: HTMLElement;
   private canvasHost: HTMLElement;
@@ -79,11 +103,14 @@ export class Director {
   private cardEl: HTMLElement;
   private statusEl: HTMLElement;
   private stallEl: HTMLElement;
+  private guidanceEl: HTMLElement;
   private pauseEl: HTMLElement;
+  private reviewControlsEl: HTMLElement | null;
 
   constructor(private opts: {
     container: HTMLElement;
     onExit: (target?: DirectorExitTarget) => void;
+    reviewMode?: boolean;
   }) {
     opts.container.innerHTML = `
       <div class="stage">
@@ -97,7 +124,18 @@ export class Director {
           <p class="card-date"></p>
           <p class="card-status"></p>
         </div>
+        <p class="beat-guidance" aria-live="polite" aria-hidden="true"></p>
         <p class="stall-hint" aria-live="off" aria-hidden="true"></p>
+        ${opts.reviewMode ? `
+          <div class="review-controls" aria-label="Development review controls">
+            <span>Review mode</span>
+            <select data-review-scene aria-label="Scene to review">
+              ${scenes.map((scene) => `<option value="${scene.id}">${splitChapterHeading(scene.title).title}</option>`).join("")}
+            </select>
+            <button data-review-action="jump">Go to scene</button>
+            <button data-review-action="beat">Next beat</button>
+            <button data-review-action="scene">Skip scene</button>
+          </div>` : ""}
         <div class="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden>
           <section class="pause-panel">
             <div class="pause-menu">
@@ -128,8 +166,10 @@ export class Director {
     this.fadeEl = this.stage.querySelector(".fade-layer")!;
     this.cardEl = this.stage.querySelector(".title-card")!;
     this.statusEl = this.stage.querySelector(".card-status")!;
+    this.guidanceEl = this.stage.querySelector(".beat-guidance")!;
     this.stallEl = this.stage.querySelector(".stall-hint")!;
     this.pauseEl = this.stage.querySelector(".pause-overlay")!;
+    this.reviewControlsEl = this.stage.querySelector(".review-controls");
     configureLoadingSemantics(this.cardEl);
     setPauseDialogView(this.pauseEl, "menu");
     this.stallTimer = new StallHintTimer((visible) => {
@@ -138,6 +178,7 @@ export class Director {
     this.audio.onSubtitle = (text) => { this.subtitleEl.textContent = text ?? ""; };
     document.addEventListener("keydown", this.onPauseKeyDown);
     this.pauseEl.addEventListener("click", this.onPauseAction);
+    this.reviewControlsEl?.addEventListener("click", this.onReviewAction);
   }
 
   /** Entry point — call from a user gesture (audio autoplay policy). */
@@ -149,70 +190,93 @@ export class Director {
   // ---- scene lifecycle -------------------------------------------------
 
   private async runScene(id: string) {
+    if (this.reviewTransitioning) return;
     const manifest = sceneById.get(id);
     if (!manifest) throw new Error(`unknown scene "${id}"`);
 
-    await this.fadeTo(1);
-    await this.teardownScene();
-    this.current = manifest;
-    setCurrentScene(manifest.id);
+    this.setReviewTransitioning(true);
 
-    const chapter = scenes.indexOf(manifest);
-    const heading = splitChapterHeading(manifest.title);
-    this.cardEl.querySelector(".card-kicker")!.textContent =
-      chapter >= 0 ? `Chapter ${CHAPTER_WORDS[chapter] ?? chapter + 1}` : "";
-    this.cardEl.querySelector(".card-title")!.textContent = heading.title;
-    this.cardEl.querySelector(".card-date")!.textContent = heading.date;
-    this.statusEl.textContent = "Preparing the chapter";
-    this.cardEl.classList.add("visible");
+    try {
+      await this.fadeTo(1);
+      await this.teardownScene();
+      this.current = manifest;
+      setCurrentScene(manifest.id);
+      const reviewSceneSelect = this.reviewControlsEl?.querySelector<HTMLSelectElement>("[data-review-scene]");
+      if (reviewSceneSelect) reviewSceneSelect.value = manifest.id;
 
-    const cueEngine = new CueEngine(manifest.cues, {
-      play: async (cue) => {
-        // cast diegetic line first (the script order: shout, then narrator)
-        if (cue.diegeticVo) {
+      const chapter = scenes.indexOf(manifest);
+      const heading = splitChapterHeading(manifest.title);
+      this.cardEl.querySelector(".card-kicker")!.textContent =
+        chapter >= 0 ? `Chapter ${CHAPTER_WORDS[chapter] ?? chapter + 1}` : "";
+      this.cardEl.querySelector(".card-title")!.textContent = heading.title;
+      this.cardEl.querySelector(".card-date")!.textContent = heading.date;
+      this.statusEl.textContent = "Preparing the chapter";
+      this.cardEl.classList.add("visible");
+
+      const cueEngine = new CueEngine(manifest.cues, {
+        play: async (cue) => {
+          // cast diegetic line first (the script order: shout, then narrator)
+          if (cue.diegeticVo) {
+            await this.audio.playVoice({
+              url: cue.diegeticVo,
+              subtitle: cue.diegeticSubtitle,
+              bus: "diegetic",
+              duck: [],
+            });
+          }
           await this.audio.playVoice({
-            url: cue.diegeticVo,
-            subtitle: cue.diegeticSubtitle,
-            bus: "diegetic",
-            duck: [],
+            url: cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`,
+            subtitle: cue.subtitle,
+            bus: cue.diegetic ? "diegetic" : "narration",
+            duck: cue.diegetic ? [] : cue.duck as BusName[] | undefined,
           });
-        }
-        await this.audio.playVoice({
-          url: cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`,
-          subtitle: cue.subtitle,
-          bus: cue.diegetic ? "diegetic" : "narration",
-          duck: cue.diegetic ? [] : cue.duck as BusName[] | undefined,
-        });
-      },
-      // audio-first: the visual consequence lands on the last word — and a
-      // failed VO load still advances the story
-      after: (cue) => {
-        if (this.cueEngine === cueEngine) void this.runThen(cue);
-      },
-      action: (cue) => {
-        if (cue.lockControls) this.runner?.setControlsLocked(true);
-        if (manifest.next?.preloadAt === cue.id) this.preloadNext(manifest);
-      },
-    });
-    this.cueEngine = cueEngine;
-    this.updateTimer = window.setInterval(() => {
-      if (!this.paused) cueEngine.update(0.1);
-    }, 100);
+        },
+        // audio-first: the visual consequence lands on the last word — and a
+        // failed VO load still advances the story
+        after: async (cue) => {
+          if (this.cueEngine !== cueEngine) return;
+          await this.runThen(cue);
+          const staysInScene = !cue.then || !cue.then.startsWith("scene:") && cue.then !== "end";
+          if (staysInScene && this.cueEngine === cueEngine && !cueEngine.hasQueuedPlayback()) {
+            this.armBeatGuidance(cueEngine);
+          }
+        },
+        action: (cue) => {
+          this.hideBeatGuidance();
+          if (cue.lockControls) this.runner?.setControlsLocked(true);
+          if (manifest.next?.preloadAt === cue.id) this.preloadNext(manifest);
+        },
+      });
+      this.cueEngine = cueEngine;
+      this.updateTimer = window.setInterval(() => {
+        if (!this.paused) cueEngine.update(0.1);
+      }, 100);
 
-    if (manifest.audio.ambience?.length) void this.audio.playAmbience(manifest.audio.ambience);
-    // narration over black is the loading screen — start the scene now
-    cueEngine.handleEvent({ type: "scene-start" });
+      if (manifest.audio.ambience?.length) void this.audio.playAmbience(manifest.audio.ambience);
+      // narration over black is the loading screen — start the scene now
+      cueEngine.handleEvent({ type: "scene-start" });
 
-    const minHold = new Promise((r) => setTimeout(r, 2500));
-    await Promise.all([this.createRunner(manifest), minHold]);
-    // a scene with no preloadAt marker still preloads, just later
-    if (manifest.next && !manifest.next.preloadAt) this.preloadNext(manifest);
-    if (manifest.audio.barks?.length) this.startBarks(manifest.audio.barks);
+      const minHold = new Promise((r) => setTimeout(r, 2500));
+      await Promise.all([this.createRunner(manifest), minHold]);
+      // a scene with no preloadAt marker still preloads, just later
+      if (manifest.next && !manifest.next.preloadAt) this.preloadNext(manifest);
+      if (manifest.audio.barks?.length) this.startBarks(manifest.audio.barks);
 
-    this.cardEl.classList.remove("visible");
-    await this.fadeTo(0);
-    this.sceneReady = true;
-    this.armStallHint(manifest.renderer);
+      this.cardEl.classList.remove("visible");
+      await this.fadeTo(0);
+      this.sceneReady = true;
+      this.armStallHint(manifest.renderer);
+    } finally {
+      this.setReviewTransitioning(false);
+    }
+  }
+
+  private setReviewTransitioning(transitioning: boolean) {
+    if (!this.opts.reviewMode) return;
+    this.reviewTransitioning = transitioning;
+    for (const control of this.reviewControlsEl?.querySelectorAll<HTMLButtonElement | HTMLSelectElement>("button, select") ?? []) {
+      control.disabled = transitioning;
+    }
   }
 
   private preloadNext(manifest: SceneManifest) {
@@ -223,6 +287,7 @@ export class Director {
   private async teardownScene() {
     this.sceneReady = false;
     this.disarmStallHint();
+    this.hideBeatGuidance();
     this.sceneTimers.cancelAll();
     this.finishActiveCutscene?.(true);
     this.finishActiveCutscene = null;
@@ -245,6 +310,7 @@ export class Director {
     this.disposed = true;
     document.removeEventListener("keydown", this.onPauseKeyDown);
     this.pauseEl.removeEventListener("click", this.onPauseAction);
+    this.reviewControlsEl?.removeEventListener("click", this.onReviewAction);
     await this.teardownScene();
     await this.audio.dispose();
   }
@@ -278,6 +344,30 @@ export class Director {
       case "settings-back":
         this.closePauseSettings(true);
         break;
+    }
+  };
+
+  private onReviewAction = (event: Event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-review-action]");
+    if (!button || !this.opts.reviewMode) return;
+    event.preventDefault();
+    switch (button.dataset.reviewAction) {
+      case "beat":
+        this.hideBeatGuidance();
+        this.cueEngine?.fireNextPending();
+        break;
+      case "scene": {
+        const next = this.current?.next && sceneById.get(this.current.next.scene);
+        if (next) void this.runScene(next.id);
+        else void this.exitTo("chapters");
+        break;
+      }
+      case "jump": {
+        const sceneId = this.reviewControlsEl
+          ?.querySelector<HTMLSelectElement>("[data-review-scene]")?.value;
+        if (sceneId && sceneById.has(sceneId)) void this.runScene(sceneId);
+        break;
+      }
     }
   };
 
@@ -376,7 +466,7 @@ export class Director {
   }
 
   /** The only in-scene chrome beyond subtitles. Activity immediately hides
-   * the reminder and restarts its twenty-second idle clock. */
+   * the reminder and restarts its ten-second idle clock. */
   private armStallHint(renderer: SceneManifest["renderer"]) {
     this.disarmStallHint();
     this.stallMessage = renderer === "splat"
@@ -399,6 +489,31 @@ export class Director {
     this.stallTimer?.stop();
     this.stallCleanup?.();
     this.stallCleanup = null;
+  }
+
+  /** After narration finishes, tell the viewer what advances the next beat.
+   * Unlike the idle reminder, this still appears while someone is actively
+   * exploring, so movement cannot hide a progression dead end forever. */
+  private armBeatGuidance(cueEngine: CueEngine) {
+    this.hideBeatGuidance();
+    const next = cueEngine.nextPendingCue();
+    if (!next) return;
+    const message = next.guidance ?? defaultGuidanceForCue(next);
+    if (!message) return;
+    this.guidanceCancel = this.sceneTimers.schedule(() => {
+      if (this.cueEngine !== cueEngine || this.paused) return;
+      this.guidanceEl.textContent = message;
+      this.guidanceEl.classList.add("visible");
+      this.guidanceEl.setAttribute("aria-hidden", "false");
+    }, 3_000);
+  }
+
+  private hideBeatGuidance() {
+    this.guidanceCancel?.();
+    this.guidanceCancel = null;
+    this.guidanceEl?.classList.remove("visible");
+    this.guidanceEl?.setAttribute("aria-hidden", "true");
+    if (this.guidanceEl) this.guidanceEl.textContent = "";
   }
 
   // ---- renderers -------------------------------------------------------

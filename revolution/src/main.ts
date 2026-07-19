@@ -17,12 +17,14 @@ installSessionChallenge();
 
 const app = document.getElementById("app")!;
 let director: Director | null = null;
+const reviewMode = import.meta.env.DEV && new URLSearchParams(window.location.search).get("review") === "1";
 
 async function play(sceneId: string, newStory = false) {
   if (director) await director.dispose();
   if (newStory) resetStoryProgress();
   director = new Director({
     container: app,
+    reviewMode,
     onExit: (target = "title") => {
       director = null;
       renderShell(target);
@@ -72,7 +74,7 @@ function renderTitle() {
 
 function renderChapters() {
   const state = loadState();
-  const devOverride = hasChapterDevOverride(window.location.search);
+  const devOverride = reviewMode || hasChapterDevOverride(window.location.search);
 
   app.innerHTML = `
     <main class="shell-screen chapters-screen">

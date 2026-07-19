@@ -19,7 +19,7 @@
       "subtitle": "October, 1781. The war is six years old and has no end in sight — except here. General Cornwallis has fortified Yorktown, Virginia, on a river mouth, waiting for the Royal Navy to carry his army back to safety." },
     { "id": "YOR-020", "trigger": { "type": "action", "name": "unit-placed:french-fleet" },
       "subtitle": "The navy that arrives is French. Admiral de Grasse turns the British rescue fleet away at the Chesapeake and seals the bay. Cornwallis is trapped." },
-    { "id": "YOR-021", "trigger": { "type": "action", "name": "unit-placed:allied-army", "orTimer": 150 },
+    { "id": "YOR-021", "trigger": { "type": "action", "name": "unit-placed:allied-army", "orTimer": 75 },
       "subtitle": "Washington and the French general Rochambeau march their armies four hundred miles south in secret, and close the landward side. Sixteen thousand allied troops, while Cornwallis has only eight." },
     { "id": "YOR-030", "trigger": { "type": "action", "name": "phase-advanced:siege-lines" },
       "subtitle": "A siege is procedure. Dig a trench, mount the guns, batter the defenses; dig the next trench closer, and repeat. The allied guns fire day and night. The second trench cannot be established, as two British redoubts, numbers nine and ten, block its path." },
@@ -28,20 +28,22 @@
       "lockControls": true, "then": "wake:worldmodel" },
     { "id": "YOR-050", "trigger": { "type": "model-event", "name": "redoubt-taken" },
       "subtitle": "The allied guns move into the new line, and from there they can reach every square yard of the town. Three days later, a British drummer climbs onto the parapet and beats for a parley." },
-    { "id": "YOR-060", "trigger": { "type": "model-event", "name": "assault-end", "orTimer": 600 },
+    { "id": "YOR-060", "trigger": { "type": "model-event", "name": "assault-end", "orTimer": 150 },
       "subtitle": "October 19th, 1781. The British army marches out between two lines — French on one side, American on the other — a mile long, to a field where the weapons are laid down. Legend says their bands played a tune called The World Turned Upside Down.",
       "then": "settle:splat" },
     { "id": "YOR-070", "trigger": { "type": "zone-enter", "zone": "field-walk" },
+      "guidance": "Walk out onto the surrender field.",
       "subtitle": "Cornwallis did not come. He sent his sword out with a deputy, who tried to surrender it to the French commander first. Rochambeau pointed across the road, to Washington. Washington directed him to his own deputy. The forms mattered, that day." },
-    { "id": "YOR-080", "trigger": { "type": "zone-enter", "zone": "field-end", "orTimer": 780 },
+    { "id": "YOR-080", "trigger": { "type": "zone-enter", "zone": "field-end", "orTimer": 210, "orAfterPrevious": 12 },
+      "guidance": "Continue across the field toward the waiting lines.",
       "subtitle": "The war did not end at Yorktown; the fighting sputtered on for two more years. But when the news reached London, the government fell, and Britain began negotiating the peace.",
       "then": "scene:treaty-paris" }
   ],
   "audio": { "ambience": ["/assets/audio/amb/siege-camp.mp3"] },
   "modelEvents": [
-    { "at": 30, "name": "redoubt-taken",
+    { "at": 20, "name": "redoubt-taken",
       "prompt": "Same night battlefield: soldiers climb the earthen wall of the redoubt through broken stakes and swarm over the parapet, brief hand-to-hand fighting silhouetted by distant cannon flashes, then the fighting subsides. Nearly black, realistic." },
-    { "at": 55, "name": "assault-end" }
+    { "at": 40, "name": "assault-end" }
   ],
   "next": { "scene": "treaty-paris", "preloadAt": "YOR-060" }
 }
