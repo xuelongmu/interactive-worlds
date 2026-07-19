@@ -12,6 +12,9 @@ export class AudioEngine {
   private ctx: AudioContext | null = null;
   private buses = new Map<BusName, GainNode>();
   private ambienceSources: AudioBufferSourceNode[] = [];
+  private activeSources = new Set<AudioBufferSourceNode>();
+  private paused = false;
+  private playbackGeneration = 0;
   /** invalidates in-flight playAmbience loads when stopAmbience runs */
   private ambienceGeneration = 0;
   private bufferCache = new Map<string, AudioBuffer | null>();
@@ -27,8 +30,20 @@ export class AudioEngine {
         this.buses.set(name, gain);
       }
     }
-    if (this.ctx.state === "suspended") void this.ctx.resume();
+    if (this.ctx.state === "suspended" && !this.paused) void this.ctx.resume();
     return this.ctx;
+  }
+
+  /** Suspend the shared context so narration, diegetic sound, ambience, and
+   * music retain their exact positions across the pause overlay. */
+  async pause() {
+    this.paused = true;
+    if (this.ctx?.state === "running") await this.ctx.suspend();
+  }
+
+  async resume() {
+    this.paused = false;
+    if (this.ctx?.state === "suspended") await this.ctx.resume();
   }
 
   private async load(url: string): Promise<AudioBuffer | null> {
@@ -66,6 +81,7 @@ export class AudioEngine {
     const bus = this.buses.get(opts.bus ?? "narration")!;
     const duckTargets = opts.duck ?? ["ambience", "music"];
     const buffer = await this.load(opts.url);
+    const generation = this.playbackGeneration;
 
     this.onSubtitle(opts.subtitle ?? null);
     this.duck(duckTargets, true);
@@ -75,13 +91,17 @@ export class AudioEngine {
           const source = ctx.createBufferSource();
           source.buffer = buffer;
           source.connect(bus);
-          source.onended = () => resolveDone();
+          this.activeSources.add(source);
+          source.onended = () => {
+            this.activeSources.delete(source);
+            resolveDone();
+          };
           source.start();
         });
       } else if (opts.subtitle) {
         // ~180 wpm reading pace, min 2s
         const seconds = Math.max(2, opts.subtitle.split(/\s+/).length / 3);
-        await new Promise((r) => setTimeout(r, seconds * 1000));
+        await this.waitWhileUnpaused(seconds * 1000, generation);
       }
     } finally {
       this.duck(duckTargets, false);
@@ -97,6 +117,8 @@ export class AudioEngine {
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(this.buses.get(bus)!);
+    this.activeSources.add(source);
+    source.onended = () => this.activeSources.delete(source);
     source.start();
   }
 
@@ -114,6 +136,8 @@ export class AudioEngine {
       source.buffer = buffer;
       source.loop = true;
       source.connect(this.buses.get("ambience")!);
+      this.activeSources.add(source);
+      source.onended = () => this.activeSources.delete(source);
       source.start();
       this.ambienceSources.push(source);
     }
@@ -125,5 +149,32 @@ export class AudioEngine {
       try { s.stop(); } catch { /* already stopped */ }
     }
     this.ambienceSources = [];
+  }
+
+  /** Scene-bound playback never leaks through restart, chapter select, or
+   * a director transition. Cached decoded buffers remain reusable. */
+  stopAll() {
+    this.playbackGeneration++;
+    this.ambienceGeneration++;
+    for (const source of this.activeSources) {
+      try { source.stop(); } catch { /* already stopped */ }
+    }
+    this.activeSources.clear();
+    this.ambienceSources = [];
+    if (this.ctx) {
+      for (const bus of this.buses.values()) bus.gain.setValueAtTime(1, this.ctx.currentTime);
+    }
+    this.onSubtitle(null);
+  }
+
+  private async waitWhileUnpaused(durationMs: number, generation: number) {
+    let remaining = durationMs;
+    let last = performance.now();
+    while (remaining > 0 && generation === this.playbackGeneration) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(100, remaining)));
+      const now = performance.now();
+      if (!this.paused) remaining -= now - last;
+      last = now;
+    }
   }
 }

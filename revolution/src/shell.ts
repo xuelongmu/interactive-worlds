@@ -1,0 +1,52 @@
+import type { StoryState } from "./engine/state";
+import type { SceneManifest } from "./engine/types";
+
+export type ShellView = "title" | "chapters" | "settings";
+
+export interface ChapterHeading {
+  title: string;
+  date: string;
+}
+
+/** Scene titles already carry their historically reviewed date after an em
+ * dash. The shell presents the two parts separately without duplicating
+ * content metadata outside the manifests. */
+export function splitChapterHeading(sceneTitle: string): ChapterHeading {
+  const [title, ...dateParts] = sceneTitle.split(/\s+—\s+/);
+  return {
+    title: title.trim(),
+    date: dateParts.join(" — ").trim(),
+  };
+}
+
+export function isChapterUnlocked(
+  index: number,
+  scenes: readonly Pick<SceneManifest, "id">[],
+  state: StoryState,
+  devOverride = false
+): boolean {
+  if (devOverride || index === 0) return true;
+  const scene = scenes[index];
+  const previous = scenes[index - 1];
+  return !!scene && (
+    state.completedScenes.includes(scene.id) ||
+    state.currentSceneId === scene.id ||
+    (!!previous && state.completedScenes.includes(previous.id))
+  );
+}
+
+export function getResumeScene<T extends Pick<SceneManifest, "id">>(
+  scenes: readonly T[],
+  state: StoryState
+): T | undefined {
+  const current = scenes.find(
+    (scene) => scene.id === state.currentSceneId && !state.completedScenes.includes(scene.id)
+  );
+  return current ?? scenes.find((scene) => !state.completedScenes.includes(scene.id)) ?? scenes[0];
+}
+
+/** Deliberately explicit: development chapter access is never inferred from
+ * the build mode and never silently changes a viewer's progress. */
+export function hasChapterDevOverride(search: string): boolean {
+  return new URLSearchParams(search).get("unlock") === "chapters";
+}

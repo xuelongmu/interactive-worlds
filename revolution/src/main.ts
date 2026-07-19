@@ -1,73 +1,146 @@
 import "./style.css";
 import { scenes } from "./scenes";
 import { loadState } from "./engine/state";
-import { Director } from "./engine/director";
-
-/** Shell: Play resumes at the first unfinished chapter; the chapter list
- *  doubles as a dev chapter-select. The director owns the DOM once a
- *  chapter starts and hands back here at story end. */
+import { Director, type DirectorExitTarget } from "./engine/director";
+import {
+  getResumeScene,
+  hasChapterDevOverride,
+  isChapterUnlocked,
+  splitChapterHeading,
+  type ShellView,
+} from "./shell";
 
 const app = document.getElementById("app")!;
 let director: Director | null = null;
 
-function play(sceneId: string) {
-  void director?.dispose();
-  director = new Director({ container: app, onExit: renderMenu });
-  void director.start(sceneId);
+async function play(sceneId: string) {
+  if (director) await director.dispose();
+  director = new Director({
+    container: app,
+    onExit: (target = "title") => {
+      director = null;
+      renderShell(target);
+    },
+  });
+  await director.start(sceneId);
 }
 
-function renderMenu() {
-  director = null;
+function shellHeader(backTarget?: ShellView) {
+  return `
+    <header class="shell-header">
+      ${backTarget ? `<button class="text-button shell-back" data-view="${backTarget}">← Back</button>` : "<span></span>"}
+      <p class="shell-wordmark">American Revolution</p>
+      <span></span>
+    </header>`;
+}
+
+function renderTitle() {
   const state = loadState();
-  const firstUnfinished =
-    scenes.find((s) => !state.completedScenes.includes(s.id)) ?? scenes[0];
+  const resumeScene = getResumeScene(scenes, state) ?? scenes[0];
+  const resumeHeading = splitChapterHeading(resumeScene.title);
+  const hasProgress = state.completedScenes.length > 0 || state.currentSceneId !== null;
+  const complete = scenes.every((scene) => state.completedScenes.includes(scene.id));
 
   app.innerHTML = `
-    <main style="max-width:680px;margin:8vh auto;padding:0 24px">
-      <p style="color:var(--dim);letter-spacing:0.2em;text-transform:uppercase;font-size:12px">An interactive story</p>
-      <h1 style="font-size:42px;font-weight:normal;margin:8px 0 4px">American Revolution</h1>
-      <p style="color:var(--dim);margin-bottom:28px">1773 – 1783 · splats, world models, and ink</p>
+    <main class="shell-screen title-screen">
+      <div class="paper-grain" aria-hidden="true"></div>
+      <section class="title-panel" aria-labelledby="piece-title">
+        <p class="title-eyebrow">An interactive documentary · 1773–1783</p>
+        <h1 id="piece-title">American Revolution</h1>
+        <p class="title-deck">Ten years of uprising, consequence, and ink.</p>
+        <div class="title-actions">
+          <button class="primary-action" id="begin">
+            ${complete ? "Begin Again" : hasProgress ? "Continue" : "Begin"}
+            <span>${resumeHeading.title}</span>
+          </button>
+          <button class="text-button" data-view="chapters">Chapters</button>
+          <button class="text-button" data-view="settings">Settings</button>
+        </div>
+      </section>
+      <p class="title-footnote">Headphones recommended · Progress saves on this device</p>
+    </main>`;
 
-      <button id="play" style="font-size:17px;padding:12px 36px">
-        ${state.completedScenes.length ? "Continue" : "Play"} — ${firstUnfinished.title}
-      </button>
+  document.getElementById("begin")!.addEventListener("click", () => void play(resumeScene.id));
+  bindViewButtons();
+}
 
-      <h2 style="font-size:14px;color:var(--dim);text-transform:uppercase;letter-spacing:0.15em;margin-top:40px">Chapters (dev select)</h2>
-      <ul style="list-style:none;padding:0;margin:12px 0">
-        ${scenes
-          .map(
-            (s, i) => `
-          <li style="margin:10px 0">
-            <a href="#" data-scene="${s.id}" style="color:var(--ink);text-decoration:none">${i + 1}. ${s.title}</a>
-            <span style="color:var(--dim)"> — <code>${s.renderer}</code>${
-              state.completedScenes.includes(s.id) ? ' · <span style="color:#7fae6a">completed</span>' : ""
-            }</span>
-          </li>`
-          )
-          .join("")}
-      </ul>
+function renderChapters() {
+  const state = loadState();
+  const devOverride = hasChapterDevOverride(window.location.search);
 
-      <h2 style="font-size:14px;color:var(--dim);text-transform:uppercase;letter-spacing:0.15em;margin-top:36px">Spikes (review builds)</h2>
-      <ul style="list-style:none;padding:0;margin:12px 0 36px">
-        <li style="margin:10px 0"><a href="/spikes/worldmodel/">Spike 1 — World model (Delaware boat, live Lingbot World 2 session)</a></li>
-        <li style="margin:10px 0"><a href="/spikes/splat/">Spike 2 — Walkable splat (Lexington cue zones, Spark renderer)</a></li>
-        <li style="margin:10px 0"><a href="/spikes/sandtable/">Spike 3 — Saratoga sand table (Actor register)</a></li>
-      </ul>
-      <p style="color:var(--dim);font-size:13px">
-        Missing worlds/audio degrade gracefully — generate assets with
-        <code>npm run pipeline:worlds</code> / <code>pipeline:vo</code> /
-        <code>pipeline:models</code>.
-      </p>
-    </main>
-  `;
+  app.innerHTML = `
+    <main class="shell-screen chapters-screen">
+      ${shellHeader("title")}
+      <section class="chapters-heading">
+        <p class="title-eyebrow">1773–1783</p>
+        <h1>Chapters</h1>
+        <p>Completed chapters remain open. The next chapter unlocks as the story advances.</p>
+        ${devOverride ? '<p class="dev-notice">Development override active · all chapters unlocked</p>' : ""}
+      </section>
+      <ol class="chapter-grid">
+        ${scenes.map((scene, index) => {
+          const heading = splitChapterHeading(scene.title);
+          const unlocked = isChapterUnlocked(index, scenes, state, devOverride);
+          const completed = state.completedScenes.includes(scene.id);
+          const current = state.currentSceneId === scene.id && !completed;
+          return `
+            <li>
+              <button
+                class="chapter-card plate-${(index % 4) + 1}"
+                data-scene="${scene.id}"
+                ${unlocked ? "" : "disabled"}
+                aria-label="Chapter ${index + 1}: ${heading.title}${unlocked ? "" : ", locked"}"
+              >
+                <span class="chapter-plate" aria-hidden="true"></span>
+                <span class="chapter-number">Chapter ${index + 1}</span>
+                <strong>${heading.title}</strong>
+                <span class="chapter-date">${heading.date}</span>
+                <span class="chapter-state">${completed ? "Completed" : current ? "Continue" : unlocked ? "Available" : "Locked"}</span>
+              </button>
+            </li>`;
+        }).join("")}
+      </ol>
+      ${import.meta.env.DEV && !devOverride
+        ? '<a class="dev-override" href="?unlock=chapters">Unlock all chapters for development</a>'
+        : ""}
+    </main>`;
 
-  document.getElementById("play")!.addEventListener("click", () => play(firstUnfinished.id));
-  for (const link of app.querySelectorAll<HTMLAnchorElement>("[data-scene]")) {
-    link.addEventListener("click", (e) => {
-      e.preventDefault();
-      play(link.dataset.scene!);
-    });
+  bindViewButtons();
+  for (const card of app.querySelectorAll<HTMLButtonElement>("[data-scene]:not(:disabled)")) {
+    card.addEventListener("click", () => void play(card.dataset.scene!));
   }
 }
 
-renderMenu();
+function renderSettings() {
+  app.innerHTML = `
+    <main class="shell-screen settings-screen">
+      ${shellHeader("title")}
+      <section class="settings-panel" aria-labelledby="settings-title">
+        <p class="title-eyebrow">Preferences</p>
+        <h1 id="settings-title">Settings</h1>
+        <div id="settings-hook" class="settings-hook" aria-live="polite">
+          <p>Display, subtitle, motion, and input preferences will appear here.</p>
+        </div>
+      </section>
+    </main>`;
+  bindViewButtons();
+  window.dispatchEvent(new CustomEvent("revolution:settings-open", {
+    detail: { container: document.getElementById("settings-hook") },
+  }));
+}
+
+function bindViewButtons() {
+  for (const button of app.querySelectorAll<HTMLButtonElement>("[data-view]")) {
+    button.addEventListener("click", () => renderShell(button.dataset.view as ShellView));
+  }
+}
+
+function renderShell(view: DirectorExitTarget | ShellView = "title") {
+  switch (view) {
+    case "chapters": renderChapters(); break;
+    case "settings": renderSettings(); break;
+    default: renderTitle();
+  }
+}
+
+renderShell();

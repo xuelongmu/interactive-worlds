@@ -241,6 +241,7 @@ export class WorldModelScenePlayer {
   private timers: number[] = [];
   private unbindKeys: (() => void) | null = null;
   private disposed = false;
+  private paused = false;
   private onBeforeUnload = () => void this.session?.disconnect();
 
   constructor(private opts: WorldModelPlayerOptions) {
@@ -317,9 +318,10 @@ export class WorldModelScenePlayer {
       `no first frame within ${budget}ms`
     );
     if (this.disposed) throw new Error("disposed during connect");
-    this.unbindKeys = bindWorldModelKeys(this.session);
+    this.unbindKeys = bindWorldModelKeys(this.session, () => this.paused);
     // live scene clock: the beats are authored in seconds from control handoff
     this.every(250, () => {
+      if (this.paused) return;
       this.clock += 0.25;
       this.timeline.update(this.clock);
     });
@@ -349,6 +351,7 @@ export class WorldModelScenePlayer {
       // dev path: nothing generated yet — hold black and run beats on a clock
       onStatus?.("no fallback video — running beats on a wall clock");
       this.every(250, () => {
+        if (this.paused) return;
         this.clock += 0.25;
         this.timeline.update(this.clock);
       });
@@ -380,6 +383,19 @@ export class WorldModelScenePlayer {
     this.timers.push(window.setTimeout(fn, ms));
   }
 
+  setPaused(paused: boolean) {
+    this.paused = paused;
+    if (paused) {
+      this.video.pause();
+      if (this.session) {
+        void this.session.setMovement("idle", "idle");
+        void this.session.setLook("idle", "idle");
+      }
+    } else {
+      void this.video.play().catch(() => undefined);
+    }
+  }
+
   /** Always called on scene exit — the session must never outlive the scene. */
   async dispose() {
     this.disposed = true;
@@ -396,7 +412,10 @@ export class WorldModelScenePlayer {
 }
 
 /** Keyboard -> world-model input mapping (WASD move, arrows look). */
-export function bindWorldModelKeys(session: WorldModelSession): () => void {
+export function bindWorldModelKeys(
+  session: WorldModelSession,
+  isLocked: () => boolean = () => false
+): () => void {
   const keys = new Set<string>();
   const apply = () => {
     const longitudinal: Longitudinal =
@@ -415,7 +434,7 @@ export function bindWorldModelKeys(session: WorldModelSession): () => void {
     return !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
   };
   const down = (e: KeyboardEvent) => {
-    if (inFormField(e)) return;
+    if (inFormField(e) || isLocked()) return;
     if (e.code.startsWith("Arrow")) e.preventDefault();
     keys.add(e.code); apply();
   };
