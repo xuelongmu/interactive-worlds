@@ -1,5 +1,7 @@
 import { LingbotWorld2Model, type LingbotWorld2Message } from "@reactor-models/lingbot-world-2";
 import type { EngineEvent, SceneManifest } from "../engine/types";
+import { PausableTimeouts } from "../engine/timers";
+import { resolveWorldModelInput } from "../engine/worldmodel-input";
 
 export interface WorldModelOptions {
   video: HTMLVideoElement;
@@ -241,6 +243,8 @@ export class WorldModelScenePlayer {
   private timers: number[] = [];
   private unbindKeys: (() => void) | null = null;
   private disposed = false;
+  private paused = false;
+  private controlTimers = new PausableTimeouts();
   private onBeforeUnload = () => void this.session?.disconnect();
 
   constructor(private opts: WorldModelPlayerOptions) {
@@ -317,9 +321,10 @@ export class WorldModelScenePlayer {
       `no first frame within ${budget}ms`
     );
     if (this.disposed) throw new Error("disposed during connect");
-    this.unbindKeys = bindWorldModelKeys(this.session);
+    this.unbindKeys = bindWorldModelKeys(this.session, () => this.paused);
     // live scene clock: the beats are authored in seconds from control handoff
     this.every(250, () => {
+      if (this.paused) return;
       this.clock += 0.25;
       this.timeline.update(this.clock);
     });
@@ -349,6 +354,7 @@ export class WorldModelScenePlayer {
       // dev path: nothing generated yet — hold black and run beats on a clock
       onStatus?.("no fallback video — running beats on a wall clock");
       this.every(250, () => {
+        if (this.paused) return;
         this.clock += 0.25;
         this.timeline.update(this.clock);
       });
@@ -359,7 +365,10 @@ export class WorldModelScenePlayer {
   /** Common entry beat: the viewer is aboard; control (live only) follows. */
   private onControlHandoff() {
     this.opts.onEvent({ type: "action", name: "boarded" });
-    this.after(3000, () => this.opts.onEvent({ type: "action", name: "control-granted" }));
+    this.controlTimers.schedule(
+      () => this.opts.onEvent({ type: "action", name: "control-granted" }),
+      3000
+    );
   }
 
   private withDeadline<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -376,8 +385,19 @@ export class WorldModelScenePlayer {
   private every(ms: number, fn: () => void) {
     this.timers.push(window.setInterval(fn, ms));
   }
-  private after(ms: number, fn: () => void) {
-    this.timers.push(window.setTimeout(fn, ms));
+  setPaused(paused: boolean) {
+    this.paused = paused;
+    if (paused) {
+      this.controlTimers.pause();
+      this.video.pause();
+      if (this.session) {
+        void this.session.setMovement("idle", "idle");
+        void this.session.setLook("idle", "idle");
+      }
+    } else {
+      this.controlTimers.resume();
+      void this.video.play().catch(() => undefined);
+    }
   }
 
   /** Always called on scene exit — the session must never outlive the scene. */
@@ -388,6 +408,7 @@ export class WorldModelScenePlayer {
     this.timers = [];
     this.unbindKeys?.();
     this.unbindKeys = null;
+    this.controlTimers.cancelAll();
     this.video.pause();
     this.video.remove();
     await this.session?.disconnect();
@@ -396,17 +417,13 @@ export class WorldModelScenePlayer {
 }
 
 /** Keyboard -> world-model input mapping (WASD move, arrows look). */
-export function bindWorldModelKeys(session: WorldModelSession): () => void {
+export function bindWorldModelKeys(
+  session: WorldModelSession,
+  isLocked: () => boolean = () => false
+): () => void {
   const keys = new Set<string>();
   const apply = () => {
-    const longitudinal: Longitudinal =
-      keys.has("KeyW") ? "forward" : keys.has("KeyS") ? "back" : "idle";
-    const lateral: Lateral =
-      keys.has("KeyA") ? "strafe_left" : keys.has("KeyD") ? "strafe_right" : "idle";
-    const lookH: LookH =
-      keys.has("ArrowLeft") ? "left" : keys.has("ArrowRight") ? "right" : "idle";
-    const lookV: LookV =
-      keys.has("ArrowUp") ? "up" : keys.has("ArrowDown") ? "down" : "idle";
+    const { longitudinal, lateral, lookH, lookV } = resolveWorldModelInput(keys, isLocked());
     void session.setMovement(longitudinal, lateral);
     void session.setLook(lookH, lookV);
   };
@@ -415,7 +432,7 @@ export function bindWorldModelKeys(session: WorldModelSession): () => void {
     return !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
   };
   const down = (e: KeyboardEvent) => {
-    if (inFormField(e)) return;
+    if (inFormField(e) || isLocked()) return;
     if (e.code.startsWith("Arrow")) e.preventDefault();
     keys.add(e.code); apply();
   };

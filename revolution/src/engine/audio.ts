@@ -12,6 +12,10 @@ export class AudioEngine {
   private ctx: AudioContext | null = null;
   private buses = new Map<BusName, GainNode>();
   private ambienceSources: AudioBufferSourceNode[] = [];
+  private activeSources = new Set<AudioBufferSourceNode>();
+  private paused = false;
+  private disposed = false;
+  private playbackGeneration = 0;
   /** invalidates in-flight playAmbience loads when stopAmbience runs */
   private ambienceGeneration = 0;
   private bufferCache = new Map<string, AudioBuffer | null>();
@@ -19,6 +23,7 @@ export class AudioEngine {
 
   /** Must be called from a user gesture (autoplay policy). */
   ensure(): AudioContext {
+    if (this.disposed) throw new Error("audio engine is disposed");
     if (!this.ctx) {
       this.ctx = new AudioContext();
       for (const name of ["narration", "diegetic", "ambience", "music"] as BusName[]) {
@@ -27,8 +32,20 @@ export class AudioEngine {
         this.buses.set(name, gain);
       }
     }
-    if (this.ctx.state === "suspended") void this.ctx.resume();
+    if (this.ctx.state === "suspended" && !this.paused) void this.ctx.resume();
     return this.ctx;
+  }
+
+  /** Suspend the shared context so narration, diegetic sound, ambience, and
+   * music retain their exact positions across the pause overlay. */
+  async pause() {
+    this.paused = true;
+    if (this.ctx?.state === "running") await this.ctx.suspend();
+  }
+
+  async resume() {
+    this.paused = false;
+    if (this.ctx?.state === "suspended") await this.ctx.resume();
   }
 
   private async load(url: string): Promise<AudioBuffer | null> {
@@ -62,10 +79,12 @@ export class AudioEngine {
     bus?: BusName;
     duck?: BusName[];
   }): Promise<void> {
+    const generation = this.playbackGeneration;
     const ctx = this.ensure();
     const bus = this.buses.get(opts.bus ?? "narration")!;
     const duckTargets = opts.duck ?? ["ambience", "music"];
     const buffer = await this.load(opts.url);
+    if (this.disposed || generation !== this.playbackGeneration) return;
 
     this.onSubtitle(opts.subtitle ?? null);
     this.duck(duckTargets, true);
@@ -75,13 +94,17 @@ export class AudioEngine {
           const source = ctx.createBufferSource();
           source.buffer = buffer;
           source.connect(bus);
-          source.onended = () => resolveDone();
+          this.activeSources.add(source);
+          source.onended = () => {
+            this.activeSources.delete(source);
+            resolveDone();
+          };
           source.start();
         });
       } else if (opts.subtitle) {
         // ~180 wpm reading pace, min 2s
         const seconds = Math.max(2, opts.subtitle.split(/\s+/).length / 3);
-        await new Promise((r) => setTimeout(r, seconds * 1000));
+        await this.waitWhileUnpaused(seconds * 1000, generation);
       }
     } finally {
       this.duck(duckTargets, false);
@@ -92,11 +115,13 @@ export class AudioEngine {
   /** Fire-and-forget playback (barks, stingers): no subtitle, no ducking. */
   async playOneShot(url: string, bus: BusName = "diegetic") {
     const buffer = await this.load(url);
-    if (!buffer) return;
+    if (!buffer || this.disposed) return;
     const ctx = this.ensure();
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(this.buses.get(bus)!);
+    this.activeSources.add(source);
+    source.onended = () => this.activeSources.delete(source);
     source.start();
   }
 
@@ -114,6 +139,8 @@ export class AudioEngine {
       source.buffer = buffer;
       source.loop = true;
       source.connect(this.buses.get("ambience")!);
+      this.activeSources.add(source);
+      source.onended = () => this.activeSources.delete(source);
       source.start();
       this.ambienceSources.push(source);
     }
@@ -125,5 +152,44 @@ export class AudioEngine {
       try { s.stop(); } catch { /* already stopped */ }
     }
     this.ambienceSources = [];
+  }
+
+  /** Scene-bound playback never leaks through restart, chapter select, or
+   * a director transition. Cached decoded buffers remain reusable. */
+  stopAll() {
+    this.playbackGeneration++;
+    this.ambienceGeneration++;
+    for (const source of this.activeSources) {
+      try { source.stop(); } catch { /* already stopped */ }
+    }
+    this.activeSources.clear();
+    this.ambienceSources = [];
+    if (this.ctx) {
+      for (const bus of this.buses.values()) bus.gain.setValueAtTime(1, this.ctx.currentTime);
+    }
+    this.onSubtitle(null);
+  }
+
+  async dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.stopAll();
+    const context = this.ctx;
+    this.ctx = null;
+    this.buses.clear();
+    this.bufferCache.clear();
+    this.paused = false;
+    if (context && context.state !== "closed") await context.close();
+  }
+
+  private async waitWhileUnpaused(durationMs: number, generation: number) {
+    let remaining = durationMs;
+    let last = performance.now();
+    while (remaining > 0 && generation === this.playbackGeneration) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(100, remaining)));
+      const now = performance.now();
+      if (!this.paused) remaining -= now - last;
+      last = now;
+    }
   }
 }
