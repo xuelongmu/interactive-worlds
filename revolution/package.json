@@ -6,6 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test:server": "node --test tests/session.test.mjs",
     "typecheck": "tsc --noEmit",
     "pipeline:frames": "node pipeline/frames.mjs",
     "pipeline:vo": "node pipeline/vo.mjs",

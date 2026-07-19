@@ -1,0 +1,9 @@
+.env
+.env.*
+node_modules/
+dist/
+pipeline/
+public/assets/
+public/reference/
+snapshots/
+tests/
