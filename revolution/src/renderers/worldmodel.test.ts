@@ -249,6 +249,26 @@ describe("WorldModelSession lifecycle", () => {
     expect(session.phase).toBe("stopped");
   });
 
+  it("reports remote session loss only after runtime readiness and before local teardown", async () => {
+    const model = new FakeModel();
+    const onUnexpectedDisconnect = vi.fn();
+    const session = new WorldModelSession({
+      mintJwt: async () => "jwt",
+      onUnexpectedDisconnect,
+      timeouts: { mint: 100, connect: 100, ready: 100 },
+    }, model as unknown as LingbotWorld2Model);
+
+    model.emitEvent("statusChanged", "disconnected");
+    expect(onUnexpectedDisconnect).not.toHaveBeenCalled();
+    await session.prepareTransport();
+    model.emitEvent("statusChanged", "disconnected");
+    expect(onUnexpectedDisconnect).toHaveBeenCalledOnce();
+
+    await session.disconnect({ dispose: true });
+    model.emitEvent("statusChanged", "disconnected");
+    expect(onUnexpectedDisconnect).toHaveBeenCalledOnce();
+  });
+
   it("uses an authenticated keepalive termination request on pagehide", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -272,6 +292,12 @@ describe("WorldModelSession lifecycle", () => {
 });
 
 describe("presentation and rollover gates", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it("rejects a pending presentation deadline when disposal cancels waits", async () => {
     vi.stubGlobal("window", globalThis);
     const player = Object.create(WorldModelScenePlayer.prototype) as any;
@@ -369,6 +395,77 @@ describe("presentation and rollover gates", () => {
     );
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it("recovers remote session loss once and hands fallback the current authored clock", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("window", globalThis);
+    const disconnect = vi.fn().mockResolvedValue(undefined);
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.runtimeFallbackStarted = false;
+    player.disposed = false;
+    player.rolloverDeadline = null;
+    player.timers = new Set<number>();
+    player.clock = 61.25;
+    player.clockTimer = window.setInterval(() => {}, 250);
+    player.timers.add(player.clockTimer);
+    player.telemetry = vi.fn();
+    player.emitLiveControls = vi.fn();
+    player.opts = { onStatus: vi.fn() };
+    player.cancelVideoFrames = vi.fn();
+    const unbindKeys = vi.fn();
+    player.unbindKeys = unbindKeys;
+    player.session = { disconnect };
+    player.mode = "live";
+    player.startFallback = vi.fn().mockResolvedValue(undefined);
+
+    await player.fallBackFromLive("Reactor session disconnected");
+    await player.fallBackFromLive("Reactor session disconnected");
+
+    expect(player.clockTimer).toBeNull();
+    expect(unbindKeys).toHaveBeenCalledOnce();
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(player.startFallback).toHaveBeenCalledOnce();
+    expect(player.startFallback).toHaveBeenCalledWith(true);
+    expect(player.mode).toBe("fallback");
+  });
+
+  it("seeks a recovered recorded fallback to the current authored clock", async () => {
+    vi.stubGlobal("HTMLMediaElement", { HAVE_METADATA: 1, HAVE_CURRENT_DATA: 2 });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, {
+      status: 200,
+      headers: { "content-type": "video/mp4" },
+    })));
+    const addEventListener = vi.fn();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.clock = 61.25;
+    player.disposed = false;
+    player.hasPoster = false;
+    player.fallbackUsesWallClock = false;
+    player.video = {
+      srcObject: {},
+      style: { visibility: "hidden" },
+      readyState: 2,
+      currentTime: 0,
+      src: "",
+      loop: false,
+      play: vi.fn().mockResolvedValue(undefined),
+      addEventListener,
+    };
+    player.poster = { style: { display: "none" } };
+    player.opts = {
+      manifest: { assets: { fallbackVideo: "/fallback.mp4" } },
+      onStatus: vi.fn(),
+    };
+    player.presentation = { markFallbackReady: vi.fn() };
+    player.onFallbackTimeUpdate = vi.fn();
+
+    await player.startFallback(true);
+
+    expect(player.video.srcObject).toBeNull();
+    expect(player.video.currentTime).toBe(61.25);
+    expect(addEventListener).toHaveBeenCalledWith("timeupdate", expect.any(Function));
+    expect(player.presentation.markFallbackReady).toHaveBeenCalledOnce();
   });
 
   it("maps direct mouse look and contextual action bindings", () => {

@@ -47,6 +47,8 @@ export interface WorldModelSessionOptions {
   onEvent?: (event: EngineEvent) => void;
   onMessage?: (message: LingbotWorld2Message) => void;
   onStatus?: (status: string) => void;
+  /** Fires when a prepared or active runtime disconnects before local teardown. */
+  onUnexpectedDisconnect?: (status: string) => void;
   onTelemetry?: (event: WorldModelTelemetryEvent) => void;
   /** Test seam; production always uses the challenge/admission broker. */
   mintJwt?: () => Promise<string>;
@@ -211,7 +213,7 @@ export class WorldModelSession {
 
   attach(options: Pick<
     WorldModelSessionOptions,
-    "video" | "onEvent" | "onMessage" | "onStatus" | "onTelemetry"
+    "video" | "onEvent" | "onMessage" | "onStatus" | "onUnexpectedDisconnect" | "onTelemetry"
   >): void {
     this.hooks = { ...this.hooks, ...options };
     if (this.stream && options.video) this.attachStream(options.video, this.stream);
@@ -448,7 +450,15 @@ export class WorldModelSession {
   private installPermanentListeners(): void {
     if (this.permanentListenersInstalled) return;
     this.permanentListenersInstalled = true;
-    const statusHandler = (status: string) => this.hooks.onStatus?.(status);
+    const statusHandler = (status: string) => {
+      this.hooks.onStatus?.(status);
+      if (
+        status === "disconnected"
+        && ["runtime-ready", "conditioning", "prepared", "starting", "streaming", "recycling"].includes(this.phase)
+      ) {
+        this.hooks.onUnexpectedDisconnect?.(status);
+      }
+    };
     this.model.on("statusChanged", statusHandler);
     this.unsubscribes.push(
       () => this.model.off("statusChanged", statusHandler),
@@ -859,6 +869,7 @@ export class WorldModelScenePlayer {
   private controlsLocked = false;
   private presented = false;
   private liveClockStarted = false;
+  private clockTimer: number | null = null;
   private fallbackUsesWallClock = false;
   private hasPoster = false;
   private healthSamplePending = false;
@@ -1015,6 +1026,11 @@ export class WorldModelScenePlayer {
       video: this.video,
       onEvent: this.opts.onEvent,
       onStatus: this.opts.onStatus,
+      onUnexpectedDisconnect: (status) => {
+        if (this.presented && this.mode === "live") {
+          void this.fallBackFromLive(`Reactor session ${status}`);
+        }
+      },
       onTelemetry: this.opts.onTelemetry,
       onMessage: (message) => this.handleModelMessage(message),
     });
@@ -1091,13 +1107,20 @@ export class WorldModelScenePlayer {
       onStatus?.("playing pre-rendered fallback");
       this.video.src = url;
       this.video.loop = false;
-      await this.video.play().catch(() => undefined);
+      const resumeAt = preserveLiveClock ? this.clock : 0;
+      if (resumeAt > 0) {
+        const seek = () => { this.video.currentTime = resumeAt; };
+        if (this.video.readyState >= HTMLMediaElement.HAVE_METADATA) seek();
+        else this.video.addEventListener("loadedmetadata", seek, { once: true });
+      }
+      if (!this.paused) await this.video.play().catch(() => undefined);
       await this.waitForPlayableFrame();
       this.revealLiveVideo();
-      if (!preserveLiveClock) this.video.addEventListener("timeupdate", this.onFallbackTimeUpdate);
+      this.video.addEventListener("timeupdate", this.onFallbackTimeUpdate);
     } else {
       onStatus?.("no fallback video - running beats on a wall clock");
-      if (!preserveLiveClock) this.fallbackUsesWallClock = true;
+      this.fallbackUsesWallClock = true;
+      if (preserveLiveClock) this.startWallClock();
     }
     if (this.disposed) return;
     this.presentation.markFallbackReady();
@@ -1125,7 +1148,7 @@ export class WorldModelScenePlayer {
   private startLiveClock(): void {
     if (this.liveClockStarted) return;
     this.liveClockStarted = true;
-    this.every(250, () => {
+    this.clockTimer = this.every(250, () => {
       if (this.paused) return;
       this.clock += 0.25;
       this.timeline.update(this.clock);
@@ -1133,11 +1156,19 @@ export class WorldModelScenePlayer {
   }
 
   private startWallClock(): void {
-    this.every(250, () => {
+    if (this.clockTimer !== null) return;
+    this.clockTimer = this.every(250, () => {
       if (this.paused) return;
       this.clock += 0.25;
       this.timeline.update(this.clock);
     });
+  }
+
+  private stopSceneClock(): void {
+    if (this.clockTimer === null) return;
+    clearInterval(this.clockTimer);
+    this.timers.delete(this.clockTimer);
+    this.clockTimer = null;
   }
 
   private applyModelEventControlBoundary(name: string): void {
@@ -1274,6 +1305,7 @@ export class WorldModelScenePlayer {
     if (this.runtimeFallbackStarted || this.disposed) return;
     this.runtimeFallbackStarted = true;
     this.clearRolloverDeadline();
+    this.stopSceneClock();
     this.telemetry({ name: "fallback", reason, durationMs });
     this.emitLiveControls(false);
     this.opts.onStatus?.("Live output unavailable - switching to recorded fallback");
@@ -1345,8 +1377,10 @@ export class WorldModelScenePlayer {
     this.pendingWaits.clear();
   }
 
-  private every(ms: number, fn: () => void): void {
-    this.timers.add(window.setInterval(fn, ms));
+  private every(ms: number, fn: () => void): number {
+    const timer = window.setInterval(fn, ms);
+    this.timers.add(timer);
+    return timer;
   }
 
   private telemetry(event: WorldModelTelemetryEvent): void {
