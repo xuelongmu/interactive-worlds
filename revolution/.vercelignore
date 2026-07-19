@@ -4,6 +4,7 @@ node_modules/
 dist/
 pipeline/
 public/assets/
+# Published under the same immutable CDN release and rewritten at /reference/.
 public/reference/
 snapshots/
 tests/

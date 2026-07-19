@@ -64,12 +64,14 @@ through) shows the parsed cue list without calling the API.
 ## Production deployment
 
 Vercel builds this directory as a Vite static app and deploys
-`api/session.ts` as the server-only Reactor token broker. Generated media stays
-outside the app deployment in versioned object storage/CDN releases because a
-single splat can approach 200 MB. See [production deployment](../docs/deployment.md)
-for fresh-clone setup, secret handling, asset publishing, verification, and
-the external account steps that must be completed before claiming a public
-world-model run.
+`api/session.ts` as the server-only Reactor token broker. Production token
+minting requires a one-time Turnstile challenge and an atomic Upstash Redis
+admission check for replay, per-client rate, and global daily budget. Generated
+media and conditioning references stay outside the app deployment in versioned
+object storage/CDN releases because a single splat can approach 200 MB. See
+[production deployment](../docs/deployment.md) for fresh-clone setup, secret
+handling, asset publishing, verification, and the external account steps that
+must be completed before claiming a public world-model run.
 
 ## Layout
 

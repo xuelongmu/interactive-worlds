@@ -2,6 +2,9 @@ import "./style.css";
 import { scenes } from "./scenes";
 import { loadState } from "./engine/state";
 import { Director } from "./engine/director";
+import { installSessionChallenge } from "./security/session-challenge";
+
+installSessionChallenge();
 
 /** Shell: Play resumes at the first unfinished chapter; the chapter list
  *  doubles as a dev chapter-select. The director owns the DOM once a

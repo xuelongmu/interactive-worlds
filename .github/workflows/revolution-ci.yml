@@ -2,8 +2,6 @@ name: Revolution CI
 
 on:
   pull_request:
-    branches:
-      - revolution-scaffold
 
 permissions:
   contents: read
