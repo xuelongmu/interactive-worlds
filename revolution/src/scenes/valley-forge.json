@@ -46,5 +46,6 @@
       }
     ]
   },
+  "branching": { "context": "valley-forge-analysis-acknowledgement" },
   "next": { "scene": "yorktown", "preloadAt": "VAL-040" }
 }

@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LingbotWorld2Message, LingbotWorld2Model } from "@reactor-models/lingbot-world-2";
+import { BRANCH_ACTION_MAPPINGS } from "../branch-state";
 import {
   canDispatchWorldModelAction,
+  bindWorldModelKeys,
   frameHasVisibleContent,
   isGroundedWorldModelEvent,
   isWorldModelActionKey,
@@ -27,6 +29,15 @@ class FakeModel {
   private messages = new Set<Handler<LingbotWorld2Message>>();
   private imageAccepted = new Set<Handler<any>>();
   private conditionsReady = new Set<Handler<any>>();
+  private generationReset = new Set<Handler<any>>();
+  private promptAccepted = new Set<Handler<any>>();
+  private stateHandlers = new Set<Handler<any>>();
+  private input = {
+    move_longitudinal: "idle",
+    move_lateral: "idle",
+    look_horizontal: "idle",
+    look_vertical: "idle",
+  };
 
   on(event: string, handler: Handler) {
     this.calls.push(`listen:${event}`);
@@ -51,6 +62,21 @@ class FakeModel {
     this.conditionsReady.add(handler);
     return () => this.conditionsReady.delete(handler);
   }
+  onGenerationReset(handler: Handler) {
+    this.calls.push("listen:reset");
+    this.generationReset.add(handler);
+    return () => this.generationReset.delete(handler);
+  }
+  onPromptAccepted(handler: Handler) {
+    this.calls.push("listen:prompt");
+    this.promptAccepted.add(handler);
+    return () => this.promptAccepted.delete(handler);
+  }
+  onState(handler: Handler) {
+    this.calls.push("listen:state");
+    this.stateHandlers.add(handler);
+    return () => this.stateHandlers.delete(handler);
+  }
   getStatus() { return this.status; }
   async connect() {
     this.calls.push("connect");
@@ -61,6 +87,11 @@ class FakeModel {
     }
   }
   async uploadFile() { this.calls.push("upload"); return { id: "ref" } as any; }
+  async reset() {
+    this.calls.push("reset");
+    this.emit({ type: "generation_reset", reason: "test" });
+    this.emitState();
+  }
   async setImage() {
     this.calls.push("setImage");
     this.emit({ type: "image_accepted", width: 1664, height: 960 });
@@ -85,15 +116,23 @@ class FakeModel {
   async disconnect() { this.calls.push("disconnect"); }
   async setMoveLongitudinal({ move_longitudinal }: { move_longitudinal?: string }) {
     this.calls.push(`move-long:${move_longitudinal}`);
+    this.input.move_longitudinal = move_longitudinal ?? "idle";
+    this.emitState();
   }
   async setMoveLateral({ move_lateral }: { move_lateral?: string }) {
     this.calls.push(`move-lateral:${move_lateral}`);
+    this.input.move_lateral = move_lateral ?? "idle";
+    this.emitState();
   }
   async setLookHorizontal({ look_horizontal }: { look_horizontal?: string }) {
     this.calls.push(`look-h:${look_horizontal}`);
+    this.input.look_horizontal = look_horizontal ?? "idle";
+    this.emitState();
   }
   async setLookVertical({ look_vertical }: { look_vertical?: string }) {
     this.calls.push(`look-v:${look_vertical}`);
+    this.input.look_vertical = look_vertical ?? "idle";
+    this.emitState();
   }
   getConnectionTimings() { return undefined; }
   getStats() { return undefined; }
@@ -108,7 +147,34 @@ class FakeModel {
     if (message.type === "conditions_ready") {
       for (const handler of this.conditionsReady) handler(message);
     }
+    if (message.type === "generation_reset") {
+      for (const handler of this.generationReset) handler(message);
+    }
+    if (message.type === "prompt_accepted") {
+      for (const handler of this.promptAccepted) handler(message);
+    }
+    if (message.type === "state") {
+      for (const handler of this.stateHandlers) handler(message);
+    }
     for (const handler of this.messages) handler(message);
+  }
+
+  emitState() {
+    this.emit({
+      type: "state",
+      seed: 42,
+      paused: false,
+      running: false,
+      started: false,
+      has_image: true,
+      has_prompt: true,
+      ...this.input,
+      current_chunk: 0,
+      current_action: "still",
+      current_prompt: "scene",
+      camera_pose_active: false,
+      rotation_speed_deg: 5,
+    });
   }
 
   emitEvent(event: string, value: unknown) {
@@ -116,7 +182,8 @@ class FakeModel {
   }
 
   temporaryListenerCount() {
-    return this.imageAccepted.size + this.conditionsReady.size;
+    return this.imageAccepted.size + this.conditionsReady.size + this.generationReset.size
+      + this.promptAccepted.size + this.stateHandlers.size;
   }
 }
 
@@ -142,11 +209,13 @@ describe("WorldModelSession lifecycle", () => {
     await session.prepare(new Blob(["frame"]), "winter river");
 
     expect(session.phase).toBe("prepared");
-    expect(model.calls).toEqual([
-      "listen:statusChanged", "listen:video", "listen:message",
-      "mint", "connect", "listen:image", "listen:conditions",
-      "upload", "setImage", "setPrompt:winter river",
+    const commands = model.calls.filter((call) =>
+      ["mint", "connect", "reset", "upload", "setImage"].includes(call)
+      || call.startsWith("setPrompt:"));
+    expect(commands.map((call) => call.startsWith("setPrompt:") ? "setPrompt" : call)).toEqual([
+      "mint", "connect", "reset", "upload", "setImage", "setPrompt",
     ]);
+    expect(model.calls.find((call) => call.startsWith("setPrompt:"))).toContain("winter river");
     expect(model.calls).not.toContain("start");
     expect(model.temporaryListenerCount()).toBe(0);
   });
@@ -182,7 +251,7 @@ describe("WorldModelSession lifecycle", () => {
     const { session } = makeSession(model);
     await session.prepareTransport();
     const conditioning = session.condition(new Blob(), "scene");
-    const rejection = expect(conditioning).rejects.toThrow("conditions_ready timeout");
+    const rejection = expect(conditioning).rejects.toThrow("prompt_accepted timeout");
     await vi.advanceTimersByTimeAsync(101);
 
     await rejection;
@@ -222,6 +291,69 @@ describe("WorldModelSession lifecycle", () => {
       "look-h:right",
       "look-v:down",
     ]);
+  });
+
+  it("normalizes only backend prompt acceptance into one correlated branch confirmation", async () => {
+    const model = new FakeModel();
+    const runtimeEvents = vi.fn();
+    const readiness = vi.fn();
+    const session = new WorldModelSession({
+      mintJwt: async () => "jwt",
+      onBranchRuntimeEvent: runtimeEvents,
+      onBranchReadiness: readiness,
+      timeouts: { mint: 100, connect: 100, ready: 100, upload: 100, conditions: 100, begin: 100, input: 100 },
+    }, model as unknown as LingbotWorld2Model);
+    await session.prepare(new Blob(), "scene");
+    await session.begin();
+    await session.setInputEnabled(true);
+    const mapping = BRANCH_ACTION_MAPPINGS[0];
+    const request = { momentId: mapping.momentId, choiceId: mapping.choiceId, requestId: mapping.requestId };
+
+    await session.requestBranchAction(request, "Hands hold the hatchet briefly.");
+    expect(runtimeEvents).toHaveBeenCalledTimes(1);
+    expect(runtimeEvents).toHaveBeenCalledWith({
+      type: "branch-confirmed",
+      id: mapping.confirmationEventId,
+      requestId: mapping.requestId,
+    });
+    expect(readiness).toHaveBeenCalledWith({
+      sessionConfirmed: true,
+      imageConfirmed: true,
+      promptConfirmed: true,
+      inputConfirmed: true,
+    });
+
+    const lastPromptCall = [...model.calls].reverse().find((call: string) => call.startsWith("setPrompt:"))!;
+    model.emit({ type: "prompt_accepted", prompt: lastPromptCall.slice(10) });
+    expect(runtimeEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes correlated command_error and allows a clean retry", async () => {
+    const model = new FakeModel();
+    const runtimeEvents = vi.fn();
+    const { session } = makeSession(model);
+    session.attach({ onBranchRuntimeEvent: runtimeEvents });
+    await session.prepare(new Blob(), "scene");
+    await session.begin();
+    await session.setInputEnabled(true);
+    model.autoConditions = false;
+    const mapping = BRANCH_ACTION_MAPPINGS[1];
+    const request = { momentId: mapping.momentId, choiceId: mapping.choiceId, requestId: mapping.requestId };
+
+    await session.requestBranchAction(request, "Hands hold the broom briefly.");
+    model.emit({ type: "command_error", command: "set_prompt", reason: "try again" });
+    expect(runtimeEvents).toHaveBeenCalledWith({
+      type: "command_error",
+      requestId: mapping.requestId,
+      message: "try again",
+    });
+    model.autoConditions = true;
+    await session.requestBranchAction(request, "Hands hold the broom briefly.");
+    expect(runtimeEvents).toHaveBeenLastCalledWith({
+      type: "branch-confirmed",
+      id: mapping.confirmationEventId,
+      requestId: mapping.requestId,
+    });
   });
 
   it("deterministically stops translation at a grounded/landed boundary", async () => {
@@ -512,12 +644,61 @@ describe("presentation and rollover gates", () => {
     expect(resolveWorldModelPointerLook(8, -4)).toEqual({ h: "right", v: "up" });
     expect(resolveWorldModelPointerLook(-8, 4)).toEqual({ h: "left", v: "down" });
     expect(resolveWorldModelPointerLook(0, 0)).toEqual({ h: "idle", v: "idle" });
-    expect(["KeyE", "Space", "Enter"].every(isWorldModelActionKey)).toBe(true);
+    expect(["KeyE", "KeyF"].every(isWorldModelActionKey)).toBe(true);
+    expect(["Space", "Enter"].some(isWorldModelActionKey)).toBe(false);
     expect(isWorldModelActionKey("KeyW")).toBe(false);
     expect(canDispatchWorldModelAction("KeyE", false, false)).toBe(false);
     expect(canDispatchWorldModelAction("KeyE", true, true)).toBe(false);
     expect(canDispatchWorldModelAction("KeyE", true, false)).toBe(true);
     expect(canDispatchWorldModelAction("KeyE", true, false, true)).toBe(false);
+  });
+
+  it("releases movement and contextual E/F edges on keyup, blur, visibility loss, and disposal", () => {
+    const documentTarget = new EventTarget() as EventTarget & { visibilityState: string; pointerLockElement: null };
+    documentTarget.visibilityState = "visible";
+    documentTarget.pointerLockElement = null;
+    const windowTarget = new EventTarget();
+    vi.stubGlobal("document", documentTarget);
+    vi.stubGlobal("window", windowTarget);
+    const session = {
+      setMovement: vi.fn(),
+      setLook: vi.fn(),
+      clearPersistentInput: vi.fn(),
+    };
+    const onAction = vi.fn();
+    const onActionRelease = vi.fn();
+    const keyboard = (type: string, code: string, repeat = false) => {
+      const event = new Event(type, { cancelable: true });
+      Object.defineProperties(event, {
+        code: { value: code }, repeat: { value: repeat },
+        ctrlKey: { value: false }, altKey: { value: false }, metaKey: { value: false },
+      });
+      return event;
+    };
+    const unbind = bindWorldModelKeys(session as unknown as WorldModelSession, () => false, {
+      isPresented: () => true,
+      onAction,
+      onActionRelease,
+    });
+
+    documentTarget.dispatchEvent(keyboard("keydown", "KeyW"));
+    documentTarget.dispatchEvent(keyboard("keyup", "KeyW"));
+    expect(session.setMovement).toHaveBeenCalledWith("forward", "idle");
+    expect(session.setMovement).toHaveBeenLastCalledWith("idle", "idle");
+    documentTarget.dispatchEvent(keyboard("keydown", "KeyE"));
+    documentTarget.dispatchEvent(keyboard("keydown", "KeyE", true));
+    documentTarget.dispatchEvent(keyboard("keyup", "KeyE"));
+    expect(onAction).toHaveBeenCalledOnce();
+    expect(onAction).toHaveBeenCalledWith("E");
+    expect(onActionRelease).toHaveBeenCalledWith("E");
+
+    windowTarget.dispatchEvent(new Event("blur"));
+    expect(session.clearPersistentInput).toHaveBeenCalledWith("blur");
+    documentTarget.visibilityState = "hidden";
+    documentTarget.dispatchEvent(new Event("visibilitychange"));
+    expect(session.clearPersistentInput).toHaveBeenCalledWith("visibility");
+    unbind();
+    expect(session.clearPersistentInput).toHaveBeenCalledWith("input-disposed");
   });
 
   it("does not advertise a generic action through the director handoff", () => {
@@ -531,7 +712,7 @@ describe("presentation and rollover gates", () => {
       renderer: "worldmodel",
       controlsEnabled: true,
       movement: { binding: "WASD", label: "Move" },
-      look: { binding: "Mouse / arrows", label: "Look" },
+      look: { binding: "Mouse", label: "Look" },
     });
     expect(onControlHandoff.mock.calls[0][0]).not.toHaveProperty("action");
   });
