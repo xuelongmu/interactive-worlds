@@ -1,0 +1,111 @@
+/** Four-bus Web Audio engine: narration / diegetic / ambience / music.
+ *  Narration ducks other buses by -6 dB. VO files are baked per cue id;
+ *  when a file is missing (assets not yet generated) the subtitle still
+ *  shows for an estimated read duration, so scenes are testable pre-VO. */
+
+export type BusName = "narration" | "diegetic" | "ambience" | "music";
+
+const DUCK_DB = -6;
+const dbToGain = (db: number) => Math.pow(10, db / 20);
+
+export class AudioEngine {
+  private ctx: AudioContext | null = null;
+  private buses = new Map<BusName, GainNode>();
+  private ambienceSources: AudioBufferSourceNode[] = [];
+  private bufferCache = new Map<string, AudioBuffer | null>();
+  onSubtitle: (text: string | null) => void = () => {};
+
+  /** Must be called from a user gesture (autoplay policy). */
+  ensure(): AudioContext {
+    if (!this.ctx) {
+      this.ctx = new AudioContext();
+      for (const name of ["narration", "diegetic", "ambience", "music"] as BusName[]) {
+        const gain = this.ctx.createGain();
+        gain.connect(this.ctx.destination);
+        this.buses.set(name, gain);
+      }
+    }
+    if (this.ctx.state === "suspended") void this.ctx.resume();
+    return this.ctx;
+  }
+
+  private async load(url: string): Promise<AudioBuffer | null> {
+    if (this.bufferCache.has(url)) return this.bufferCache.get(url)!;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${res.status}`);
+      const buffer = await this.ensure().decodeAudioData(await res.arrayBuffer());
+      this.bufferCache.set(url, buffer);
+      return buffer;
+    } catch {
+      console.warn(`[audio] missing asset: ${url} (subtitle-only playback)`);
+      this.bufferCache.set(url, null);
+      return null;
+    }
+  }
+
+  private duck(buses: BusName[], on: boolean) {
+    const ctx = this.ensure();
+    for (const name of buses) {
+      const bus = this.buses.get(name);
+      bus?.gain.setTargetAtTime(on ? dbToGain(DUCK_DB) : 1, ctx.currentTime, 0.15);
+    }
+  }
+
+  /** Play a VO cue; resolves when finished. Missing files resolve after an
+   *  estimated read time so cue sequencing still works. */
+  async playVoice(opts: {
+    url: string;
+    subtitle?: string;
+    bus?: BusName;
+    duck?: BusName[];
+  }): Promise<void> {
+    const ctx = this.ensure();
+    const bus = this.buses.get(opts.bus ?? "narration")!;
+    const duckTargets = opts.duck ?? ["ambience", "music"];
+    const buffer = await this.load(opts.url);
+
+    this.onSubtitle(opts.subtitle ?? null);
+    this.duck(duckTargets, true);
+    try {
+      if (buffer) {
+        await new Promise<void>((resolveDone) => {
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          source.connect(bus);
+          source.onended = () => resolveDone();
+          source.start();
+        });
+      } else if (opts.subtitle) {
+        // ~180 wpm reading pace, min 2s
+        const seconds = Math.max(2, opts.subtitle.split(/\s+/).length / 3);
+        await new Promise((r) => setTimeout(r, seconds * 1000));
+      }
+    } finally {
+      this.duck(duckTargets, false);
+      this.onSubtitle(null);
+    }
+  }
+
+  async playAmbience(urls: string[]) {
+    const ctx = this.ensure();
+    this.stopAmbience();
+    for (const url of urls) {
+      const buffer = await this.load(url);
+      if (!buffer) continue;
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.connect(this.buses.get("ambience")!);
+      source.start();
+      this.ambienceSources.push(source);
+    }
+  }
+
+  stopAmbience() {
+    for (const s of this.ambienceSources) {
+      try { s.stop(); } catch { /* already stopped */ }
+    }
+    this.ambienceSources = [];
+  }
+}

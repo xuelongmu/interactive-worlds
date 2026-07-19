@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+# generated, reproducible via pipeline/
+public/assets/
+public/reference/
+pipeline/.*-cache.json
