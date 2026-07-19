@@ -288,9 +288,11 @@ describe("WorldModelSession lifecycle", () => {
   it("keeps the SDK error visible when a later status only says disconnected", async () => {
     const model = new FakeModel();
     const onStatus = vi.fn();
+    const onUnexpectedDisconnect = vi.fn();
     const session = new WorldModelSession({
       mintJwt: async () => "jwt",
       onStatus,
+      onUnexpectedDisconnect,
       timeouts: { mint: 100, connect: 100, ready: 100 },
     }, model as unknown as LingbotWorld2Model);
 
@@ -299,6 +301,7 @@ describe("WorldModelSession lifecycle", () => {
     model.emitEvent("statusChanged", "disconnected");
 
     expect(onStatus).toHaveBeenLastCalledWith("Connection error: WebRTC handshake failed");
+    expect(onUnexpectedDisconnect).toHaveBeenCalledWith("WebRTC handshake failed");
     expect(formatWorldModelError(new Error("bad eyJabc.def.ghi token")))
       .toBe("bad [redacted token] token");
   });

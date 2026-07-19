@@ -467,20 +467,20 @@ export class WorldModelSession {
     const statusHandler = (status: string) => {
       this.hooks.onStatus?.(
         status === "disconnected" && this.lastConnectionError
-          ? this.lastConnectionError
+          ? `Connection error: ${this.lastConnectionError}`
           : status
       );
       if (
         status === "disconnected"
         && ["runtime-ready", "conditioning", "prepared", "starting", "streaming", "recycling"].includes(this.phase)
       ) {
-        this.hooks.onUnexpectedDisconnect?.(status);
+        this.hooks.onUnexpectedDisconnect?.(this.lastConnectionError ?? status);
       }
     };
     const errorHandler = (error: unknown) => {
-      const status = `Connection error: ${formatWorldModelError(error)}`;
-      this.lastConnectionError = status;
-      this.hooks.onStatus?.(status);
+      const reason = formatWorldModelError(error);
+      this.lastConnectionError = reason;
+      this.hooks.onStatus?.(`Connection error: ${reason}`);
     };
     this.model.on("statusChanged", statusHandler);
     this.model.on("error", errorHandler);
