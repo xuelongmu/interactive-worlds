@@ -23,6 +23,7 @@ import {
 interface Runner {
   dispose(): void | Promise<void>;
   setControlsLocked(locked: boolean): void;
+  hasMovementInput?(): boolean;
   setPaused(paused: boolean): void;
   /** current rendered frame, for splat -> world-model conditioning */
   captureFrame?(): Promise<Blob | null>;
@@ -33,6 +34,17 @@ export type DirectorExitTarget = "title" | "chapters" | "settings";
 const CHAPTER_WORDS = [
   "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
 ];
+
+export function runnerHasMovementInput(
+  runner: { hasMovementInput?(): boolean } | null
+): boolean {
+  return runner?.hasMovementInput?.() === true;
+}
+
+export function completeCutsceneHandoff(emitAftermath: () => void, unlock: () => void) {
+  emitAftermath();
+  unlock();
+}
 
 /** Runs the story: loads a manifest, instantiates its renderer, wires the
  *  cue + audio engines, and executes `then:` directives. Linear order makes
@@ -162,13 +174,14 @@ export class Director {
             url: cue.diegeticVo,
             subtitle: cue.diegeticSubtitle,
             bus: "diegetic",
+            duck: [],
           });
         }
         await this.audio.playVoice({
           url: cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`,
           subtitle: cue.subtitle,
           bus: cue.diegetic ? "diegetic" : "narration",
-          duck: cue.duck as BusName[] | undefined,
+          duck: cue.diegetic ? [] : cue.duck as BusName[] | undefined,
         });
       },
       // audio-first: the visual consequence lands on the last word — and a
@@ -443,6 +456,7 @@ export class Director {
           applyControlLock();
           if (!locked) this.armResumeWalk();
         },
+        hasMovementInput: () => scene.hasMovementInput(),
         setPaused: (value) => {
           paused = value;
           applyControlLock();
@@ -599,9 +613,11 @@ export class Director {
       });
       if (!completed) return;
     }
-    this.runner?.setControlsLocked(false);
     await this.fadeTo(0);
-    this.cueEngine?.handleEvent({ type: "action", name: `cutscene-${id}-complete` });
+    completeCutsceneHandoff(
+      () => this.cueEngine?.handleEvent({ type: "action", name: `cutscene-${id}-complete` }),
+      () => this.runner?.setControlsLocked(false)
+    );
   }
 
   /** Repeatable diegetic bark pool (mariner calls across the water):
@@ -637,7 +653,7 @@ export class Director {
     pollTimer = window.setInterval(() => {
       if (this.paused) return;
       const runner = this.runner;
-      if (runner instanceof SplatScene && !runner.controlsLocked && runner.hasMovementInput()) fire();
+      if (runnerHasMovementInput(runner)) fire();
     }, 250);
     this.teardownFns.push(cleanup);
   }

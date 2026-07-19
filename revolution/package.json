@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --test --experimental-strip-types src/*.test.mjs src/engine/*.test.mjs",
+    "test": "node --test --experimental-strip-types src/*.test.mjs src/engine/*.test.mjs && vitest run src/engine/audio.test.ts src/engine/cues.test.ts src/engine/director.test.ts src/renderers/worldmodel.test.ts src/scenes/diegetic-vo.test.ts",
     "build": "vite build",
     "preview": "vite preview",
     "test:server": "node --test tests/session.test.mjs",
@@ -26,6 +26,7 @@
   "devDependencies": {
     "@types/three": "^0.185.1",
     "typescript": "^7.0.2",
-    "vite": "^8.1.5"
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
   }
 }
