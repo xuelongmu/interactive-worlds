@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   activeRunnerCanResumePointerInput,
   canPrewarmWorldModelTarget,
+  CHAPTER_STING_URL,
   completeCutsceneHandoff,
   controlHandoffForScene,
   defaultGuidanceForCue,
   dispatchEngineEvent,
   Director,
+  playCueAudio,
   runnerHasMovementInput,
   runnerCanResumePointerInput,
 } from "./director";
@@ -345,5 +347,31 @@ describe("Director live-session prewarming", () => {
     expect(await controller.prewarm({ scene: worldScene("failed"), strategy: "transport" })).toBe(false);
     expect(await controller.adopt("failed", "transport")).toBeNull();
     expect(session.disconnect).toHaveBeenCalledWith({ reason: "prewarm-failed", dispose: true });
+  });
+});
+
+describe("Director editorial music sequencing", () => {
+  it("finishes narration, then music, before the cue transition can run", async () => {
+    const order: string[] = [];
+    const audio = {
+      playVoice: vi.fn(async () => { order.push("narration"); }),
+      playOneShotAndWait: vi.fn(async () => { order.push("music"); }),
+    };
+    const cue = {
+      id: "TEST-MUSIC",
+      trigger: { type: "scene-start" as const },
+      subtitle: "A final line.",
+      musicAfter: "/assets/audio/music/swell-test.mp3",
+    };
+
+    await playCueAudio(audio, cue);
+    order.push("transition");
+
+    expect(order).toEqual(["narration", "music", "transition"]);
+    expect(audio.playOneShotAndWait).toHaveBeenCalledWith(cue.musicAfter);
+  });
+
+  it("uses the approved score's chapter sting on title cards", () => {
+    expect(CHAPTER_STING_URL).toBe("/assets/audio/music/chapter-sting.mp3");
   });
 });

@@ -211,6 +211,7 @@ function bindViewButtons() {
 }
 
 function renderShell(view: DirectorExitTarget | ShellView = "title") {
+  if (view !== "title") stopTitleTheme();
   switch (view) {
     case "chapters": renderChapters(); break;
     case "settings": renderSettings(); break;

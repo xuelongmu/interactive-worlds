@@ -79,6 +79,30 @@ const CHAPTER_WORDS = [
   "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
 ];
 
+export const CHAPTER_STING_URL = "/assets/audio/music/chapter-sting.mp3";
+
+type DirectorAudio = Pick<AudioEngine, "playVoice" | "playOneShotAndWait">;
+
+/** Keep every editorial swell after its authored line and inside the cue
+ * queue, so `then:` transitions cannot race ahead of the music. */
+export async function playCueAudio(audio: DirectorAudio, cue: Cue) {
+  if (cue.diegeticVo) {
+    await audio.playVoice({
+      url: cue.diegeticVo,
+      subtitle: cue.diegeticSubtitle,
+      bus: "diegetic",
+      duck: [],
+    });
+  }
+  await audio.playVoice({
+    url: cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`,
+    subtitle: cue.subtitle,
+    bus: cue.diegetic ? "diegetic" : "narration",
+    duck: cue.diegetic ? [] : cue.duck as BusName[] | undefined,
+  });
+  if (cue.musicAfter) await audio.playOneShotAndWait(cue.musicAfter);
+}
+
 export function runnerHasMovementInput(
   runner: { hasMovementInput?(): boolean } | null
 ): boolean {
@@ -316,23 +340,9 @@ export class Director {
       this.cardEl.classList.add("visible");
 
       const cueEngine = new CueEngine(manifest.cues, {
-        play: async (cue) => {
+        play: (cue) => {
           this.setActiveBeat(manifest.id, cue.id);
-          // cast diegetic line first (the script order: shout, then narrator)
-          if (cue.diegeticVo) {
-            await this.audio.playVoice({
-              url: cue.diegeticVo,
-              subtitle: cue.diegeticSubtitle,
-              bus: "diegetic",
-              duck: [],
-            });
-          }
-          await this.audio.playVoice({
-            url: cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`,
-            subtitle: cue.subtitle,
-            bus: cue.diegetic ? "diegetic" : "narration",
-            duck: cue.diegetic ? [] : cue.duck as BusName[] | undefined,
-          });
+          return playCueAudio(this.audio, cue);
         },
         // audio-first: the visual consequence lands on the last word — and a
         // failed VO load still advances the story
@@ -361,6 +371,10 @@ export class Director {
         }
       }, 100);
 
+      // The chapter sting owns the card by itself. Only after it ends may
+      // ambience and narration begin; the latter then continues over black
+      // while the renderer loads.
+      await this.audio.playOneShotAndWait(CHAPTER_STING_URL);
       if (manifest.audio.ambience?.length) void this.audio.playAmbience(manifest.audio.ambience);
       // narration over black is the loading screen — start the scene now
       if (startCueId) cueEngine.startAt(startCueId);

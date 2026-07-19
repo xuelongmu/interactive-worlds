@@ -26,6 +26,7 @@ export function preloadSceneAssets(manifest: SceneManifest): void {
   }
   for (const cue of manifest.cues) {
     if (cue.subtitle || cue.vo) urls.add(cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`);
+    if (cue.musicAfter) urls.add(cue.musicAfter);
   }
   for (const url of urls) {
     void fetch(url).then(
