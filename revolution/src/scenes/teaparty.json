@@ -23,7 +23,7 @@
     { "id": "TEA-030", "trigger": { "type": "dwell", "zone": "ships-view", "seconds": 2 },
       "subtitle": "Dartmouth. Eleanor. Beaver. Three hundred and forty-two chests between them — about ninety thousand pounds of tea. The governor has refused to let the ships leave. The town has refused to let them unload. Something has to give." },
     { "id": "TEA-040", "trigger": { "type": "zone-enter", "zone": "gangway", "orTimer": 300 },
-      "subtitle": "Around six-thirty, men began arriving at the wharf in loose disguise — blankets, soot, feathers, faces darkened. Nobody was fooled, and nobody was meant to be. The disguise was not concealment. It was a statement: tonight we are not the King's subjects. They went aboard in silence.",
+      "subtitle": "Around six-thirty, men began arriving at the wharf in loose disguise — blankets, soot, feathers, faces darkened. It was a statement: tonight we are not the King's subjects. They went aboard in silence.",
       "lockControls": true, "then": "wake:worldmodel" },
     { "id": "TEA-050", "trigger": { "type": "action", "name": "control-granted" },
       "subtitle": "They worked in teams, one ship to a team, with block and tackle and hatchets. It took about three hours." },
@@ -32,7 +32,7 @@
     { "id": "TEA-070", "trigger": { "type": "model-event", "name": "chests-done", "orTimer": 540 },
       "subtitle": "Nothing else was touched. No one was hurt, nothing was stolen, and a padlock they broke was replaced the next day. The men swept the decks before they left. It was, witnesses said, the quietest destruction they had ever seen." },
     { "id": "TEA-080", "trigger": { "type": "model-event", "name": "deck-clear", "orTimer": 600 },
-      "subtitle": "Parliament's answer came in the spring. Boston's port was closed, its charter gutted, its government handed to the army. The other colonies were expected to take the lesson. Instead they began raising militias. Sixteen months later, on a village green west of Boston, the argument ran out of words.",
+      "subtitle": "Parliament's answer came in the spring. Boston's port was closed, its charter gutted, its government handed to the army. The other colonies were expected to take the lesson. Instead they began raising militias. Sixteen months later, the war began on a village green west of Boston.",
       "then": "scene:lexington" }
   ],
   "audio": { "ambience": ["/assets/audio/amb/wharf-night.mp3"] },

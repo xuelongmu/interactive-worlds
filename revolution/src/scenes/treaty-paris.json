@@ -15,14 +15,14 @@
     { "id": "PAR-010", "trigger": { "type": "scene-start" },
       "subtitle": "Paris. September 3rd, 1783. Two years after Yorktown, the diplomats finish what the armies started. Great Britain acknowledges the United States to be free, sovereign, and independent. Those are the treaty's own words." },
     { "id": "PAR-020", "trigger": { "type": "zone-enter", "zone": "commissioners" },
-      "subtitle": "The painter Benjamin West set out to record the moment: John Jay, John Adams, Benjamin Franklin, the American commissioners, composed and finished. The British commissioners refused to sit. West kept the canvas anyway, half-painted, the right side empty — the defeated party absent from its own surrender." },
+      "subtitle": "The painter Benjamin West set out to record the moment: John Jay, John Adams, Benjamin Franklin, the American commissioners, composed and finished. The British commissioners refused to sit. The canvas remained half-painted, the right side empty." },
     { "id": "PAR-030", "trigger": { "type": "zone-enter", "zone": "unfinished-half" },
-      "subtitle": "It is an honest picture — more honest than a finished one. Half of it is a new country, rendered in detail. The other half is a blank the future had not filled in yet: a treaty line at the Mississippi, an army going home unpaid, a constitution not yet written, and a promise — that all men are created equal — kept, so far, for almost no one." },
+      "subtitle": "Half the canvas is a new country, rendered in detail. The other half is blank, and so is much of what comes next: a border at the Mississippi, an army going home unpaid, a constitution not yet written." },
     { "id": "PAR-040", "trigger": { "type": "zone-enter", "zone": "signature-frame", "orTimer": 300 },
       "subtitle": "In the summer of 1776, fifty-six people signed their names below that promise, not knowing how the story would end.",
       "lockControls": true, "then": "signature:aged" },
     { "id": "PAR-050", "trigger": { "type": "action", "name": "signature-dwell" },
-      "subtitle": "One of the signatures is yours. The revolution ended in 1783. The argument it started has not ended yet.",
+      "subtitle": "One of the signatures is yours. The revolution ended in 1783. The movement it started continues to this day.",
       "then": "end" }
   ],
   "audio": { "ambience": ["/assets/audio/amb/paris-studio.mp3"] }
