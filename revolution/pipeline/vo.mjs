@@ -19,6 +19,7 @@ const dryRun = process.argv.includes("--dry-run");
 
 /** Parse `**CUE-ID — …**` blocks followed by `> NARRATOR: …` lines. */
 function parseCues(markdown) {
+  markdown = markdown.replace(/\r\n/g, "\n"); // CRLF checkouts break `.`-based line matching
   const cues = [];
   const blockRe = /\*\*([A-Z]{3}-\d{3})[^\n]*\*\*\s*\n((?:>.*\n?)*)/g;
   for (const match of markdown.matchAll(blockRe)) {

@@ -38,4 +38,38 @@ export const worlds = [
       "frozen rutted paths, bare black trees, a few campfires, stacked muskets, gray overcast sky " +
       "fading to blue dusk. Deep snow, desolate and quiet. Photorealistic, no modern objects.",
   },
+  {
+    scene: "griffins-wharf",
+    worldId: null,
+    image: "public/reference/griffins-wharf.jpg",
+    prompt:
+      "A Boston wharf at night in December 1773, eye level. Wet cobbles and timber decking, " +
+      "coiled rope, barrels and crates, three moored 18th century merchant ships with furled " +
+      "sails, lanterns in the rigging, a dense crowd of colonists standing still and silent " +
+      "along the wharf edge, brick warehouses behind, moonlight on black harbor water. " +
+      "Very low light. Photorealistic, historically accurate, no modern objects.",
+  },
+  {
+    scene: "surrender-field",
+    worldId: null,
+    image: "public/reference/surrender-field.jpg",
+    prompt:
+      "An open Virginia field in October 1781, early afternoon, eye level. A long dirt road " +
+      "between two facing lines of soldiers standing at attention — white-coated French troops " +
+      "on one side, worn Continental troops on the other — with British soldiers frozen " +
+      "mid-stride between the lines, laying muskets onto a pile. Autumn grass, split-rail " +
+      "fences, distant earthworks, smoke haze. Photorealistic, historically accurate, " +
+      "no modern objects.",
+  },
+  {
+    scene: "treaty-paris",
+    worldId: null,
+    image: "public/reference/treaty-paris.jpg",
+    prompt:
+      "The interior of an 18th century painter's studio in Paris, 1783, eye level. A monumental " +
+      "half-finished canvas dominates the room: the left half richly painted with five American " +
+      "diplomats around a treaty table, the right half blank primed linen with faint chalk " +
+      "underdrawing. Tall north window light, easels, pigments, a tall clock, parquet floor. " +
+      "Photorealistic, historically accurate, no modern objects.",
+  },
 ];
