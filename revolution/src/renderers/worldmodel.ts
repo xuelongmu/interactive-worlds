@@ -1,5 +1,7 @@
 import { LingbotWorld2Model, type LingbotWorld2Message } from "@reactor-models/lingbot-world-2";
-import { DEFAULT_BASE_URL } from "@reactor-team/js-sdk";
+import { LingbotModel } from "@reactor-models/lingbot";
+import { HeliosModel } from "@reactor-models/helios";
+import { DEFAULT_BASE_URL, type FileRef } from "@reactor-team/js-sdk";
 import type { ControlHandoffDetail, EngineEvent, SceneManifest } from "../engine/types";
 import {
   BRANCH_ACTION_MAPPINGS,
@@ -75,7 +77,13 @@ export interface WorldModelSessionOptions {
   onTelemetry?: (event: WorldModelTelemetryEvent) => void;
   /** Test seam; production always uses the challenge/admission broker. */
   mintJwt?: () => Promise<string>;
+  /** Defaults to the allowlisted URL/env selection, then LingBot World 2. */
+  modelName?: ReactorWorldModelName;
   timeouts?: Partial<WorldModelSessionTimeouts>;
+}
+
+export function isReactorCapacityErrorStatus(status: string): boolean {
+  return /(?:^|\D)503(?:\D|$)/.test(status);
 }
 
 interface WorldModelSessionTimeouts {
@@ -118,6 +126,126 @@ export type Longitudinal = "idle" | "forward" | "back";
 export type Lateral = "idle" | "strafe_left" | "strafe_right";
 export type LookH = "idle" | "left" | "right";
 export type LookV = "idle" | "up" | "down";
+
+export const REACTOR_WORLD_MODELS = {
+  "lingbot-world-2": "reactor/lingbot-world-2",
+  lingbot: "reactor/lingbot",
+  helios: "reactor/helios",
+} as const;
+
+export type ReactorWorldModelName = typeof REACTOR_WORLD_MODELS[keyof typeof REACTOR_WORLD_MODELS];
+
+const REACTOR_MODEL_ALIASES: Readonly<Record<string, ReactorWorldModelName>> = {
+  "lingbot-world-2": REACTOR_WORLD_MODELS["lingbot-world-2"],
+  "reactor/lingbot-world-2": REACTOR_WORLD_MODELS["lingbot-world-2"],
+  lingbot: REACTOR_WORLD_MODELS.lingbot,
+  "reactor/lingbot": REACTOR_WORLD_MODELS.lingbot,
+  helios: REACTOR_WORLD_MODELS.helios,
+  "reactor/helios": REACTOR_WORLD_MODELS.helios,
+};
+
+/** Query string wins so a deployed build can be moved off an overloaded model immediately. */
+export function resolveReactorWorldModelName(
+  search = typeof window === "undefined" ? "" : window.location?.search ?? "",
+  configured = import.meta.env.VITE_REACTOR_MODEL ?? ""
+): ReactorWorldModelName {
+  const requested = new URLSearchParams(search).get("reactorModel")?.trim().toLowerCase();
+  const selected = requested || configured.trim().toLowerCase();
+  return REACTOR_MODEL_ALIASES[selected] ?? REACTOR_WORLD_MODELS["lingbot-world-2"];
+}
+
+export function resolveLegacyLingbotMovement(
+  longitudinal: Longitudinal,
+  lateral: Lateral
+): Longitudinal | Lateral {
+  return longitudinal !== "idle" ? longitudinal : lateral;
+}
+
+export function supportsReactorWorldNavigation(modelName = resolveReactorWorldModelName()): boolean {
+  return modelName !== REACTOR_WORLD_MODELS.helios;
+}
+
+/** Legacy LingBot has one movement axis, so longitudinal input wins over strafe. */
+class CompatibleLingbotModel extends LingbotModel {
+  private longitudinal: Longitudinal = "idle";
+  private lateral: Lateral = "idle";
+  private movement: Longitudinal | Lateral = "idle";
+
+  async setMoveLongitudinal({ move_longitudinal = "idle" }: { move_longitudinal?: Longitudinal }) {
+    this.longitudinal = move_longitudinal;
+    await this.flushMovement();
+  }
+
+  async setMoveLateral({ move_lateral = "idle" }: { move_lateral?: Lateral }) {
+    this.lateral = move_lateral;
+    await this.flushMovement();
+  }
+
+  override setPrompt({ prompt = "" }: { prompt?: string }): Promise<void> {
+    const compatiblePrompt = prompt.slice(0, 1_000);
+    if (compatiblePrompt.length !== prompt.length) {
+      console.warn("[worldmodel] LingBot fallback prompt truncated to 1000 characters");
+    }
+    return super.setPrompt({ prompt: compatiblePrompt });
+  }
+
+  private async flushMovement(): Promise<void> {
+    const next = resolveLegacyLingbotMovement(this.longitudinal, this.lateral);
+    if (next === this.movement) return;
+    this.movement = next;
+    await this.setMovement({ movement: next });
+  }
+}
+
+/** Helios preserves the authored image/prompt stream but intentionally has no camera navigation. */
+class CompatibleHeliosModel extends HeliosModel {
+  private pendingImage: FileRef | null = null;
+
+  override setImage({ image }: { image?: FileRef }): Promise<void> {
+    if (!image) return Promise.reject(new Error("Helios conditioning image is required"));
+    this.pendingImage = image;
+    return Promise.resolve();
+  }
+
+  override setPrompt({ prompt = "" }: { prompt?: string }): Promise<void> {
+    if (!this.pendingImage) return super.setPrompt({ prompt });
+    const image = this.pendingImage;
+    this.pendingImage = null;
+    return this.setConditioning({ image, prompt });
+  }
+
+  override async reset(): Promise<void> {
+    this.pendingImage = null;
+    await super.reset();
+  }
+
+  setMoveLongitudinal(_params: { move_longitudinal?: Longitudinal }): Promise<void> {
+    return Promise.resolve();
+  }
+
+  setMoveLateral(_params: { move_lateral?: Lateral }): Promise<void> {
+    return Promise.resolve();
+  }
+
+  setLookHorizontal(_params: { look_horizontal?: LookH }): Promise<void> {
+    return Promise.resolve();
+  }
+
+  setLookVertical(_params: { look_vertical?: LookV }): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+export function createReactorWorldModel(modelName: ReactorWorldModelName): LingbotWorld2Model {
+  const model = modelName === REACTOR_WORLD_MODELS.lingbot
+    ? new CompatibleLingbotModel()
+    : modelName === REACTOR_WORLD_MODELS.helios
+      ? new CompatibleHeliosModel()
+      : new LingbotWorld2Model();
+  // The official clients share the lifecycle, media, conditioning, and message
+  // surface consumed below; adapters normalize their control/conditioning differences.
+  return model as unknown as LingbotWorld2Model;
+}
 
 export const ROLLOVER_OUTPUT_BUDGET_MS = 10_000;
 
@@ -190,6 +318,7 @@ interface PendingSignal {
  * conditioning, and generation start are deliberately separate operations. */
 export class WorldModelSession {
   private model: LingbotWorld2Model;
+  private modelName: ReactorWorldModelName;
   private hooks: WorldModelSessionOptions;
   private lifecyclePhase: WorldModelSessionPhase = "idle";
   private operation = 0;
@@ -237,18 +366,26 @@ export class WorldModelSession {
 
   constructor(
     options: WorldModelSessionOptions = {},
-    model: LingbotWorld2Model = new LingbotWorld2Model()
+    model?: LingbotWorld2Model
   ) {
     this.hooks = options;
-    this.model = model;
+    this.modelName = options.modelName ?? resolveReactorWorldModelName();
+    this.model = model ?? createReactorWorldModel(this.modelName);
   }
 
   get phase(): WorldModelSessionPhase {
     return this.lifecyclePhase;
   }
 
-  static async mintJwt(): Promise<string> {
-    const res = await fetch("/api/session", { method: "POST" });
+  get supportsNavigation(): boolean {
+    return supportsReactorWorldNavigation(this.modelName);
+  }
+
+  static async mintJwt(
+    modelName: ReactorWorldModelName = resolveReactorWorldModelName()
+  ): Promise<string> {
+    const url = `/api/session?model=${encodeURIComponent(modelName)}`;
+    const res = await fetch(url, { method: "POST" });
     if (!res.ok) throw new Error(`token mint failed: ${res.status} ${await res.text()}`);
     const body = (await res.json()) as { jwt?: string };
     if (!body.jwt) throw new Error("token mint returned no jwt");
@@ -518,7 +655,7 @@ export class WorldModelSession {
       this.hooks.onStatus?.("minting token");
       const mintAt = performance.now();
       const jwt = await this.withTimeout(
-        (this.hooks.mintJwt ?? WorldModelSession.mintJwt)(),
+        (this.hooks.mintJwt ?? (() => WorldModelSession.mintJwt(this.modelName)))(),
         this.timeout("mint"),
         "token mint timeout"
       );
@@ -1222,6 +1359,8 @@ export class WorldModelScenePlayer {
   private healthSamplePending = false;
   private blackFrameSamples = 0;
   private runtimeFallbackStarted = false;
+  private stickyCapacityStatus: string | null = null;
+  private navigationEnabled = true;
   private rolloverDeadline: number | null = null;
   private controlTimers = new PausableTimeouts();
   private presentation = new WorldModelPresentationGate((mode) => this.onPresented(mode));
@@ -1285,7 +1424,7 @@ export class WorldModelScenePlayer {
       console.warn("[worldmodel] live session unavailable, falling back:", error);
       this.telemetry({ name: "fallback", reason });
       if (this.disposed) return;
-      this.opts.onStatus?.(visibleError);
+      this.reportStatus(visibleError);
       this.cancelVideoFrames();
       this.unbindKeys?.();
       this.unbindKeys = null;
@@ -1315,6 +1454,7 @@ export class WorldModelScenePlayer {
   canResumePointerInput(): boolean {
     return this.presented
       && this.mode === "live"
+      && this.navigationEnabled !== false
       && !this.disposed
       && !this.rollover.recycling
       && !this.runtimeFallbackStarted;
@@ -1376,10 +1516,11 @@ export class WorldModelScenePlayer {
       onTelemetry: this.opts.onTelemetry,
     });
     this.session = session;
+    this.navigationEnabled = session.supportsNavigation;
     session.attach({
       video: this.video,
       onEvent: this.opts.onEvent,
-      onStatus: this.opts.onStatus,
+      onStatus: (status) => this.reportStatus(status),
       onUnexpectedDisconnect: (status) => {
         if (this.presented && this.mode === "live") {
           void this.fallBackFromLive(`Reactor session ${status}`);
@@ -1396,6 +1537,7 @@ export class WorldModelScenePlayer {
       {
         target: this.video,
         isPresented: () => this.inputIsUsable(),
+        navigationEnabled: () => this.navigationEnabled,
         onAction: (binding) => {
           const action = this.opts.getBranchActions?.()?.find((candidate) => candidate.binding === binding);
           if (action?.usable) this.opts.onBranchActionRequest?.({
@@ -1461,7 +1603,7 @@ export class WorldModelScenePlayer {
     preserveLiveClock = false,
     unavailableStatus?: string
   ): Promise<void> {
-    const { manifest, onStatus } = this.opts;
+    const { manifest } = this.opts;
     this.video.srcObject = null;
     this.video.style.visibility = "hidden";
     if (this.hasPoster) this.poster.style.display = "block";
@@ -1472,7 +1614,7 @@ export class WorldModelScenePlayer {
       playable = !!head?.ok && !(head.headers.get("content-type") ?? "").includes("text/html");
     }
     if (playable && url) {
-      onStatus?.("playing pre-rendered fallback");
+      this.reportStatus("playing pre-rendered fallback");
       this.video.src = url;
       this.video.loop = false;
       const resumeAt = preserveLiveClock ? this.clock : 0;
@@ -1486,7 +1628,7 @@ export class WorldModelScenePlayer {
       this.revealLiveVideo();
       this.video.addEventListener("timeupdate", this.onFallbackTimeUpdate);
     } else {
-      onStatus?.(unavailableStatus ?? "no fallback video - running beats on a wall clock");
+      this.reportStatus(unavailableStatus ?? "no fallback video - running beats on a wall clock");
       this.fallbackUsesWallClock = true;
       if (preserveLiveClock) this.startWallClock();
     }
@@ -1544,6 +1686,10 @@ export class WorldModelScenePlayer {
   }
 
   private emitLiveControls(enabled: boolean): void {
+    if (this.navigationEnabled === false) {
+      this.opts.onControlHandoff?.({ renderer: "worldmodel", controlsEnabled: false });
+      return;
+    }
     this.opts.onControlHandoff?.({
       renderer: "worldmodel",
       controlsEnabled: enabled,
@@ -1693,7 +1839,7 @@ export class WorldModelScenePlayer {
     this.telemetry({ name: "fallback", reason, durationMs });
     this.emitLiveControls(false);
     const visibleError = `Live connection lost: ${formatWorldModelError(reason)}`;
-    this.opts.onStatus?.(visibleError);
+    this.reportStatus(visibleError);
     this.cancelVideoFrames();
     this.unbindKeys?.();
     this.unbindKeys = null;
@@ -1708,6 +1854,13 @@ export class WorldModelScenePlayer {
   private cancelVideoFrames(): void {
     for (const callback of this.videoFrameCallbacks) this.video.cancelVideoFrameCallback(callback);
     this.videoFrameCallbacks.clear();
+  }
+
+  /** Capacity errors remain actionable while fallback setup emits routine status. */
+  private reportStatus(status: string): void {
+    if (this.stickyCapacityStatus && !isReactorCapacityErrorStatus(status)) return;
+    if (isReactorCapacityErrorStatus(status)) this.stickyCapacityStatus = status;
+    this.opts.onStatus?.(status);
   }
 
   private waitForPlayableFrame(): Promise<void> {
@@ -1781,6 +1934,7 @@ export interface WorldModelInputBindingOptions {
   onActionRelease?: (binding: "E" | "F") => void;
   onReset?: (reason: string) => void;
   onActivity?: (kind: "movement" | "look" | "action") => void;
+  navigationEnabled?: () => boolean;
 }
 
 export function bindWorldModelKeys(
@@ -1792,6 +1946,7 @@ export function bindWorldModelKeys(
   const heldActions = new Set<"E" | "F">();
   let lookIdleTimer = 0;
   const isPresented = options.isPresented ?? (() => true);
+  const navigationEnabled = options.navigationEnabled ?? (() => true);
   const apply = () => {
     const { longitudinal, lateral, lookH, lookV } = resolveWorldModelInput(keys, isLocked());
     void session.setMovement(longitudinal, lateral);
@@ -1815,7 +1970,10 @@ export function bindWorldModelKeys(
       }
       return;
     }
-    if (!["KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code) || event.repeat) return;
+    if (!["KeyW", "KeyA", "KeyS", "KeyD", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.code)
+      || event.repeat) return;
+    if (!navigationEnabled()) return;
+    if (event.code.startsWith("Arrow")) event.preventDefault();
     keys.add(event.code);
     apply();
     if (isPresented() && ["KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code)) {
@@ -1829,10 +1987,11 @@ export function bindWorldModelKeys(
       return;
     }
     keys.delete(event.code);
+    if (!navigationEnabled()) return;
     apply();
   };
   const pointerMove = (event: MouseEvent) => {
-    if (!isPresented() || isLocked()) return;
+    if (!navigationEnabled() || !isPresented() || isLocked()) return;
     if (options.target && document.pointerLockElement !== options.target) return;
     const { h, v } = resolveWorldModelPointerLook(event.movementX, event.movementY);
     if (h === "idle" && v === "idle") return;
@@ -1842,7 +2001,7 @@ export function bindWorldModelKeys(
     lookIdleTimer = window.setTimeout(() => void session.setLook("idle", "idle"), 80);
   };
   const requestPointer = () => {
-    if (isPresented() && !isLocked()) void options.target?.requestPointerLock();
+    if (navigationEnabled() && isPresented() && !isLocked()) void options.target?.requestPointerLock();
   };
   const releaseAll = (reason: string) => {
     keys.clear();

@@ -4,18 +4,85 @@ import { BRANCH_ACTION_MAPPINGS } from "../branch-state";
 import {
   canDispatchWorldModelAction,
   bindWorldModelKeys,
+  createReactorWorldModel,
   formatWorldModelError,
   frameHasVisibleContent,
   isGroundedWorldModelEvent,
+  isReactorCapacityErrorStatus,
   isWorldModelActionKey,
   ModelEventTimeline,
+  REACTOR_WORLD_MODELS,
+  resolveLegacyLingbotMovement,
+  resolveReactorWorldModelName,
   resolveWorldModelPointerLook,
   ROLLOVER_OUTPUT_BUDGET_MS,
+  supportsReactorWorldNavigation,
   WorldModelPresentationGate,
   WorldModelRolloverGate,
   WorldModelScenePlayer,
   WorldModelSession,
 } from "./worldmodel";
+
+describe("Reactor world-model selection", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("allows the deployed URL to switch between the two navigable models", () => {
+    expect(resolveReactorWorldModelName("?reactorModel=lingbot", "")).toBe(
+      REACTOR_WORLD_MODELS.lingbot
+    );
+    expect(resolveReactorWorldModelName("?reactorModel=lingbot-world-2", "reactor/lingbot")).toBe(
+      REACTOR_WORLD_MODELS["lingbot-world-2"]
+    );
+  });
+
+  it("uses an allowlisted build default and fails unknown values back to World 2", () => {
+    expect(resolveReactorWorldModelName("", "reactor/lingbot")).toBe(REACTOR_WORLD_MODELS.lingbot);
+    expect(resolveReactorWorldModelName("?reactorModel=sana", "reactor/lingbot")).toBe(
+      REACTOR_WORLD_MODELS["lingbot-world-2"]
+    );
+  });
+
+  it("selects Helios only as a non-navigable cinematic model", () => {
+    expect(resolveReactorWorldModelName("?reactorModel=helios", "")).toBe(
+      REACTOR_WORLD_MODELS.helios
+    );
+    expect(supportsReactorWorldNavigation(REACTOR_WORLD_MODELS.helios)).toBe(false);
+    expect(supportsReactorWorldNavigation(REACTOR_WORLD_MODELS.lingbot)).toBe(true);
+  });
+
+  it("commits Helios image and prompt atomically before generation", async () => {
+    const model = createReactorWorldModel(REACTOR_WORLD_MODELS.helios) as any;
+    const image = { uploadId: "reference" };
+    model.setConditioning = vi.fn().mockResolvedValue(undefined);
+
+    await model.setImage({ image });
+    await model.setPrompt({ prompt: "historical scene" });
+
+    expect(model.setConditioning).toHaveBeenCalledWith({ image, prompt: "historical scene" });
+  });
+
+  it("maps diagonal input deterministically onto legacy LingBot's single axis", () => {
+    expect(resolveLegacyLingbotMovement("forward", "strafe_left")).toBe("forward");
+    expect(resolveLegacyLingbotMovement("idle", "strafe_right")).toBe("strafe_right");
+  });
+
+  it("requests a JWT scoped to the selected model", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ jwt: "jwt" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await WorldModelSession.mintJwt(REACTOR_WORLD_MODELS.lingbot);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/session?model=reactor%2Flingbot",
+      { method: "POST" }
+    );
+  });
+
+  it("recognizes an HTTP 503 without matching unrelated numbers", () => {
+    expect(isReactorCapacityErrorStatus("token mint failed: 503 capacity exhausted")).toBe(true);
+    expect(isReactorCapacityErrorStatus("error 1503")).toBe(false);
+  });
+});
 
 type Handler<T = unknown> = (value: T) => void;
 
@@ -714,6 +781,21 @@ describe("presentation and rollover gates", () => {
     );
   });
 
+  it("keeps a 503 capacity error visible while routine fallback statuses arrive", () => {
+    const onStatus = vi.fn();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.opts = { onStatus };
+    player.stickyCapacityStatus = null;
+
+    player.reportStatus("Live connection failed: token mint failed: 503 capacity exhausted");
+    player.reportStatus("playing pre-rendered fallback");
+
+    expect(onStatus).toHaveBeenCalledOnce();
+    expect(onStatus).toHaveBeenLastCalledWith(
+      "Live connection failed: token mint failed: 503 capacity exhausted"
+    );
+  });
+
   it("seeks a recovered recorded fallback to the current authored clock", async () => {
     vi.stubGlobal("HTMLMediaElement", { HAVE_METADATA: 1, HAVE_CURRENT_DATA: 2 });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, {
@@ -811,6 +893,21 @@ describe("presentation and rollover gates", () => {
     expect(session.clearPersistentInput).toHaveBeenCalledWith("visibility");
     unbind();
     expect(session.clearPersistentInput).toHaveBeenCalledWith("input-disposed");
+
+    session.setMovement.mockClear();
+    onAction.mockClear();
+    const unbindCinematic = bindWorldModelKeys(session as unknown as WorldModelSession, () => false, {
+      isPresented: () => true,
+      navigationEnabled: () => false,
+      onAction,
+      onActionRelease,
+    });
+    documentTarget.dispatchEvent(keyboard("keydown", "KeyW"));
+    documentTarget.dispatchEvent(keyboard("keydown", "KeyF"));
+    documentTarget.dispatchEvent(keyboard("keyup", "KeyF"));
+    expect(session.setMovement).not.toHaveBeenCalled();
+    expect(onAction).toHaveBeenCalledExactlyOnceWith("F");
+    unbindCinematic();
   });
 
   it("does not advertise a generic action through the director handoff", () => {
@@ -827,6 +924,20 @@ describe("presentation and rollover gates", () => {
       look: { binding: "Mouse", label: "Look" },
     });
     expect(onControlHandoff.mock.calls[0][0]).not.toHaveProperty("action");
+  });
+
+  it("does not advertise navigation controls for Helios cinematic mode", () => {
+    const onControlHandoff = vi.fn();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.opts = { onControlHandoff };
+    player.navigationEnabled = false;
+
+    player.emitLiveControls(true);
+
+    expect(onControlHandoff).toHaveBeenCalledWith({
+      renderer: "worldmodel",
+      controlsEnabled: false,
+    });
   });
 });
 

@@ -95,6 +95,7 @@ durable Upstash Redis database. Configure these values in Vercel:
 | `SESSION_CLIENT_WINDOW_SECONDS` | server config | fixed-window duration |
 | `SESSION_GLOBAL_DAILY_LIMIT` | server config | maximum admitted tokens per UTC day |
 | `REACTOR_API_KEY` | server secret | Reactor token-mint credential |
+| `VITE_REACTOR_MODEL` | optional public build value | default `reactor/lingbot-world-2`; use `reactor/lingbot` for navigable fallback or `reactor/helios` for cinematic fallback |
 | `SESSION_PREVIEW_BYPASS` | preview-only server config | explicitly permits the server bypass on authenticated Vercel previews |
 | `VITE_SESSION_CHALLENGE_MODE` | preview-only public build value | set to `disabled` so preview clients do not request a challenge |
 

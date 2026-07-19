@@ -1,6 +1,12 @@
 import { Redis } from "@upstash/redis";
 
 const REACTOR_TOKENS_URL = "https://api.reactor.inc/tokens";
+const DEFAULT_REACTOR_MODEL = "reactor/lingbot-world-2";
+const ALLOWED_REACTOR_MODELS = new Set([
+  DEFAULT_REACTOR_MODEL,
+  "reactor/lingbot",
+  "reactor/helios",
+]);
 const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const TURNSTILE_ACTION = "session";
 const CHALLENGE_TTL_SECONDS = 600;
@@ -154,6 +160,8 @@ type Admission = {
   reason: AdmissionReason;
 };
 
+type ReactorModelName = "reactor/lingbot-world-2" | "reactor/lingbot" | "reactor/helios";
+
 type ParsedClearance =
   | { kind: "missing" }
   | { kind: "malformed" }
@@ -265,6 +273,13 @@ function json(status: number, body: object, extraHeaders: HeadersInit = {}): Res
       ...Object.fromEntries(new Headers(extraHeaders)),
     },
   });
+}
+
+function requestedReactorModel(request: Request): ReactorModelName | null {
+  const values = new URL(request.url).searchParams.getAll("model");
+  if (values.length === 0) return DEFAULT_REACTOR_MODEL;
+  if (values.length !== 1 || !ALLOWED_REACTOR_MODELS.has(values[0]!)) return null;
+  return values[0] as ReactorModelName;
 }
 
 function clientAddress(request: Request): string | null {
@@ -511,6 +526,7 @@ function limitResponse(admission: Admission, config: BrokerConfig, now: Date): R
 async function mintReactorToken(
   config: BrokerConfig,
   fetchImpl: typeof fetch,
+  model: ReactorModelName,
   cookie?: string
 ): Promise<Response> {
   const headers: HeadersInit = cookie ? { "set-cookie": cookie } : {};
@@ -521,7 +537,11 @@ async function mintReactorToken(
         "Content-Type": "application/json",
         "Reactor-API-Key": config.reactorApiKey,
       },
-      body: "{}",
+      body: JSON.stringify({
+        authorization_details: [
+          { type: "session", resources: { models: { match: [model] } } },
+        ],
+      }),
       signal: AbortSignal.timeout(5_000),
     });
     if (!upstream.ok) return json(502, { error: "token mint failed" }, headers);
@@ -547,6 +567,11 @@ export async function handleSessionRequest(
     return json(405, { error: "Method not allowed" }, { allow: "POST" });
   }
 
+  const model = requestedReactorModel(request);
+  if (!model) {
+    return json(400, { error: "unsupported Reactor model" });
+  }
+
   const config = configuration(options.env ?? serverEnvironment());
   if (!config) {
     return json(503, { error: "session service unavailable" });
@@ -569,7 +594,7 @@ export async function handleSessionRequest(
       return json(503, { error: "session service unavailable" });
     }
     if (!admission.allowed) return limitResponse(admission, config, now);
-    return mintReactorToken(config, fetchImpl);
+    return mintReactorToken(config, fetchImpl, model);
   }
 
   const parsedClearance = parseClearance(request, config);
@@ -585,6 +610,7 @@ export async function handleSessionRequest(
       return mintReactorToken(
         config,
         fetchImpl,
+        model,
         clearanceCookie(parsedClearance.value, config)
       );
     }
@@ -644,7 +670,7 @@ export async function handleSessionRequest(
     return limitResponse(admission, config, now);
   }
 
-  return mintReactorToken(config, fetchImpl, clearanceCookie(clearance, config));
+  return mintReactorToken(config, fetchImpl, model, clearanceCookie(clearance, config));
 }
 
 export default {

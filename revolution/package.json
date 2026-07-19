@@ -19,6 +19,8 @@
     "pipeline:models": "node pipeline/models.mjs"
   },
   "dependencies": {
+    "@reactor-models/helios": "^0.9.15",
+    "@reactor-models/lingbot": "^0.2.43",
     "@reactor-models/lingbot-world-2": "^0.3.3",
     "@reactor-team/js-sdk": "^2.12.1",
     "@sparkjsdev/spark": "^2.1.0",

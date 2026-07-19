@@ -22,6 +22,24 @@ Keys go in `revolution/.env` (or the parent workspace `.env`) — see
 `.env.example`. Only `REACTOR_API_KEY` is needed to run Spike 1; the rest are
 pipeline-time keys.
 
+### Reactor capacity fallback
+
+LingBot World 2 remains the default. To move one browser immediately to the
+compatible legacy LingBot runtime, append `?reactorModel=lingbot` to any app
+URL and reload. Use `?reactorModel=lingbot-world-2` to switch back. To select a
+deployment-wide build default, set `VITE_REACTOR_MODEL=reactor/lingbot` (or
+`reactor/lingbot-world-2`) before building. Use `?reactorModel=helios` for a
+seed-image, prompt-steered cinematic fallback. Helios keeps E/F narrative
+actions but intentionally disables WASD, mouse look, and their HUD hints. The
+server allowlists these three values and scopes each short-lived JWT to the
+selected model.
+
+Legacy LingBot supports the same seed-image, prompt, live video, WASD, and look
+flow used here, but it has a single movement direction at a time: when a user
+holds forward/back and strafe together, forward/back wins. SANA Streaming is
+not exposed by this switch because it is a video-to-video model requiring an
+inbound source stream, not a navigable seed-image world.
+
 ## Spike results (2026-07-18)
 
 **Spike 1 — world model.** Live session through the dev token broker
