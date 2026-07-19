@@ -4,7 +4,7 @@
   "renderer": "worldmodel",
   "assets": {
     "referenceImage": "/reference/delaware.jpg",
-    "prompt": "First-person view from inside a crowded wooden Durham boat crossing a wide dark river at night in winter. Chunks of ice float on black water. Sleet and snow fall. Continental Army soldiers in 1776 uniforms and blankets huddle low in the boat; boatmen pole and row. Other boats are barely visible in the dark. No modern objects. Grim, cold, realistic, very low light.",
+    "prompt": "First-person view low inside a broad, high-sided 40–60-foot wooden Durham freight boat crossing a wide dark river at night in winter. Chunks of ice float on black water. Sleet and snow fall. Continental Army soldiers in 1776 uniforms and blankets huddle low in the boat; experienced watermen pole and row. Other full-sized freight boats are barely visible in the dark. No modern objects. Grim, cold, realistic, very low light.",
     "fallbackVideo": "/assets/video/delaware-crossing.mp4"
   },
   "zones": [],
@@ -25,7 +25,7 @@
       "subtitle": "Around eleven, a nor'easter came up the river — rain, sleet, and snow together. The storm slowed the crossing by three hours. It also hid it." },
     { "id": "DEL-040", "trigger": { "type": "model-event", "name": "landing" },
       "subtitle": "The last boats landed at three in the morning. Trenton lay nine miles away. The army marched through the storm to reach it. Two soldiers froze to death on the road." },
-    { "id": "DEL-041", "trigger": { "type": "model-event", "name": "column-formed", "orTimer": 260 },
+    { "id": "DEL-041", "trigger": { "type": "model-event", "name": "column-formed", "orTimer": 180 },
       "subtitle": "Near dawn came word that the storm had soaked the muskets. Most of the army could not fire a shot. Washington's answer passed back down the column, man to man: use the bayonet. He was resolved to take Trenton.",
       "then": "scene:trenton" }
   ],
@@ -38,12 +38,12 @@
     ]
   },
   "modelEvents": [
-    { "at": 45, "name": "knox" },
-    { "at": 90, "name": "storm",
+    { "at": 30, "name": "knox" },
+    { "at": 60, "name": "storm",
       "prompt": "Same boat, same river at night, but the storm intensifies: heavy sleet and driving snow, wind whipping the water into chop, ice grinding against the hull, near whiteout darkness. Soldiers hunch lower. Realistic, very low light." },
-    { "at": 180, "name": "landing",
+    { "at": 120, "name": "landing",
       "prompt": "The wooden boat reaches a dark snowy riverbank at night. Soldiers in 1776 Continental uniforms climb out into shallow water and snow, forming a column on the shore, sleet falling. Realistic, very low light." },
-    { "at": 215, "name": "column-formed" }
+    { "at": 150, "name": "column-formed" }
   ],
   "next": { "scene": "trenton", "preloadAt": "DEL-032" }
 }

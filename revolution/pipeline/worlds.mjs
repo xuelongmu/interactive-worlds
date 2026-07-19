@@ -10,6 +10,13 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { requireKey, projectRoot, download, pollUntil } from "./lib.mjs";
+import {
+  assertConditioningFrameAvailable,
+  reusablePinnedWorldId,
+  WORLD_MODEL,
+  worldAssetCacheMatches,
+  worldGenerationSignature,
+} from "./world-cache.mjs";
 import { worlds } from "./worlds.config.mjs";
 
 const API = "https://api.worldlabs.ai/marble/v1";
@@ -45,13 +52,22 @@ async function uploadMediaAsset(localPath) {
 
 async function generateWorld(entry) {
   console.log(`\n=== ${entry.scene} ===`);
-  let worldId = worldIdFlag ?? entry.worldId;
+  const generationSignature = worldGenerationSignature(entry);
+  const pinnedWorldId = reusablePinnedWorldId(entry, generationSignature);
+  if (!worldIdFlag && entry.worldId && !pinnedWorldId) {
+    console.log("pinned world does not match the current prompt; generating a new take");
+  }
+  let worldId = worldIdFlag ?? pinnedWorldId;
 
   if (!worldId) {
-    // Image-prompted when a starting frame exists (pipeline/frames.mjs),
-    // text-only otherwise. marble-1.1-plus = larger worlds.
+    const imageAvailable = entry.image
+      ? existsSync(resolve(projectRoot, entry.image))
+      : false;
+    assertConditioningFrameAvailable(entry, imageAvailable);
+    // Configured scenes are image-prompted from pipeline/frames.mjs; scenes
+    // without an image remain text-only. marble-1.1-plus = larger worlds.
     let worldPrompt = { type: "text", text_prompt: entry.prompt };
-    if (entry.image && existsSync(resolve(projectRoot, entry.image))) {
+    if (entry.image) {
       console.log(`uploading starting frame ${entry.image}…`);
       const assetId = await uploadMediaAsset(entry.image);
       worldPrompt = {
@@ -59,8 +75,6 @@ async function generateWorld(entry) {
         image_prompt: { source: "media_asset", media_asset_id: assetId },
         text_prompt: entry.prompt,
       };
-    } else if (entry.image) {
-      console.log(`(starting frame ${entry.image} not found — run pipeline:frames first; using text prompt)`);
     }
     console.log("generating (typically ~5 minutes)…");
     const res = await fetch(`${API}/worlds:generate`, {
@@ -68,7 +82,7 @@ async function generateWorld(entry) {
       headers,
       body: JSON.stringify({
         display_name: `revolution/${entry.scene}`,
-        model: "marble-1.1-plus",
+        model: WORLD_MODEL,
         world_prompt: worldPrompt,
       }),
     });
@@ -88,8 +102,9 @@ async function generateWorld(entry) {
     if (done.response?.error) throw new Error(JSON.stringify(done.response.error));
     worldId = done.response?.id ?? done.metadata?.world_id;
     console.log(`world id: ${worldId}`);
+    console.log(`generation signature: ${generationSignature}`);
     console.log(`viewer:   https://marble.worldlabs.ai/world/${worldId}`);
-    console.log(`(paste into worlds.config.mjs as worldId to pin this take)`);
+    console.log(`(paste both values into worlds.config.mjs to pin this take)`);
   }
 
   // Assets can publish a few moments after the operation reports done.
@@ -121,7 +136,7 @@ async function generateWorld(entry) {
   const meta = splats?.semantics_metadata ?? {};
   writeFileSync(
     resolve(projectRoot, `public/assets/worlds/${entry.scene}.meta.json`),
-    JSON.stringify({ worldId, ...meta }, null, 2)
+    JSON.stringify({ ...meta, worldId, generationSignature }, null, 2)
   );
   console.log(`  scale factor: ${meta.metric_scale_factor ?? "?"} · ground offset: ${meta.ground_plane_offset ?? "?"}`);
 }
@@ -133,15 +148,14 @@ if (selected.length === 0) {
 }
 for (const entry of selected) {
   const already = existsSync(resolve(projectRoot, `public/assets/worlds/${entry.scene}.spz`));
-  // A local asset only counts if it came from the currently pinned world —
-  // pinning a new take in worlds.config.mjs must trigger a re-download.
-  let localWorldId = null;
+  // A local asset only counts when it came from the current generation inputs;
+  // prompt edits and newly pinned takes must never inherit a stale local .spz.
+  let localMetadata = null;
   const metaPath = resolve(projectRoot, `public/assets/worlds/${entry.scene}.meta.json`);
   if (existsSync(metaPath)) {
-    try { localWorldId = JSON.parse(readFileSync(metaPath, "utf8")).worldId ?? null; } catch { /* refetch */ }
+    try { localMetadata = JSON.parse(readFileSync(metaPath, "utf8")); } catch { /* refetch */ }
   }
-  const pinMatches = !entry.worldId || entry.worldId === localWorldId;
-  if (already && !worldIdFlag && pinMatches) {
+  if (already && !worldIdFlag && worldAssetCacheMatches(entry, localMetadata)) {
     console.log(`${entry.scene}: asset exists, skipping (delete the .spz to regenerate)`);
     continue;
   }

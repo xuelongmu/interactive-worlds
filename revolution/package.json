@@ -4,12 +4,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "node --test --experimental-strip-types src/*.test.mjs src/engine/*.test.mjs pipeline/vo.test.mjs pipeline/visual-sources.test.mjs pipeline/world-cache.test.mjs && vitest run src/engine/audio.test.ts src/engine/cues.test.ts src/engine/director.test.ts src/renderers/worldmodel.test.ts src/scenes/diegetic-vo.test.ts",
     "build": "vite build",
     "preview": "vite preview",
+    "test:server": "node --test tests/session.test.mjs",
     "typecheck": "tsc --noEmit",
     "pipeline:frames": "node pipeline/frames.mjs",
     "pipeline:vo": "node pipeline/vo.mjs",
     "pipeline:sfx": "node pipeline/sfx.mjs",
+    "pipeline:lexington-volley": "node pipeline/lexington-volley.mjs",
     "pipeline:worlds": "node pipeline/worlds.mjs",
     "pipeline:models": "node pipeline/models.mjs"
   },
@@ -17,11 +20,13 @@
     "@reactor-models/lingbot-world-2": "^0.3.3",
     "@reactor-team/js-sdk": "^2.12.1",
     "@sparkjsdev/spark": "^2.1.0",
+    "@upstash/redis": "1.38.0",
     "three": "^0.185.1"
   },
   "devDependencies": {
     "@types/three": "^0.185.1",
     "typescript": "^7.0.2",
-    "vite": "^8.1.5"
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
   }
 }

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 import type { EngineEvent, SceneManifest, ZoneDef } from "../engine/types";
+import { bindPointerLockClick } from "../engine/pointer-lock";
 
 export interface SplatSceneOptions {
   container: HTMLElement;
@@ -42,6 +43,7 @@ export class SplatScene {
   splatMesh: SplatMesh | null = null;
   readonly worldGroup = new THREE.Group();
   private disposed = false;
+  private unbindPointerLock: (() => void) | null = null;
 
   /** Shift the world so the collider ground under the origin sits at y=0.
    *  The world origin is the capture camera at roughly eye height, so cast
@@ -151,9 +153,7 @@ export class SplatScene {
   }
 
   private bindInput(container: HTMLElement) {
-    container.addEventListener("click", () => {
-      if (!document.pointerLockElement) void container.requestPointerLock();
-    });
+    this.unbindPointerLock = bindPointerLockClick(container);
     document.addEventListener("mousemove", this.onMouseMove);
     document.addEventListener("keydown", this.onKeyDown);
     document.addEventListener("keyup", this.onKeyUp);
@@ -166,6 +166,7 @@ export class SplatScene {
     this.pitch = THREE.MathUtils.clamp(this.pitch - e.movementY * 0.0022, -1.2, 1.2);
   };
   private onKeyDown = (e: KeyboardEvent) => {
+    if (this.controlsLocked) return;
     this.keys.add(e.code);
     if (e.code === "KeyZ") {
       this.debugGroup.visible = !this.debugGroup.visible;
@@ -255,6 +256,8 @@ export class SplatScene {
     document.removeEventListener("keydown", this.onKeyDown);
     document.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("resize", this.onResize);
+    this.unbindPointerLock?.();
+    this.unbindPointerLock = null;
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

@@ -8,7 +8,7 @@ export interface CueEngineHooks {
   action?: (cue: Cue) => void;
   /** Deferred side-effects that must wait for the line to finish
    *  (`then:` transitions, cutscenes) — the audio-first contract. */
-  after?: (cue: Cue) => void;
+  after?: (cue: Cue) => void | Promise<void>;
 }
 
 /** Renderer-agnostic trigger evaluation with narrator queueing.
@@ -21,6 +21,7 @@ export class CueEngine {
   private stopped = false;
   private clock = 0;
   private zoneEnteredAt = new Map<string, number>();
+  private completedAt = new Map<string, number>();
 
   constructor(private cues: Cue[], private hooks: CueEngineHooks) {}
 
@@ -52,18 +53,46 @@ export class CueEngine {
   /** Call each frame with elapsed seconds. Handles timer/dwell/orTimer. */
   update(dt: number) {
     this.clock += dt;
-    for (const cue of this.cues) {
+    for (const [index, cue] of this.cues.entries()) {
       if (this.fired.has(cue.id)) continue;
       const t = cue.trigger;
+      let shouldFire = false;
       if (t.type === "timer" && t.seconds !== undefined && this.clock >= t.seconds) {
-        this.fire(cue);
+        shouldFire = true;
       } else if (t.type === "dwell" && t.zone && t.seconds !== undefined) {
         const enteredAt = this.zoneEnteredAt.get(t.zone);
-        if (enteredAt !== undefined && this.clock - enteredAt >= t.seconds) this.fire(cue);
-      } else if (t.orTimer !== undefined && this.clock >= t.orTimer) {
-        this.fire(cue);
+        shouldFire = enteredAt !== undefined && this.clock - enteredAt >= t.seconds;
       }
+      if (!shouldFire && t.orTimer !== undefined && this.clock >= t.orTimer) {
+        shouldFire = true;
+      }
+      if (!shouldFire && t.orAfterPrevious !== undefined && index > 0) {
+        const previousCompletedAt = this.completedAt.get(this.cues[index - 1].id);
+        if (previousCompletedAt !== undefined && this.clock - previousCompletedAt >= t.orAfterPrevious) {
+          shouldFire = true;
+        }
+      }
+      if (shouldFire) this.fire(cue);
     }
+  }
+
+  /** First cue that has not been triggered yet, in authored order. */
+  nextPendingCue(): Cue | undefined {
+    return this.cues.find((cue) => !this.fired.has(cue.id));
+  }
+
+  /** Whether another already-triggered cue will play immediately after the
+   * current line. Guidance should wait until that queue drains. */
+  hasQueuedPlayback(): boolean {
+    return this.queue.length > 0;
+  }
+
+  /** Development review escape hatch: trigger the next authored beat without
+   * pretending its spatial/action condition occurred naturally. */
+  fireNextPending(): Cue | undefined {
+    const cue = this.nextPendingCue();
+    if (cue) this.fire(cue);
+    return cue;
   }
 
   private fire(cue: Cue) {
@@ -87,7 +116,8 @@ export class CueEngine {
       // a stop() during playback wins — a dead scene must not launch the
       // old cue's `then:` transition after teardown
       if (this.stopped) break;
-      this.hooks.after?.(cue);
+      this.completedAt.set(cue.id, this.clock);
+      await this.hooks.after?.(cue);
     }
     this.playing = false;
   }

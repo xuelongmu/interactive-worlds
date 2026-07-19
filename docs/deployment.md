@@ -1,0 +1,197 @@
+# Production deployment
+
+The production shape is a Vite static deployment on Vercel, one guarded Node
+function at `POST /api/session`, and a separate object-store/CDN origin for
+baked media and conditioning references. Reactor, Turnstile validation, Redis,
+pipeline, and object-store credentials are never needed by the browser or
+build. The Turnstile **site key** is intentionally public; it is not a secret.
+
+## Deploy the static app and session broker
+
+1. Import this repository into Vercel and set **Root Directory** to
+   `revolution` (or run `npx vercel --cwd revolution` from a fresh clone).
+2. Keep the build settings from `revolution/vercel.json`: `npm run build` and
+   output directory `dist`.
+3. Complete the Turnstile and Redis setup below, then add every required
+   production environment variable. Add the full set to Preview only when live
+   paid sessions from previews are intentional.
+4. Deploy. Verify that `GET /api/session` returns `405`, an unchallenged POST is
+   rejected, and a missing policy variable makes POST fail closed with `503`.
+5. Open `/`, `/spikes/splat/`, and `/spikes/worldmodel/`. In the world-model
+   spike, connect, wait for moving video, and verify WASD/arrows affect the
+   stream before disconnecting. A token response alone does not prove WebRTC.
+
+## Paid-session abuse controls
+
+Production uses two independent server-enforced controls before Reactor:
+
+1. The browser completes a Cloudflare Turnstile widget with action `session`.
+   `/api/session` validates the single-use, five-minute token with Siteverify,
+   including its action, exact hostname, and Vercel-provided client address.
+2. One Upstash Redis Lua transaction checks and consumes the challenge hash,
+   enforces a fixed-window per-client issuance limit, and enforces a UTC-daily
+   global issuance budget. All keys share one Redis hash tag, so the decision
+   and counters are atomic. Client addresses are HMACed before storage.
+
+Only after both checks pass does the function call Reactor. Missing/invalid
+configuration, missing trusted client address, challenge failure, replay,
+budget exhaustion, or Redis failure returns without calling Reactor. An
+admitted request consumes its conservative budget slot even if Reactor later
+fails; this prevents retries from bypassing the cap.
+
+Create a Turnstile widget restricted to every production hostname and create a
+durable Upstash Redis database. Configure these values in Vercel:
+
+| Variable | Visibility | Purpose |
+|---|---|---|
+| `VITE_TURNSTILE_SITE_KEY` | public build value | Turnstile widget site key |
+| `TURNSTILE_SECRET_KEY` | server secret | Siteverify credential |
+| `TURNSTILE_EXPECTED_HOSTNAMES` | server config | exact comma-separated hostnames returned by Siteverify |
+| `UPSTASH_REDIS_REST_URL` | server config | durable Redis REST endpoint |
+| `UPSTASH_REDIS_REST_TOKEN` | server secret | durable Redis credential |
+| `SESSION_CLIENT_HASH_SECRET` | server secret | random 32+ character HMAC secret for client identifiers |
+| `SESSION_CLIENT_LIMIT` | server config | maximum admitted tokens per client window |
+| `SESSION_CLIENT_WINDOW_SECONDS` | server config | fixed-window duration |
+| `SESSION_GLOBAL_DAILY_LIMIT` | server config | maximum admitted tokens per UTC day |
+| `REACTOR_API_KEY` | server secret | Reactor token-mint credential |
+
+There are deliberately no code defaults for the three limits. Pick values from
+the account's real concurrency/spend tolerance (for example, a small number of
+sessions per ten-minute client window and a daily token count whose worst-case
+session duration is affordable), set provider alerts below the hard limit, and
+lower the global limit during incidents. Never create `VITE_*` copies
+of server secrets. The production client automatically opens Turnstile on the
+first session request; local `npm run dev` continues to use the loopback-only
+Vite broker without paid-route deployment semantics.
+
+Alternative controls require a code/security review before substitution:
+
+1. An authenticated account entitlement plus the same atomic Redis budgets.
+2. A museum/classroom issuer that provides signed, one-time admission grants,
+   with nonce consumption and global budgets in the broker.
+3. A Cloudflare Worker/Durable Object in front of Vercel that performs the
+   challenge and atomic admission before forwarding to a private broker.
+4. A provider-native bot attestation product only if its server token is
+   cryptographically verified and paired with durable global accounting.
+
+Origin or CORS checks alone are never an acceptable substitute: non-browser
+callers can forge headers and call a public endpoint directly.
+
+The function sends the Reactor key only in the `Reactor-API-Key` request
+header, returns only the upstream `jwt` on success, marks every response
+`Cache-Control: no-store`, and uses generic errors so exception/upstream text
+cannot disclose server configuration.
+
+`revolution/.vercelignore` also excludes local environment files, offline
+pipeline code, generated media, tests, and build output from CLI source uploads.
+Do not remove the `.env` or generated-media exclusions to work around a deploy.
+
+## Large baked assets: object store plus CDN
+
+`revolution/public/assets/` and `revolution/public/reference/` are deliberately
+ignored. Splats can approach 200 MB each, while a Vercel CLI deployment accepts
+at most 100 MB of source on Hobby and 1 GB on Pro. Putting a ten-chapter media
+library in every application deployment would also make rollbacks and previews
+needlessly expensive.
+
+The recommended production layout is Cloudflare R2 behind a custom asset
+domain. Store each release under an immutable prefix that mirrors `public/`:
+
+```text
+releases/<release-id>/assets/audio/...
+releases/<release-id>/assets/models/...
+releases/<release-id>/assets/video/...
+releases/<release-id>/assets/worlds/...
+releases/<release-id>/reference/delaware.jpg
+releases/<release-id>/reference/...
+```
+
+Use the Git commit SHA or another immutable release id. Uploads happen from a
+trusted operator machine or a separate asset-publish workflow; R2 write
+credentials never belong in Vercel and never use a `VITE_*` name.
+
+With R2's S3-compatible credentials present only in the operator environment,
+run this from `revolution/` after replacing every placeholder:
+
+```powershell
+aws s3 sync public/assets "s3://<bucket>/releases/<release-id>/assets" `
+  --endpoint-url "https://<account-id>.r2.cloudflarestorage.com" `
+  --cache-control "public,max-age=31536000,immutable"
+aws s3 sync public/reference "s3://<bucket>/releases/<release-id>/reference" `
+  --endpoint-url "https://<account-id>.r2.cloudflarestorage.com" `
+  --cache-control "public,max-age=31536000,immutable"
+```
+
+Do not use `--delete` against a computed or reused release prefix. A published
+release is immutable; upload a new prefix when any asset changes.
+
+After the real CDN hostname and release id exist, add both concrete rules to
+the `rewrites` array in `revolution/vercel.json`:
+
+```json
+{
+  "source": "/assets/:path*",
+  "destination": "https://assets.example.org/releases/<release-id>/assets/:path*"
+},
+{
+  "source": "/reference/:path*",
+  "destination": "https://assets.example.org/releases/<release-id>/reference/:path*"
+}
+```
+
+Replace the example hostname and release id; do not commit placeholders to the
+live configuration. Vercel checks its filesystem before rewrites, so hashed
+Vite JS/CSS files in local `dist/assets/` still win. Other `/assets/...`
+requests and every `/reference/...` conditioning-image request go to the same
+versioned CDN release without changing scene or renderer URLs. Configure the
+CDN to support byte-range requests and return correct MIME types for `.spz`,
+`.glb`, `.mp3`, `.mp4`, `.jpg`, and `.png`. Because release prefixes are
+immutable, they can use a one-year immutable cache policy. Roll back by pointing
+the rewrite at the previous complete release; never overwrite a published
+release prefix.
+
+Before changing the rewrites, compare the uploaded object inventory with both
+local trees, request at least one object from every media class, fetch the exact
+conditioning URL in each Participant manifest (including
+`/reference/delaware.jpg`), and confirm a byte-range request returns `206`.
+Deploy the app only after the complete release is readable.
+
+## Account-dependent hosting choices
+
+The CDN hostname cannot be selected safely in source control before an account
+and domain exist. Choose one of these concrete paths:
+
+1. **Cloudflare R2 + custom domain (recommended).** Handles 200 MB splats
+   comfortably, supports immutable release prefixes, and keeps media outside
+   app deploys. Remaining work: create the bucket, attach a production custom
+   domain, upload `public/assets/` and `public/reference/` under one release
+   prefix, set MIME/cache/range behavior, add both concrete Vercel rewrites,
+   then run the public checks above.
+2. **Amazon S3 + CloudFront.** Mature lifecycle, logging, and access controls,
+   but more policy and invalidation setup. Remaining work: create a private
+   bucket and CloudFront distribution with origin access control, upload both
+   versioned trees, attach TLS/DNS, add both rewrites, and verify references and
+   range requests.
+3. **Vercel Blob.** Keeps billing and observability with one provider, but needs
+   an upload/mapping step from stable `/assets/...` and `/reference/...` paths
+   to Blob URLs and must be evaluated against the final library's delivery
+   cost. Remaining work: create the store, upload the release, establish stable
+   custom-domain or rewrite mappings, add them, and run the same checks.
+
+No public URL, token mint, WebRTC stream, browser/device result, or launch
+readiness should be claimed until the corresponding external steps have been
+performed and observed.
+
+## Local verification
+
+From `revolution/`:
+
+```powershell
+npm ci
+npm run test:server
+npm run typecheck
+npm run build
+```
+
+The GitHub Actions workflow runs the same broker test, typecheck, and build on
+every pull request, including any accidental PR targeting `main`.

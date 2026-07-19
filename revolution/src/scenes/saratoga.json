@@ -4,7 +4,7 @@
   "renderer": "gameplay",
   "assets": {
     "referenceImage": "/reference/saratoga-charge.jpg",
-    "prompt": "First-person view riding a galloping horse across an autumn battlefield in upstate New York, 1777, toward a log-and-earth fortification, among charging Continental soldiers, musket smoke drifting across stubble fields and wooded hills in fall color. Late golden afternoon light. Realistic, kinetic.",
+    "prompt": "First-person view riding a galloping horse across an autumn battlefield in upstate New York, 1777, toward the substantial log-and-earth Breymann fortification, among charging Continental soldiers, musket smoke drifting across stubble fields and wooded hills in fall color. Late golden afternoon light. Realistic, kinetic.",
     "fallbackVideo": "/assets/video/saratoga-charge.mp4"
   },
   "zones": [],
@@ -13,7 +13,7 @@
       "subtitle": "Autumn, 1777. The war is two years old, and Britain has a plan to end it: General Burgoyne brings eight thousand men south from Canada, down the Hudson. If he reaches Albany, New England is cut off from the other colonies, and the revolution is divided in half." },
     { "id": "SAR-020", "trigger": { "type": "action", "name": "unit-grabbed" },
       "subtitle": "The table shows the ground that stops him. Bemis Heights — a bluff above the only road south, fortified by a young Polish engineer named Kosciuszko. The American army waits here: twelve thousand men, and more arriving every day." },
-    { "id": "SAR-021", "trigger": { "type": "action", "name": "unit-placed:morgan-rifles", "orTimer": 120 },
+    { "id": "SAR-021", "trigger": { "type": "action", "name": "unit-placed:morgan-rifles", "orTimer": 60 },
       "subtitle": "Burgoyne cannot go around. The river is on one side, deep forest on the other. To reach Albany he must come through this position — or break it." },
     { "id": "SAR-030", "trigger": { "type": "action", "name": "phase-advanced:freemans-farm" },
       "subtitle": "September 19th. Burgoyne attacks through the woods at a clearing called Freeman's Farm. Benedict Arnold — Washington's most aggressive field general — throws regiments into the clearing as fast as they can march. The British hold the field at dusk. It costs them six hundred men." },
@@ -24,15 +24,15 @@
       "lockControls": true, "then": "wake:worldmodel" },
     { "id": "SAR-060", "trigger": { "type": "model-event", "name": "redoubt-taken" },
       "subtitle": "He leads the assault that takes the key redoubt in the British line, and goes down with a musket ball through the leg that made him a hero." },
-    { "id": "SAR-070", "trigger": { "type": "model-event", "name": "charge-end", "orTimer": 600 },
+    { "id": "SAR-070", "trigger": { "type": "model-event", "name": "charge-end", "orAfterPrevious": 25 },
       "subtitle": "Ten days later, surrounded and starving, Burgoyne surrendered his entire army — nearly six thousand men. When the news reached Paris, France declared for the revolution: money, an army, and a fleet. Saratoga inspired a much-needed ally.",
       "then": "scene:valley-forge" }
   ],
   "audio": { "ambience": ["/assets/audio/amb/command-tent.mp3"] },
   "modelEvents": [
-    { "at": 35, "name": "redoubt-taken",
+    { "at": 25, "name": "redoubt-taken",
       "prompt": "Same autumn battlefield: Continental soldiers swarm over the log wall of the earthen redoubt in musket smoke, fighting hand to hand at the top, an officer on horseback going down as his horse falls near the wall. Late golden afternoon light fading. Realistic, chaotic." },
-    { "at": 65, "name": "charge-end" }
+    { "at": 45, "name": "charge-end" }
   ],
   "next": { "scene": "valley-forge", "preloadAt": "SAR-050" }
 }
