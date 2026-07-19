@@ -7,5 +7,15 @@
     "api/session.ts": {
       "maxDuration": 15
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/assets/:path*",
+      "destination": "https://pub-e2af4157669b48a9af62795ac31c5a34.r2.dev/releases/c7e99fc4e6c6-assets-3f5622023858/assets/:path*"
+    },
+    {
+      "source": "/reference/:path*",
+      "destination": "https://pub-e2af4157669b48a9af62795ac31c5a34.r2.dev/releases/c7e99fc4e6c6-assets-3f5622023858/reference/:path*"
+    }
+  ]
 }

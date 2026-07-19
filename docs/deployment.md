@@ -82,9 +82,11 @@ header, returns only the upstream `jwt` on success, marks every response
 `Cache-Control: no-store`, and uses generic errors so exception/upstream text
 cannot disclose server configuration.
 
-`revolution/.vercelignore` also excludes local environment files, offline
-pipeline code, generated media, tests, and build output from CLI source uploads.
-Do not remove the `.env` or generated-media exclusions to work around a deploy.
+`revolution/.vercelignore` also excludes local environment files, generated
+media, tests, build output, and the trailer workspace from source uploads. The
+committed pipeline metadata remains available because runtime sound design
+imports its published plan. Do not remove the `.env` or generated-media
+exclusions to work around a deploy.
 
 ## Large baked assets: object store plus CDN
 
@@ -109,6 +111,14 @@ releases/<release-id>/reference/...
 Use the Git commit SHA or another immutable release id. Uploads happen from a
 trusted operator machine or a separate asset-publish workflow; R2 write
 credentials never belong in Vercel and never use a `VITE_*` name.
+
+The hackathon deployment currently uses Cloudflare's generated `r2.dev` origin
+through the concrete, versioned rewrites in `revolution/vercel.json`. Viewers
+still request stable same-origin `/assets/...` and `/reference/...` URLs from
+Vercel. This is intentionally a temporary hosting choice: `r2.dev` is suitable
+for modest demo traffic but does not provide the caching and traffic controls
+of an R2 custom domain. Replace only the rewrite origin when a project domain
+is added; keep the versioned release layout and stable application URLs.
 
 With R2's S3-compatible credentials present only in the operator environment,
 run this from `revolution/` after replacing every placeholder:
