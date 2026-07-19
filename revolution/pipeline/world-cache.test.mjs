@@ -77,22 +77,29 @@ test("a generated world with current metadata remains cached without a pin", () 
   );
 });
 
-test("source-conditioned worlds require newly curated takes", () => {
-  const correctedScenes = [
+test("uncurated source-conditioned worlds remain unpinned", () => {
+  const uncuratedScenes = [
     "assembly-room",
     "griffins-wharf",
-    "lexington",
     "surrender-field",
     "treaty-paris",
     "valley-forge",
   ];
 
-  for (const scene of correctedScenes) {
+  for (const scene of uncuratedScenes) {
     const corrected = worlds.find((world) => world.scene === scene);
     assert.ok(corrected, `${scene} config is missing`);
     assert.equal(corrected.worldId, null, `${scene} must not reuse its pre-correction pin`);
     assert.equal(corrected.worldSignature, null, `${scene} must await a newly curated take`);
   }
+});
+
+test("Lexington uses its newly curated source-conditioned take", () => {
+  const lexington = worlds.find((world) => world.scene === "lexington");
+
+  assert.ok(lexington, "lexington config is missing");
+  assert.equal(lexington.worldId, "5c74350b-8ff6-4470-8fa0-bdacead34305");
+  assert.equal(lexington.worldSignature, worldGenerationSignature(lexington));
 });
 
 test("retained pins declare the generation inputs that produced them", () => {
