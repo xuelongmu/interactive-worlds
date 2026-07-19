@@ -4,8 +4,11 @@ export interface CueEngineHooks {
   /** Called when a cue should play (VO/subtitle). Return a promise that
    *  resolves when playback ends so the queue can advance. */
   play: (cue: Cue) => Promise<void>;
-  /** Side-effects: lockControls, then-actions. */
+  /** Immediate side-effects on trigger (lockControls). */
   action?: (cue: Cue) => void;
+  /** Deferred side-effects that must wait for the line to finish
+   *  (`then:` transitions, cutscenes) — the audio-first contract. */
+  after?: (cue: Cue) => void;
 }
 
 /** Renderer-agnostic trigger evaluation with narrator queueing.
@@ -81,6 +84,7 @@ export class CueEngine {
       } catch (error) {
         console.warn(`[cues] playback failed for ${cue.id}:`, error);
       }
+      this.hooks.after?.(cue);
     }
     this.playing = false;
   }

@@ -56,8 +56,9 @@ Pin a Marble take you like by pasting its world id into
 `pipeline/worlds.config.mjs`.
 
 All scripts are content-hashed (re-runs only regenerate what changed) and
-no-op with instructions when their key is missing. `pipeline:vo --dry-run`
-shows the parsed cue list without calling the API.
+no-op with instructions when their key is missing.
+`npm run pipeline:vo -- --dry-run` (note the `--` npm needs to pass args
+through) shows the parsed cue list without calling the API.
 
 ## Layout
 

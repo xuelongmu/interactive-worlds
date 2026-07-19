@@ -88,15 +88,17 @@ export class Director {
     this.cardEl.classList.add("visible");
 
     const cueEngine = new CueEngine(manifest.cues, {
-      play: async (cue) => {
-        await this.audio.playVoice({
+      play: (cue) =>
+        this.audio.playVoice({
           url: cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`,
           subtitle: cue.subtitle,
           bus: cue.diegetic ? "diegetic" : "narration",
           duck: cue.duck as BusName[] | undefined,
-        });
-        // audio-first: the visual consequence lands on the last word
-        if (this.cueEngine === cueEngine) await this.runThen(cue);
+        }),
+      // audio-first: the visual consequence lands on the last word — and a
+      // failed VO load still advances the story
+      after: (cue) => {
+        if (this.cueEngine === cueEngine) void this.runThen(cue);
       },
       action: (cue) => {
         if (cue.lockControls) this.runner?.setControlsLocked(true);

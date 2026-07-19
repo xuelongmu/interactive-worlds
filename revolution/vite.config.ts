@@ -26,6 +26,20 @@ function tokenBroker(): Plugin {
   return {
     name: "reactor-token-broker",
     configureServer(server) {
+      // Dev-only: accept canvas snapshots for headless visual verification.
+      server.middlewares.use("/api/snapshot", async (req, res) => {
+        if (req.method !== "POST") { res.statusCode = 405; res.end(); return; }
+        const chunks: Buffer[] = [];
+        req.on("data", (c) => chunks.push(c));
+        req.on("end", async () => {
+          const { writeFileSync, mkdirSync } = await import("node:fs");
+          mkdirSync(resolve(root, "snapshots"), { recursive: true });
+          const file = resolve(root, "snapshots", `snap-${Date.now()}.jpg`);
+          writeFileSync(file, Buffer.concat(chunks));
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify({ file }));
+        });
+      });
       server.middlewares.use("/api/session", async (req, res) => {
         if (req.method !== "POST") {
           res.statusCode = 405;

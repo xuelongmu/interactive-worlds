@@ -4,7 +4,7 @@
 export const worlds = [
   {
     scene: "lexington",
-    worldId: null,
+    worldId: "dc292531-9d06-4f95-851c-0ebc32a3c73b",
     // GPT Image 2 starting frame (pipeline/frames.mjs) — uploaded as the
     // image prompt; the text prompt rides along as guidance.
     image: "public/reference/lexington.jpg",
@@ -19,7 +19,7 @@ export const worlds = [
   },
   {
     scene: "assembly-room",
-    worldId: null,
+    worldId: "7fb1b3f0-a623-43a5-8ce0-efa89ef6540f",
     image: "public/reference/assembly-room.jpg",
     prompt:
       "Interior of the Pennsylvania State House assembly room in summer 1776, eye level. " +
@@ -30,7 +30,8 @@ export const worlds = [
   },
   {
     scene: "valley-forge",
-    worldId: null,
+    // note: an earlier take (185eea37) generated but never published assets
+    worldId: "25fb6684-20ab-4093-a8b3-890ad9729723",
     image: "public/reference/valley-forge.jpg",
     prompt:
       "A Continental Army winter encampment at Valley Forge, December 1777, at dusk. " +

@@ -3,8 +3,11 @@
   "title": "The Declaration — Philadelphia, Summer 1776",
   "renderer": "gameplay",
   "assets": {
-    "splat": "/assets/worlds/assembly-room.spz"
+    "splat": "/assets/worlds/assembly-room.spz",
+    "collider": "/assets/worlds/assembly-room-collider.glb"
   },
+  "locomotion": { "eyeHeight": 1.65, "speed": 1.1 },
+  "entry": { "yaw": 4.712 },
   "zones": [],
   "cues": [
     { "id": "DEC-010", "trigger": { "type": "scene-start" },

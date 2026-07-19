@@ -9,6 +9,8 @@
   },
   "zones": [],
   "cues": [
+    { "id": "DEL-010", "trigger": { "type": "scene-start" },
+      "subtitle": "Emanuel Leutze painted the crossing seventy-five years later: Washington at the prow, the flag, morning light on the water. The crossing itself was made in darkness, in a storm." },
     { "id": "DEL-011", "trigger": { "type": "scene-start" },
       "subtitle": "Christmas night, 1776. The revolution is collapsing. New York is lost. The army has retreated across New Jersey, and in six days most enlistments expire. Washington plans one counterstroke: cross the river at night, and take the Hessian garrison at Trenton by surprise." },
     { "id": "DEL-012", "trigger": { "type": "action", "name": "boarded" },

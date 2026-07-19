@@ -52,9 +52,17 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function pollUntil(fn, { intervalMs = 5000, timeoutMs = 15 * 60 * 1000, label = "operation" }) {
   const startedAt = Date.now();
+  let consecutiveErrors = 0;
   for (;;) {
-    const result = await fn();
-    if (result) return result;
+    try {
+      const result = await fn();
+      consecutiveErrors = 0;
+      if (result) return result;
+    } catch (error) {
+      // Tolerate transient network failures; only give up after a streak.
+      if (++consecutiveErrors >= 5) throw error;
+      process.stdout.write("!");
+    }
     if (Date.now() - startedAt > timeoutMs) throw new Error(`${label} timed out`);
     process.stdout.write(".");
     await sleep(intervalMs);

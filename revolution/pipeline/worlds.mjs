@@ -7,7 +7,7 @@
  *    node pipeline/worlds.mjs lexington       # one scene
  *    node pipeline/worlds.mjs lexington --world-id <id>   # adopt an existing world
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { requireKey, projectRoot, download, pollUntil } from "./lib.mjs";
 import { worlds } from "./worlds.config.mjs";
@@ -92,22 +92,37 @@ async function generateWorld(entry) {
     console.log(`(paste into worlds.config.mjs as worldId to pin this take)`);
   }
 
-  const worldRes = await fetch(`${API}/worlds/${worldId}`, { headers });
-  if (!worldRes.ok) throw new Error(`world fetch failed ${worldRes.status}`);
-  const { world } = await worldRes.json();
-  const splats = world.assets?.splats;
-  const spzUrl = splats?.spz_urls?.["500k"] ?? splats?.spz_urls?.full_res;
+  // Assets can publish a few moments after the operation reports done.
+  const world = await pollUntil(
+    async () => {
+      const worldRes = await fetch(`${API}/worlds/${worldId}`, { headers });
+      if (!worldRes.ok) throw new Error(`world fetch failed ${worldRes.status}`);
+      const body = await worldRes.json();
+      return body.assets?.splats?.spz_urls ? body : null;
+    },
+    { intervalMs: 15_000, timeoutMs: 20 * 60 * 1000, label: `assets of ${entry.scene}` }
+  );
+  const splats = world.assets.splats;
+  const spzUrl = splats.spz_urls["500k"] ?? splats.spz_urls.full_res;
   if (!spzUrl) throw new Error("world has no spz asset");
   await download(spzUrl, `public/assets/worlds/${entry.scene}.spz`);
 
   const colliderUrl = world.assets?.mesh?.collider_mesh_url;
+  const colliderPath = resolve(projectRoot, `public/assets/worlds/${entry.scene}-collider.glb`);
   if (colliderUrl) {
     await download(colliderUrl, `public/assets/worlds/${entry.scene}-collider.glb`);
   } else {
+    // remove any stale collider from a previous take so the renderer really
+    // does fall back to flat ground rather than raycasting the wrong world
+    if (existsSync(colliderPath)) rmSync(colliderPath);
     console.log("  (no collider mesh on this world — scene falls back to flat ground)");
   }
 
   const meta = splats?.semantics_metadata ?? {};
+  writeFileSync(
+    resolve(projectRoot, `public/assets/worlds/${entry.scene}.meta.json`),
+    JSON.stringify({ worldId, ...meta }, null, 2)
+  );
   console.log(`  scale factor: ${meta.metric_scale_factor ?? "?"} · ground offset: ${meta.ground_plane_offset ?? "?"}`);
 }
 
@@ -118,7 +133,15 @@ if (selected.length === 0) {
 }
 for (const entry of selected) {
   const already = existsSync(resolve(projectRoot, `public/assets/worlds/${entry.scene}.spz`));
-  if (already && !worldIdFlag) {
+  // A local asset only counts if it came from the currently pinned world —
+  // pinning a new take in worlds.config.mjs must trigger a re-download.
+  let localWorldId = null;
+  const metaPath = resolve(projectRoot, `public/assets/worlds/${entry.scene}.meta.json`);
+  if (existsSync(metaPath)) {
+    try { localWorldId = JSON.parse(readFileSync(metaPath, "utf8")).worldId ?? null; } catch { /* refetch */ }
+  }
+  const pinMatches = !entry.worldId || entry.worldId === localWorldId;
+  if (already && !worldIdFlag && pinMatches) {
     console.log(`${entry.scene}: asset exists, skipping (delete the .spz to regenerate)`);
     continue;
   }
