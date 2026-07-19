@@ -13,9 +13,10 @@ export const worlds = [
       "Dew on rough spring grass, dirt road crossing the green, low stone walls, " +
       "a white meetinghouse and scattered colonial clapboard houses at the edges, bare elm trees. " +
       "Cold golden sunrise light, long shadows, thin ground mist. " +
-      "Two opposing lines of soldiers stand frozen sixty yards apart: one ragged line of " +
-      "colonial militiamen in civilian coats with muskets, facing a longer disciplined line of " +
-      "British redcoat regulars. Photorealistic, historically accurate, no modern objects.",
+      "A ragged line of colonial militiamen in civilian coats with muskets faces British " +
+      "regulars. Follow the Doolittle/Earl plate for site landmarks and broad placement, but " +
+      "do not invent an exact measured gap or perfectly opposed formations. Photorealistic, " +
+      "historically accurate, no modern objects.",
   },
   {
     scene: "assembly-room",
@@ -23,10 +24,11 @@ export const worlds = [
     image: "public/reference/assembly-room.jpg",
     prompt:
       "Interior of the Pennsylvania State House assembly room in summer 1776, eye level. " +
-      "Georgian colonial architecture, tall shuttered windows with thin light leaking through, " +
-      "gray paneled walls, rows of Windsor chairs and green baize-covered tables with papers, " +
-      "quills and inkwells, a raised speaker's chair at the far end. Warm dim interior light, " +
-      "dust in the air. Empty of people. Photorealistic, historically accurate, no modern objects.",
+      "Georgian colonial architecture based on the NPS evidence-based restoration: tall windows " +
+      "with period shades, gray paneled walls, thirteen green baize-covered tables in shallow " +
+      "semicircular rows, Windsor chairs, papers, quills and inkwells, the surviving cockleshell " +
+      "frieze and Penn crest above a modest platform. No balustrade, invented dais, or post-1776 " +
+      "Rising Sun chair. Warm dim light, empty of people, historically accurate, no modern objects.",
   },
   {
     scene: "valley-forge",
@@ -35,9 +37,9 @@ export const worlds = [
     image: "public/reference/valley-forge.jpg",
     prompt:
       "A Continental Army winter encampment at Valley Forge, December 1777, at dusk. " +
-      "Rows of small rough log huts with mud chinking in snow, smoke rising from clay chimneys, " +
+      "Rows of 14-by-16-foot rough log huts with mud chinking in patchy snow, smoke rising from clay-lined chimneys, " +
       "frozen rutted paths, bare black trees, a few campfires, stacked muskets, gray overcast sky " +
-      "fading to blue dusk. Deep snow, desolate and quiet. Photorealistic, no modern objects.",
+      "fading to blue dusk. Patchy winter ground, desolate and quiet. Photorealistic, no modern objects.",
   },
   {
     scene: "griffins-wharf",
@@ -67,10 +69,10 @@ export const worlds = [
     worldId: "2c5ba9e6-abb7-4df1-8843-7c3c521fec4b",
     image: "public/reference/treaty-paris.jpg",
     prompt:
-      "The interior of an 18th century painter's studio in Paris, 1783, eye level. A monumental " +
-      "half-finished canvas dominates the room: the left half richly painted with five American " +
-      "diplomats around a treaty table, the right half blank primed linen with faint chalk " +
-      "underdrawing. Tall north window light, easels, pigments, a tall clock, parquet floor. " +
-      "Photorealistic, historically accurate, no modern objects.",
+      "Benjamin West's London studio around 1783, eye level. The actual unfinished American " +
+      "Commissioners painting anchors the room: five negotiators in varying states of finish " +
+      "around a table on the left and the authentic broad unpainted field on the right. Do not " +
+      "invent a Paris definitive-treaty signing or a different monumental canvas. Tall north " +
+      "window light, pigments, a clock, parquet floor, historically accurate, no modern objects.",
   },
 ];

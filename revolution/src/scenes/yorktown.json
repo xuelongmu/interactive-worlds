@@ -6,7 +6,7 @@
     "splat": "/assets/worlds/surrender-field.spz",
     "collider": "/assets/worlds/surrender-field-collider.glb",
     "referenceImage": "/reference/yorktown-redoubt.jpg",
-    "prompt": "First-person view advancing at a crouch through darkness toward an earthen redoubt topped with sharpened stakes, at night, among Continental soldiers carrying unloaded muskets with fixed bayonets, distant siege cannon flashes lighting low clouds. Nearly black, tense, realistic.",
+    "prompt": "First-person view advancing at a crouch through darkness toward a low earthen-and-log redoubt protected by abatis roughly twenty-five yards outside, at night, among Continental soldiers carrying unloaded muskets with fixed bayonets. No stone walls and no tall palisade. Distant siege cannon flashes light low clouds. Nearly black, tense, realistic.",
     "fallbackVideo": "/assets/video/yorktown-redoubt.mp4"
   },
   "locomotion": { "eyeHeight": 1.65, "speed": 1.0 },
@@ -42,7 +42,7 @@
   "audio": { "ambience": ["/assets/audio/amb/siege-camp.mp3"] },
   "modelEvents": [
     { "at": 20, "name": "redoubt-taken",
-      "prompt": "Same night battlefield: soldiers climb the earthen wall of the redoubt through broken stakes and swarm over the parapet, brief hand-to-hand fighting silhouetted by distant cannon flashes, then the fighting subsides. Nearly black, realistic." },
+      "prompt": "Same night battlefield: soldiers pass through broken abatis, climb the low earthen-and-log wall and swarm over the parapet, brief hand-to-hand fighting silhouetted by distant cannon flashes, then the fighting subsides. No stone walls or tall palisade. Nearly black, realistic." },
     { "at": 40, "name": "assault-end" }
   ],
   "next": { "scene": "treaty-paris", "preloadAt": "YOR-060" }
