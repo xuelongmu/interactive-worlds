@@ -77,6 +77,9 @@ code { font-family: Consolas, monospace; color: var(--accent); }
   width: 100%;
   height: 100%;
 }
+/* narration-over-black IS the loading screen — subtitles must sit above
+   the fade layer (40) and the title card (50) */
+.stage .subtitle-bar { z-index: 60; }
 .video-host {
   position: absolute;
   inset: 0;
