@@ -86,6 +86,29 @@ const CLEARANCE_ADMISSION_SCRIPT = [
   'return {1, "ok", client_used, global_used}',
 ].join("\n");
 
+const PREVIEW_ADMISSION_SCRIPT = [
+  'local client = KEYS[1]',
+  'local global = KEYS[2]',
+  'local client_limit = tonumber(ARGV[1])',
+  'local client_ttl = tonumber(ARGV[2])',
+  'local global_limit = tonumber(ARGV[3])',
+  'local global_ttl = tonumber(ARGV[4])',
+  '',
+  'local client_used = tonumber(redis.call("GET", client) or "0")',
+  'if client_used >= client_limit then',
+  '  return {0, "client", client_used, 0}',
+  'end',
+  'local global_used = tonumber(redis.call("GET", global) or "0")',
+  'if global_used >= global_limit then',
+  '  return {0, "global", client_used, global_used}',
+  'end',
+  'client_used = redis.call("INCR", client)',
+  'if client_used == 1 then redis.call("EXPIRE", client, client_ttl) end',
+  'global_used = redis.call("INCR", global)',
+  'if global_used == 1 then redis.call("EXPIRE", global, global_ttl) end',
+  'return {1, "ok", client_used, global_used}',
+].join("\n");
+
 type ServerEnvironment = Record<string, string | undefined>;
 
 type RedisEval = {
@@ -94,8 +117,10 @@ type RedisEval = {
 
 type BrokerConfig = {
   reactorApiKey: string;
+  challengeMode: "turnstile" | "preview-bypass";
   turnstileSecretKey: string;
   expectedHostnames: Set<string>;
+  redisNamespace: string;
   redisUrl: string;
   redisToken: string;
   clientHashSecret: string;
@@ -181,6 +206,9 @@ function isHttpsUrl(value: string): boolean {
 
 function configuration(env: ServerEnvironment): BrokerConfig | null {
   const reactorApiKey = env.REACTOR_API_KEY?.trim() ?? "";
+  const previewBypass = env.VERCEL === "1" && env.VERCEL_ENV === "preview" &&
+    env.SESSION_PREVIEW_BYPASS === "1" &&
+    env.VITE_SESSION_CHALLENGE_MODE === "disabled";
   const turnstileSecretKey = env.TURNSTILE_SECRET_KEY?.trim() ?? "";
   const redisUrl = env.UPSTASH_REDIS_REST_URL?.trim() ?? "";
   const redisToken = env.UPSTASH_REDIS_REST_TOKEN?.trim() ?? "";
@@ -198,20 +226,25 @@ function configuration(env: ServerEnvironment): BrokerConfig | null {
   const validHostnames = hostnames.length > 0 && hostnames.every((hostname) =>
     /^[a-z0-9.-]+(?::\d+)?$/i.test(hostname)
   );
+  const validTurnstileConfig = !!turnstileSecretKey && validHostnames &&
+    clearanceHashSecret.length >= 32;
+  const validChallengeConfig = previewBypass || validTurnstileConfig;
 
   if (
-    !reactorApiKey || !turnstileSecretKey || !isHttpsUrl(redisUrl) || !redisToken ||
-    clientHashSecret.length < 32 || clearanceHashSecret.length < 32 ||
-    !clearanceTtlSeconds || secureClearanceCookie === null || !clientLimit ||
-    !clientWindowSeconds || !globalDailyLimit || !validHostnames
+    !reactorApiKey || !validChallengeConfig || !isHttpsUrl(redisUrl) || !redisToken ||
+    clientHashSecret.length < 32 || !clearanceTtlSeconds ||
+    secureClearanceCookie === null || !clientLimit || !clientWindowSeconds ||
+    !globalDailyLimit
   ) {
     return null;
   }
 
   return {
     reactorApiKey,
+    challengeMode: previewBypass ? "preview-bypass" : "turnstile",
     turnstileSecretKey,
     expectedHostnames: new Set(hostnames),
+    redisNamespace: previewBypass ? "iw:{session-broker-preview}" : "iw:{session-broker}",
     redisUrl,
     redisToken,
     clientHashSecret,
@@ -373,8 +406,7 @@ function parseAdmission(result: unknown): Admission {
   return { allowed: Number(result[0]) === 1, reason };
 }
 
-function admissionKeys(clientHash: string, now: Date): [string, string] {
-  const namespace = "iw:{session-broker}";
+function admissionKeys(namespace: string, clientHash: string, now: Date): [string, string] {
   const day = now.toISOString().slice(0, 10);
   return [
     namespace + ":client:" + clientHash,
@@ -395,8 +427,8 @@ async function admitChallenge(
     hmacHex(config.clearanceHashSecret, clearance),
     hmacHex(config.clientHashSecret, address),
   ]);
-  const namespace = "iw:{session-broker}";
-  const [clientKey, globalKey] = admissionKeys(clientHash, now);
+  const namespace = config.redisNamespace;
+  const [clientKey, globalKey] = admissionKeys(namespace, clientHash, now);
   return parseAdmission(await redis.eval(
     CHALLENGE_ADMISSION_SCRIPT,
     [
@@ -427,8 +459,8 @@ async function admitClearance(
     hmacHex(config.clearanceHashSecret, clearance),
     hmacHex(config.clientHashSecret, address),
   ]);
-  const namespace = "iw:{session-broker}";
-  const [clientKey, globalKey] = admissionKeys(clientHash, now);
+  const namespace = config.redisNamespace;
+  const [clientKey, globalKey] = admissionKeys(namespace, clientHash, now);
   return parseAdmission(await redis.eval(
     CLEARANCE_ADMISSION_SCRIPT,
     [namespace + ":clearance:" + clearanceHash, clientKey, globalKey],
@@ -438,6 +470,26 @@ async function admitClearance(
       config.globalDailyLimit,
       secondsUntilNextUtcDay(now),
       config.clearanceTtlSeconds,
+    ]
+  ));
+}
+
+async function admitPreview(
+  address: string,
+  config: BrokerConfig,
+  redis: RedisEval,
+  now: Date
+): Promise<Admission> {
+  const clientHash = await hmacHex(config.clientHashSecret, address);
+  const [clientKey, globalKey] = admissionKeys(config.redisNamespace, clientHash, now);
+  return parseAdmission(await redis.eval(
+    PREVIEW_ADMISSION_SCRIPT,
+    [clientKey, globalKey],
+    [
+      config.clientLimit,
+      config.clientWindowSeconds,
+      config.globalDailyLimit,
+      secondsUntilNextUtcDay(now),
     ]
   ));
 }
@@ -508,6 +560,18 @@ export async function handleSessionRequest(
   const fetchImpl = options.fetchImpl ?? fetch;
   const redis = options.redis ?? new Redis({ url: config.redisUrl, token: config.redisToken });
   const now = options.now?.() ?? new Date();
+
+  if (config.challengeMode === "preview-bypass") {
+    let admission: Admission;
+    try {
+      admission = await admitPreview(address, config, redis, now);
+    } catch {
+      return json(503, { error: "session service unavailable" });
+    }
+    if (!admission.allowed) return limitResponse(admission, config, now);
+    return mintReactorToken(config, fetchImpl);
+  }
+
   const parsedClearance = parseClearance(request, config);
 
   if (parsedClearance.kind === "present") {
