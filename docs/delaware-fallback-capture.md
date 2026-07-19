@@ -10,8 +10,8 @@ and verifies the one missing curated take without changing those mechanisms.
 - A configured `REACTOR_API_KEY`; never paste or expose its value in logs or a
   pull request.
 - Available Reactor session credit.
-- The conditioning frame at
-  `C:\Dev\interactive-worlds\revolution\public\reference\delaware.jpg`.
+- The conditioning frame at the repo-relative path
+  `public/reference/delaware.jpg`.
 - `ffprobe` on `PATH` for deterministic media inspection.
 
 From `revolution/`, start the existing review build:
@@ -24,9 +24,10 @@ Open `http://127.0.0.1:5173/spikes/worldmodel/`.
 
 ## Capture one take
 
-1. Choose the Delaware conditioning frame above, then select **Connect & start
-   generation**. Do not continue unless the page reaches `ready` and real frames
-   flow.
+1. With `public/reference/delaware.jpg` present, leave the file chooser empty so
+   the harness loads the manifest's reference image, or choose that repo-relative
+   file explicitly. Then select **Connect & start generation**. Do not continue
+   unless the page reaches `ready` and real frames flow.
 2. Drive with WASD and the arrow keys. Keep the embodied hands and pole in view,
    maintain a coherent forward crossing, and avoid abrupt camera reversals.
 3. Confirm the automatic log sequence below. Do not press the manual beat
@@ -45,8 +46,11 @@ Open `http://127.0.0.1:5173/spikes/worldmodel/`.
    objects, close violence, or gore. Stop and flag the prompt/frame after five
    unacceptable attempts.
 5. After `column-formed` and `cue DEL-041 -> scene:trenton` appear in the log,
-   select **Save recording (.mp4)**. Immediately select **Disconnect (ends the
-   session)** before inspecting or moving the download.
+   select **Save recording (.mp4)**. Keep the session connected while the button
+   says `Fetching recording...`. Wait until the event log contains
+   `recording saved` and the browser reports the download is complete. Only then
+   select **Disconnect (ends the session)**. Do not inspect or move the
+   download until the disconnect finishes.
 6. Preserve the download while placing the candidate at the ignored target:
 
 ```powershell

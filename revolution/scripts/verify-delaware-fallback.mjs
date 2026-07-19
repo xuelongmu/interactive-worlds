@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 const revolutionRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(revolutionRoot, "..");
 const manifestPath = resolve(revolutionRoot, "src/scenes/delaware.json");
+const runbookPath = resolve(repositoryRoot, "docs/delaware-fallback-capture.md");
 const videoPath = resolve(
   revolutionRoot,
   "public/assets/video/delaware-crossing.mp4"
@@ -22,7 +23,11 @@ const addCheck = (name, passed, detail) => {
   checks.push({ name, passed, detail });
 };
 
-const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+const [manifestSource, runbook] = await Promise.all([
+  readFile(manifestPath, "utf8"),
+  readFile(runbookPath, "utf8"),
+]);
+const manifest = JSON.parse(manifestSource);
 const expectedEvents = [
   { at: 45, name: "knox" },
   { at: 90, name: "storm" },
@@ -35,6 +40,35 @@ addCheck(
   "fallback asset URL",
   manifest.assets?.fallbackVideo === "/assets/video/delaware-crossing.mp4",
   manifest.assets?.fallbackVideo ?? "missing"
+);
+addCheck(
+  "conditioning image URL",
+  manifest.assets?.referenceImage === "/reference/delaware.jpg",
+  manifest.assets?.referenceImage ?? "missing"
+);
+
+const repoRelativeConditioningPath = "public/reference/delaware.jpg";
+const windowsAbsolutePath = /(?:^|[\s`"'(])[A-Za-z]:\\/m;
+addCheck(
+  "runbook uses repo-relative conditioning path",
+  runbook.includes(`\`${repoRelativeConditioningPath}\``) && !windowsAbsolutePath.test(runbook),
+  repoRelativeConditioningPath
+);
+
+const saveInstruction = runbook.indexOf("select **Save recording (.mp4)**");
+const savedConfirmation = runbook.indexOf("`recording saved`", saveInstruction);
+const downloadConfirmation = runbook.indexOf("download is complete", savedConfirmation);
+const disconnectInstruction = runbook.indexOf(
+  "select **Disconnect (ends the session)**",
+  downloadConfirmation
+);
+addCheck(
+  "runbook waits for saved download before disconnect",
+  saveInstruction >= 0 &&
+    savedConfirmation > saveInstruction &&
+    downloadConfirmation > savedConfirmation &&
+    disconnectInstruction > downloadConfirmation,
+  "Save recording -> recording saved -> download complete -> Disconnect"
 );
 addCheck(
   "model-event timeline",
