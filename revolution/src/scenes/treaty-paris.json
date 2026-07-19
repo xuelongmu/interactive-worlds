@@ -26,6 +26,7 @@
       "lockControls": true, "then": "signature:aged" },
     { "id": "PAR-050", "trigger": { "type": "action", "name": "signature-dwell" },
       "subtitle": "One of the signatures is yours. The revolution ended in 1783. The movement it started continues to this day.",
+      "musicAfter": "/assets/audio/music/swell-finale.mp3",
       "then": "end" }
   ],
   "audio": { "ambience": ["/assets/audio/amb/paris-studio.mp3"] }

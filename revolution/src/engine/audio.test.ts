@@ -117,3 +117,29 @@ describe("AudioEngine positional diegetic playback", () => {
     expect(source.start).toHaveBeenCalledOnce();
   });
 });
+
+describe("AudioEngine editorial music", () => {
+  it("awaits a music one-shot through its end event", async () => {
+    let end!: () => void;
+    const source = {
+      buffer: null as AudioBuffer | null,
+      connect: vi.fn(),
+      onended: null as (() => void) | null,
+      start: vi.fn(() => { end = () => source.onended?.(); }),
+    };
+    const engine = new AudioEngine() as any;
+    engine.ctx = { currentTime: 0, createBufferSource: () => source };
+    engine.buses = new Map([["music", { gain: { setTargetAtTime: vi.fn() } }]]);
+    engine.load = vi.fn().mockResolvedValue({ duration: 2 });
+
+    let finished = false;
+    const playback = engine.playOneShotAndWait("/music.mp3").then(() => { finished = true; });
+    await vi.waitFor(() => expect(source.start).toHaveBeenCalledOnce());
+    expect(finished).toBe(false);
+    end();
+    await playback;
+
+    expect(finished).toBe(true);
+    expect(source.connect).toHaveBeenCalledWith(engine.buses.get("music"));
+  });
+});

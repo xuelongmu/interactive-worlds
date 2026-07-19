@@ -1,9 +1,9 @@
 # Main-theme candidates — director audition packet
 
-Status: **four generated candidates, no selection made**. These artifacts are
-for the director's by-ear decision on issue #18. Nothing in this packet grants
-approval to adapt a motif into chapter-card stings, earned swells, scene
-manifests, or the final mix.
+Status: **B — Ink and String selected by the director on 2026-07-19**. The
+selection applies only to the exact take identified below; the other candidates
+remain rejected audition artifacts. The score pipeline may adapt B into the
+chapter sting and four earned swells while preserving the placement rules.
 
 ## Shared guardrails
 
@@ -116,7 +116,9 @@ Generation usage for this packet was exactly four successful 36-second calls:
 credit exhaustion. At the API's published $0.15/minute rate on 2026-07-19,
 that corresponds to $0.36 before any account-specific pricing treatment.
 
-## Director decision requested
+## Director decision
 
-Listen to A–D and select one candidate, request a revision of one direction,
-or reject all four. The pipeline deliberately records no default or winner.
+**B — Ink and String** won the by-ear audition. Runtime adoption verifies the
+exact take against SHA-256
+`a9e526b4bc6745366ce25d767825caa5e5521edc3a2f98c628ee216776fdbc15`
+before deriving any score asset; a regenerated take is not an equivalent.

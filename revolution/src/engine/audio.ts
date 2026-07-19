@@ -171,6 +171,26 @@ export class AudioEngine {
     source.start();
   }
 
+  /** Awaited one-shot for editorial music beats. The promise resolves only
+   * after the cue ends, preserving the no-music-under-narration contract. */
+  async playOneShotAndWait(url: string, bus: BusName = "music") {
+    const generation = this.playbackGeneration;
+    const buffer = await this.load(url);
+    if (!buffer || this.disposed || generation !== this.playbackGeneration) return;
+    const ctx = this.ensure();
+    await new Promise<void>((resolveDone) => {
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(this.buses.get(bus)!);
+      this.activeSources.add(source);
+      source.onended = () => {
+        this.activeSources.delete(source);
+        resolveDone();
+      };
+      source.start();
+    });
+  }
+
   async playAmbience(urls: string[]) {
     const ctx = this.ensure();
     this.stopAmbience();
