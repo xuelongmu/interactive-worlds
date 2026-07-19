@@ -15,7 +15,7 @@ import type {
 import type { BranchPresentationActions } from "../branch-state";
 import { PausableTimeouts } from "../engine/timers";
 import { resolveWorldModelInput } from "../engine/worldmodel-input";
-import { composeWorldModelPrompt } from "../engine/worldmodel-prompt";
+import { composeWorldModelPrompt, WORLD_MODEL_PROMPT_BUDGET } from "../engine/worldmodel-prompt";
 
 export type WorldModelSessionPhase =
   | "idle"
@@ -189,6 +189,13 @@ class CompatibleLingbotModel extends LingbotModel {
     return super.setPrompt({ prompt: compatiblePrompt });
   }
 
+  override async reset(): Promise<void> {
+    await super.reset();
+    this.longitudinal = "idle";
+    this.lateral = "idle";
+    this.movement = "idle";
+  }
+
   private async flushMovement(): Promise<void> {
     const next = resolveLegacyLingbotMovement(this.longitudinal, this.lateral);
     if (next === this.movement) return;
@@ -304,6 +311,43 @@ interface InputState {
   lookV: LookV;
 }
 
+function normalizeWorldModelInputState(
+  modelName: ReactorWorldModelName,
+  message: unknown,
+): InputState {
+  const state = message as Partial<Record<string, unknown>>;
+  if (modelName === REACTOR_WORLD_MODELS.helios) {
+    return { longitudinal: "idle", lateral: "idle", lookH: "idle", lookV: "idle" };
+  }
+  if (modelName === REACTOR_WORLD_MODELS.lingbot) {
+    const movement = state.movement;
+    return {
+      longitudinal: movement === "forward" || movement === "back" ? movement : "idle",
+      lateral: movement === "strafe_left" || movement === "strafe_right" ? movement : "idle",
+      lookH: state.look_horizontal === "left" || state.look_horizontal === "right"
+        ? state.look_horizontal
+        : "idle",
+      lookV: state.look_vertical === "up" || state.look_vertical === "down"
+        ? state.look_vertical
+        : "idle",
+    };
+  }
+  return {
+    longitudinal: state.move_longitudinal === "forward" || state.move_longitudinal === "back"
+      ? state.move_longitudinal
+      : "idle",
+    lateral: state.move_lateral === "strafe_left" || state.move_lateral === "strafe_right"
+      ? state.move_lateral
+      : "idle",
+    lookH: state.look_horizontal === "left" || state.look_horizontal === "right"
+      ? state.look_horizontal
+      : "idle",
+    lookV: state.look_vertical === "up" || state.look_vertical === "down"
+      ? state.look_vertical
+      : "idle",
+  };
+}
+
 interface PendingBranchPrompt {
   request: BranchActionRequest;
   prompt: string;
@@ -369,7 +413,10 @@ export class WorldModelSession {
     model?: LingbotWorld2Model
   ) {
     this.hooks = options;
-    this.modelName = options.modelName ?? resolveReactorWorldModelName();
+    // An injected client cannot be inferred from the deployment selector;
+    // callers supplying one must opt into a fallback schema explicitly.
+    this.modelName = options.modelName
+      ?? (model ? REACTOR_WORLD_MODELS["lingbot-world-2"] : resolveReactorWorldModelName());
     this.model = model ?? createReactorWorldModel(this.modelName);
   }
 
@@ -484,7 +531,10 @@ export class WorldModelSession {
 
   async setMovement(longitudinal: Longitudinal, lateral: Lateral): Promise<void> {
     this.desired.longitudinal = this.movementEnabled ? longitudinal : "idle";
-    this.desired.lateral = this.movementEnabled ? lateral : "idle";
+    this.desired.lateral = this.movementEnabled
+      && !(this.modelName === REACTOR_WORLD_MODELS.lingbot && longitudinal !== "idle")
+      ? lateral
+      : "idle";
     await this.flushDesiredInput();
   }
 
@@ -691,18 +741,13 @@ export class WorldModelSession {
     prompt: string
   ): Promise<void> {
     const acceptedAt = performance.now();
-    const reset = this.waitForSignal<Extract<LingbotWorld2Message, { type: "generation_reset" }>>(
-      (handler) => this.model.onGenerationReset(handler),
-      () => true,
-      this.timeout("conditions"),
-      "generation_reset timeout"
-    );
-    const inputReady = this.waitForSignal<Extract<LingbotWorld2Message, { type: "state" }>>(
-      (handler) => this.model.onState(handler),
-      (message) => message.move_longitudinal === "idle"
-        && message.move_lateral === "idle"
-        && message.look_horizontal === "idle"
-        && message.look_vertical === "idle",
+    const reset = this.waitForResetConfirmation();
+    const inputReady = this.waitForSignal<InputState>(
+      (handler) => this.onNormalizedInputState(handler),
+      (state) => state.longitudinal === "idle"
+        && state.lateral === "idle"
+        && state.lookH === "idle"
+        && state.lookV === "idle",
       this.timeout("input"),
       "requested-input readiness timeout"
     );
@@ -761,10 +806,18 @@ export class WorldModelSession {
 
       await this.model.setImage({ image: ref });
       this.assertCurrent(operation);
-      await imageAccepted.promise;
+      if (this.modelName === REACTOR_WORLD_MODELS.helios) {
+        // The Helios adapter commits image + prompt atomically from setPrompt;
+        // its setImage only stages the uploaded reference.
+        await this.model.setPrompt({ prompt: this.desiredPrompt });
+        this.assertCurrent(operation);
+        await imageAccepted.promise;
+      } else {
+        await imageAccepted.promise;
+        await this.model.setPrompt({ prompt: this.desiredPrompt });
+        this.assertCurrent(operation);
+      }
       this.updateReadiness({ imageConfirmed: true });
-      await this.model.setPrompt({ prompt: this.desiredPrompt });
-      this.assertCurrent(operation);
       this.hooks.onStatus?.("waiting for conditioning");
 
       await conditioningSignals;
@@ -857,12 +910,7 @@ export class WorldModelSession {
     } else if (message.type === "image_accepted") {
       this.updateReadiness({ imageConfirmed: true });
     } else if (message.type === "state") {
-      this.sent = {
-        longitudinal: message.move_longitudinal as Longitudinal,
-        lateral: message.move_lateral as Lateral,
-        lookH: message.look_horizontal as LookH,
-        lookV: message.look_vertical as LookV,
-      };
+      this.sent = normalizeWorldModelInputState(this.modelName, message);
       this.updateReadiness({ inputConfirmed: this.inputMatches() });
     } else if (message.type === "generation_started") {
       if (this.phase === "starting") {
@@ -912,25 +960,25 @@ export class WorldModelSession {
       if (next.longitudinal !== this.sent.longitudinal) {
         await this.sendInput(
           () => this.model.setMoveLongitudinal({ move_longitudinal: next.longitudinal }),
-          (state) => state.move_longitudinal === next.longitudinal,
+          (state) => state.longitudinal === next.longitudinal,
         );
       }
       if (next.lateral !== this.sent.lateral) {
         await this.sendInput(
           () => this.model.setMoveLateral({ move_lateral: next.lateral }),
-          (state) => state.move_lateral === next.lateral,
+          (state) => state.lateral === next.lateral,
         );
       }
       if (next.lookH !== this.sent.lookH) {
         await this.sendInput(
           () => this.model.setLookHorizontal({ look_horizontal: next.lookH }),
-          (state) => state.look_horizontal === next.lookH,
+          (state) => state.lookH === next.lookH,
         );
       }
       if (next.lookV !== this.sent.lookV) {
         await this.sendInput(
           () => this.model.setLookVertical({ look_vertical: next.lookV }),
-          (state) => state.look_vertical === next.lookV,
+          (state) => state.lookV === next.lookV,
         );
       }
       this.recomposePrompt();
@@ -940,11 +988,11 @@ export class WorldModelSession {
 
   private async sendInput(
     send: () => Promise<void>,
-    accepted: (state: Extract<LingbotWorld2Message, { type: "state" }>) => boolean,
+    accepted: (state: InputState) => boolean,
   ): Promise<void> {
     this.lastCommandAt = performance.now();
-    const confirmation = this.waitForSignal<Extract<LingbotWorld2Message, { type: "state" }>>(
-      (handler) => this.model.onState(handler),
+    const confirmation = this.waitForSignal<InputState>(
+      (handler) => this.onNormalizedInputState(handler),
       accepted,
       this.timeout("input"),
       "input confirmation timeout",
@@ -972,7 +1020,7 @@ export class WorldModelSession {
       },
       events: [...this.promptEvents.values()],
       lookV: this.desired.lookV,
-    });
+    }, this.modelName === REACTOR_WORLD_MODELS.lingbot ? 1_000 : WORLD_MODEL_PROMPT_BUDGET);
     if (next !== this.desiredPrompt) this.updateReadiness({ promptConfirmed: next === this.sentPrompt });
     this.desiredPrompt = next;
   }
@@ -1027,6 +1075,41 @@ export class WorldModelSession {
       && this.desired.lateral === this.sent.lateral
       && this.desired.lookH === this.sent.lookH
       && this.desired.lookV === this.sent.lookV;
+  }
+
+  private onNormalizedInputState(handler: (state: InputState) => void): () => void {
+    const model = this.model as unknown as {
+      onState(callback: (message: unknown) => void): () => void;
+    };
+    return model.onState((message) => handler(normalizeWorldModelInputState(this.modelName, message)));
+  }
+
+  private waitForResetConfirmation(): PendingSignal {
+    if (this.modelName === REACTOR_WORLD_MODELS.helios) {
+      const model = this.model as unknown as {
+        onState(callback: (message: unknown) => void): () => void;
+      };
+      return this.waitForSignal<unknown>(
+        (handler) => model.onState(handler),
+        (message) => {
+          const state = message as Partial<Record<string, unknown>>;
+          return state.type === "state"
+            && state.started === false
+            && state.running === false
+            && state.paused === false
+            && state.image_set === false
+            && state.current_prompt == null;
+        },
+        this.timeout("conditions"),
+        "Helios reset state timeout",
+      );
+    }
+    return this.waitForSignal<Extract<LingbotWorld2Message, { type: "generation_reset" }>>(
+      (handler) => this.model.onGenerationReset(handler),
+      () => true,
+      this.timeout("conditions"),
+      "generation_reset timeout",
+    );
   }
 
   private waitForReady(timeoutMs: number): Promise<void> {

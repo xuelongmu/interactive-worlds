@@ -255,6 +255,60 @@ class FakeModel {
   }
 }
 
+class LegacyLingbotConditioningModel extends FakeModel {
+  override emitState() {
+    this.emit({
+      type: "state",
+      seed: 42,
+      paused: false,
+      running: false,
+      started: false,
+      movement: "idle",
+      has_image: false,
+      has_prompt: false,
+      current_chunk: 0,
+      look_horizontal: "idle",
+      look_vertical: "idle",
+      current_action: "still",
+      current_prompt: null,
+      rotation_speed_deg: 5,
+    } as unknown as LingbotWorld2Message);
+  }
+}
+
+class HeliosConditioningModel extends FakeModel {
+  override onGenerationReset(_handler: Handler): never {
+    throw new Error("Helios does not expose onGenerationReset");
+  }
+
+  override async reset() {
+    this.calls.push("reset");
+    this.emit({
+      type: "state",
+      paused: false,
+      running: false,
+      started: false,
+      image_set: false,
+      current_chunk: 0,
+      current_frame: 0,
+      current_prompt: null,
+      image_strength: 1,
+      scheduled_prompts: {},
+    } as unknown as LingbotWorld2Message);
+  }
+
+  override async setImage() {
+    this.calls.push("setImage");
+  }
+
+  override async setPrompt({ prompt }: { prompt?: string }) {
+    this.calls.push(`setPrompt:${prompt ?? ""}`);
+    this.emit({ type: "image_accepted", width: 1664, height: 960 });
+    this.emit({ type: "prompt_accepted", prompt: prompt ?? "" });
+    this.emit({ type: "conditions_ready", has_image: true, has_prompt: true });
+  }
+}
+
 function makeSession(model = new FakeModel()) {
   const telemetry = vi.fn();
   const session = new WorldModelSession({
@@ -286,6 +340,53 @@ describe("WorldModelSession lifecycle", () => {
     expect(model.calls).toContain("listen:error");
     expect(model.calls.find((call) => call.startsWith("setPrompt:"))).toContain("winter river");
     expect(model.calls).not.toContain("start");
+    expect(model.temporaryListenerCount()).toBe(0);
+  });
+
+  it("conditions legacy Lingbot from its single movement state schema", async () => {
+    const model = new LegacyLingbotConditioningModel();
+    const readiness = vi.fn();
+    const session = new WorldModelSession({
+      modelName: REACTOR_WORLD_MODELS.lingbot,
+      mintJwt: async () => "jwt",
+      onBranchReadiness: readiness,
+      timeouts: { mint: 100, connect: 100, ready: 100, upload: 100, conditions: 100, input: 100 },
+    }, model as unknown as LingbotWorld2Model);
+
+    await session.prepare(new Blob(["frame"]), "legacy scene");
+
+    expect(session.phase).toBe("prepared");
+    expect(readiness).toHaveBeenLastCalledWith({
+      sessionConfirmed: true,
+      imageConfirmed: true,
+      promptConfirmed: true,
+      inputConfirmed: true,
+    });
+    expect(model.temporaryListenerCount()).toBe(0);
+  });
+
+  it("conditions Helios from reset state and its atomic image/prompt command", async () => {
+    const model = new HeliosConditioningModel();
+    const readiness = vi.fn();
+    const session = new WorldModelSession({
+      modelName: REACTOR_WORLD_MODELS.helios,
+      mintJwt: async () => "jwt",
+      onBranchReadiness: readiness,
+      timeouts: { mint: 100, connect: 100, ready: 100, upload: 100, conditions: 100, input: 100 },
+    }, model as unknown as LingbotWorld2Model);
+
+    await session.prepare(new Blob(["frame"]), "cinematic scene");
+
+    expect(session.phase).toBe("prepared");
+    expect(model.calls.indexOf("setImage")).toBeLessThan(
+      model.calls.findIndex((call) => call.startsWith("setPrompt:")),
+    );
+    expect(readiness).toHaveBeenLastCalledWith({
+      sessionConfirmed: true,
+      imageConfirmed: true,
+      promptConfirmed: true,
+      inputConfirmed: true,
+    });
     expect(model.temporaryListenerCount()).toBe(0);
   });
 
