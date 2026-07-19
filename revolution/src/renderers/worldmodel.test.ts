@@ -8,6 +8,9 @@ import {
   isGroundedWorldModelEvent,
   isWorldModelActionKey,
   ModelEventTimeline,
+  REACTOR_WORLD_MODELS,
+  resolveLegacyLingbotMovement,
+  resolveReactorWorldModelName,
   resolveWorldModelPointerLook,
   ROLLOVER_OUTPUT_BUDGET_MS,
   WorldModelPresentationGate,
@@ -15,6 +18,43 @@ import {
   WorldModelScenePlayer,
   WorldModelSession,
 } from "./worldmodel";
+
+describe("Reactor world-model selection", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("allows the deployed URL to switch between the two navigable models", () => {
+    expect(resolveReactorWorldModelName("?reactorModel=lingbot", "")).toBe(
+      REACTOR_WORLD_MODELS.lingbot
+    );
+    expect(resolveReactorWorldModelName("?reactorModel=lingbot-world-2", "reactor/lingbot")).toBe(
+      REACTOR_WORLD_MODELS["lingbot-world-2"]
+    );
+  });
+
+  it("uses an allowlisted build default and fails unknown values back to World 2", () => {
+    expect(resolveReactorWorldModelName("", "reactor/lingbot")).toBe(REACTOR_WORLD_MODELS.lingbot);
+    expect(resolveReactorWorldModelName("?reactorModel=sana", "reactor/lingbot")).toBe(
+      REACTOR_WORLD_MODELS["lingbot-world-2"]
+    );
+  });
+
+  it("maps diagonal input deterministically onto legacy LingBot's single axis", () => {
+    expect(resolveLegacyLingbotMovement("forward", "strafe_left")).toBe("forward");
+    expect(resolveLegacyLingbotMovement("idle", "strafe_right")).toBe("strafe_right");
+  });
+
+  it("requests a JWT scoped to the selected model", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ jwt: "jwt" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await WorldModelSession.mintJwt(REACTOR_WORLD_MODELS.lingbot);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/session?model=reactor%2Flingbot",
+      { method: "POST" }
+    );
+  });
+});
 
 type Handler<T = unknown> = (value: T) => void;
 
