@@ -1,0 +1,39 @@
+{
+  "id": "delaware",
+  "title": "Crossing the Delaware — Christmas Night, 1776",
+  "renderer": "worldmodel",
+  "assets": {
+    "referenceImage": "/reference/delaware.jpg",
+    "prompt": "First-person view from inside a crowded wooden Durham boat crossing a wide dark river at night in winter. Chunks of ice float on black water. Sleet and snow fall. Continental Army soldiers in 1776 uniforms and blankets huddle low in the boat; boatmen pole and row. Other boats are barely visible in the dark. No modern objects. Grim, cold, realistic, very low light.",
+    "fallbackVideo": "/assets/video/delaware-crossing.mp4"
+  },
+  "zones": [],
+  "cues": [
+    { "id": "DEL-010", "trigger": { "type": "scene-start" },
+      "subtitle": "Emanuel Leutze painted the crossing seventy-five years later: Washington at the prow, the flag, morning light on the water. The crossing itself was made in darkness, in a storm." },
+    { "id": "DEL-011", "trigger": { "type": "scene-start" },
+      "subtitle": "Christmas night, 1776. The revolution is collapsing. New York is lost. The army has retreated across New Jersey, and in six days most enlistments expire. Washington plans one counterstroke: cross the river at night, and take the Hessian garrison at Trenton by surprise." },
+    { "id": "DEL-012", "trigger": { "type": "action", "name": "boarded" },
+      "subtitle": "The password that night was \"Victory or death.\"" },
+    { "id": "DEL-020", "trigger": { "type": "action", "name": "control-granted" },
+      "subtitle": "The boats are crewed by fishermen from Marblehead, Massachusetts — Glover's regiment. Before morning they will carry twenty-four hundred men, eighteen cannon, and the horses across a river running with ice." },
+    { "id": "DEL-031", "trigger": { "type": "model-event", "name": "knox" },
+      "subtitle": "The voice carrying over the water is Colonel Henry Knox, directing the crossing." },
+    { "id": "DEL-032", "trigger": { "type": "model-event", "name": "storm" },
+      "subtitle": "Around eleven, a nor'easter came up the river — rain, sleet, and snow together. The storm slowed the crossing by three hours. It also hid it." },
+    { "id": "DEL-040", "trigger": { "type": "model-event", "name": "landing" },
+      "subtitle": "The last boats landed at three in the morning. Trenton lay nine miles away. The army marched through the storm to reach it. Two soldiers froze to death on the road." },
+    { "id": "DEL-041", "trigger": { "type": "action", "name": "column-formed" },
+      "subtitle": "Near dawn came word that the storm had soaked the muskets. Most of the army could not fire a shot. Washington's answer passed back down the column, man to man: use the bayonet. He was resolved to take Trenton.",
+      "then": "scene:trenton" }
+  ],
+  "audio": { "ambience": ["/assets/audio/amb/river-ice-storm.mp3"] },
+  "modelEvents": [
+    { "at": 45, "name": "knox" },
+    { "at": 90, "name": "storm",
+      "prompt": "Same boat, same river at night, but the storm intensifies: heavy sleet and driving snow, wind whipping the water into chop, ice grinding against the hull, near whiteout darkness. Soldiers hunch lower. Realistic, very low light." },
+    { "at": 180, "name": "landing",
+      "prompt": "The wooden boat reaches a dark snowy riverbank at night. Soldiers in 1776 Continental uniforms climb out into shallow water and snow, forming a column on the shore, sleet falling. Realistic, very low light." }
+  ],
+  "next": { "scene": "trenton" }
+}

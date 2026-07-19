@@ -1,0 +1,40 @@
+{
+  "id": "lexington",
+  "title": "Lexington Green — April 19, 1775",
+  "renderer": "splat",
+  "assets": {
+    "splat": "/assets/worlds/lexington.spz",
+    "collider": "/assets/worlds/lexington-collider.glb"
+  },
+  "locomotion": { "eyeHeight": 1.65, "speed": 1.3 },
+  "entry": { "yaw": 0 },
+  "zones": [
+    { "id": "militia-line", "shape": "box", "pos": [0, 1.5, -22], "size": [30, 3, 6] },
+    { "id": "parker", "shape": "box", "pos": [12, 1.5, -22], "size": [4, 3, 4] },
+    { "id": "british-line", "shape": "box", "pos": [0, 1.5, 22], "size": [30, 3, 6] },
+    { "id": "gap", "shape": "box", "pos": [0, 1.5, 0], "size": [30, 3, 24] },
+    { "id": "trigger-line", "shape": "box", "pos": [0, 1.5, 14], "size": [30, 3, 3] }
+  ],
+  "cues": [
+    { "id": "LEX-010", "trigger": { "type": "scene-start" },
+      "subtitle": "April 19th, 1775. Lexington, Massachusetts, just after sunrise. Seventy-seven militiamen stand on the green. Seven hundred British regulars are coming up the road." },
+    { "id": "LEX-020", "trigger": { "type": "zone-enter", "zone": "militia-line" },
+      "subtitle": "Farmers, mostly. Neighbors and family — fathers and sons in the same line. Most have been awake since midnight, when the alarm riders came through." },
+    { "id": "LEX-021", "trigger": { "type": "dwell", "zone": "parker", "seconds": 2 },
+      "subtitle": "Their captain, John Parker. A veteran of the French and Indian War, dying of tuberculosis. His orders: stand your ground. Don't fire unless fired upon." },
+    { "id": "LEX-030", "trigger": { "type": "zone-enter", "zone": "british-line" },
+      "subtitle": "British light infantry. They have marched seventeen miles through the night, wet to the waist from a river crossing. Their objective is the militia's powder and weapons, stored at Concord. No one intends a battle here." },
+    { "id": "LEX-040", "trigger": { "type": "zone-enter", "zone": "gap" },
+      "subtitle": "Sixty yards separate the two lines. Major Pitcairn rides forward and orders the militia to disperse. Parker, badly outnumbered, tells his men to fall back." },
+    { "id": "LEX-060", "trigger": { "type": "zone-enter", "zone": "trigger-line", "orTimer": 240 },
+      "subtitle": "Then — a single shot. No one knows who fired it. No one ever will.",
+      "lockControls": true, "then": "cutscene:volley" },
+    { "id": "LEX-080", "trigger": { "type": "action", "name": "cutscene-volley-complete" },
+      "subtitle": "The British fired two volleys and charged. It was over in minutes. Eight militiamen killed, ten wounded. Jonathan Harrington, shot on the green, crawled to his own doorstep and died there." },
+    { "id": "LEX-090", "trigger": { "type": "action", "name": "aftermath-walk" },
+      "subtitle": "The regulars marched on to Concord. By afternoon, thousands of militiamen were converging on the road back to Boston. The war had begun.",
+      "then": "scene:declaration" }
+  ],
+  "audio": { "ambience": ["/assets/audio/amb/green-dawn.mp3"] },
+  "next": { "scene": "declaration", "preloadAt": "LEX-060" }
+}
