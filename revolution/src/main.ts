@@ -109,7 +109,7 @@ function renderChapters() {
       <section class="chapters-heading">
         <p class="title-eyebrow">1773–1783</p>
         <h1>Chapters</h1>
-        <p>Completed chapters remain open. The next chapter unlocks as the story advances.</p>
+        <p>Choose any chapter. Story progress still saves on this device.</p>
         ${devOverride ? '<p class="dev-notice">Development override active · all chapters unlocked</p>' : ""}
       </section>
       <ol class="chapter-grid">
