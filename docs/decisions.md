@@ -40,6 +40,11 @@ rules stand (never under narration, never in battle, volley unscored).
 LEX-010 / DEC-030 / DEL-041). Director picks by ear; until then #2's VO
 generation waits on the voice id only — everything else in #2 can proceed.
 
+**Current cast approved.** Keep the complete round-one cast. The BOSUN's
+TEA-050 direction changes from a projected deck call to a low, urgent whisper
+within the work party; this is performance direction, not a claim that the
+public Tea Party action was covert.
+
 **Release shape.** Single launch with all ten chapters. Act One
 (Prologue → Trenton) is still built and verified as a complete internal
 milestone — it must be shippable-quality, it just doesn't ship separately.

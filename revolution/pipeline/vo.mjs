@@ -10,7 +10,7 @@
  *    DEL-020.mariner.mp3  diegetic line in the same cue
  *    DEL-BARK-1.mp3       repeatable event bark
  *
- *  Usage: node pipeline/vo.mjs [--dry-run]
+ *  Usage: node pipeline/vo.mjs [--dry-run] [--only <line-id>]
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -39,7 +39,7 @@ const CAST = {
   BOSUN: {
     env: "ELEVENLABS_BOSUN_VOICE_ID",
     settings: { stability: 0.5, similarity_boost: 0.75, style: 0.6 },
-    tag: "[shouting across the deck]",
+    tag: "[whispers]",
   },
   SERGEANT: {
     env: "ELEVENLABS_SERGEANT_VOICE_ID",
@@ -48,7 +48,18 @@ const CAST = {
   },
 };
 
-const dryRun = process.argv.includes("--dry-run");
+const args = process.argv.slice(2);
+const dryRun = args.includes("--dry-run");
+const onlyIndex = args.indexOf("--only");
+const only = onlyIndex >= 0 ? args[onlyIndex + 1] : null;
+if (onlyIndex >= 0 && (!only || only.startsWith("--"))) {
+  throw new Error("--only requires an exact spoken line id, for example TEA-050.bosun");
+}
+const onlyValueIndex = onlyIndex >= 0 ? onlyIndex + 1 : -1;
+const unknownArgs = args.filter((arg, index) =>
+  arg !== "--dry-run" && arg !== "--only" && index !== onlyValueIndex
+);
+if (unknownArgs.length) throw new Error(`unknown argument(s): ${unknownArgs.join(", ")}`);
 
 /** Strip stage directions to a pause, collapse whitespace, drop bark quotes. */
 function clean(raw) {
@@ -122,10 +133,15 @@ function parseLines(markdown) {
   return out;
 }
 
-const lines = parseLines(readFileSync(SCRIPT, "utf8"));
+const parsedLines = parseLines(readFileSync(SCRIPT, "utf8"));
+const lines = only ? parsedLines.filter((line) => line.id === only) : parsedLines;
+if (only && lines.length === 0) {
+  throw new Error(`spoken line id not found: ${only}`);
+}
 const bySpeaker = lines.reduce((acc, l) => ({ ...acc, [l.speaker]: (acc[l.speaker] ?? 0) + 1 }), {});
 console.log(
-  `parsed ${lines.length} spoken lines from docs/narration-scripts.md ` +
+  `parsed ${parsedLines.length} spoken lines from docs/narration-scripts.md` +
+    (only ? `; selected ${only}` : "") + " " +
     `(${Object.entries(bySpeaker).map(([s, n]) => `${s} ${n}`).join(", ")})`
 );
 if (dryRun) {
