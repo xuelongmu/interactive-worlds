@@ -35,7 +35,7 @@ entry in the pipeline's `CAST` map, or its lines are skipped with a warning.
 | Speaker | Who | Voice | Direction |
 |---|---|---|---|
 | NARRATOR | Unnamed documentary narrator | James — Husky, Engaging and Bold | Warm, measured, restrained. Never performs emotion; states facts and lets them land. |
-| BOSUN | Tea Party, on deck (TEA-050) | Chris — Boston, non-rhotic | Shouted across a working deck. Directing a work party, not a mob. |
+| BOSUN | Tea Party, on deck (TEA-050) | Chris — Boston, non-rhotic | Low, urgent whisper passed within the work party. Controlled and conspiratorial, not shouted. |
 | MARINER | Delaware, Marblehead fisherman (DEL-020 + bark pool) | Harry — Fierce Warrior | Shouted over wind and ice. Competent and unbothered; this is his trade. |
 | SERGEANT | Trenton, in the column (TRE-020) | George — War-torn Sergeant | Barked, urgent. Driving tired men toward gunfire. |
 
