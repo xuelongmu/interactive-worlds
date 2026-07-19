@@ -66,34 +66,43 @@ One loop-guard (an anomaly signal, not a budget): if a single scene burns
 more than 5 world re-rolls without an acceptable take, stop and flag the
 prompt/frame instead of re-rolling further.
 
-## Execution order (agents: sequence yourselves by this)
+## Execution order — revised 2026-07-19 after PR #11 and casting round 1
 
-Rationale: #5 is the engineering critical path, #8 the content critical
-path, #23 the calendar critical path — run those first; fan out behind them.
+PR #11 delivered the Wave 0–2 backbone (#5 director, #6 Delaware system,
+#8 all nine scripts, #10 sand table). Casting round 1 (#26) covers the
+narrator and all three scripted diegetic roles and moves VO to eleven_v3
+(note: the model switch invalidates every VO content hash — the first
+post-merge run is a full ~69-line regeneration, expected, run it once).
 
-- **Wave 0 (parallel, now):** #5 director · #8 scripts · #4 Lexington
-  integration · #2 narrator prep (VO gated on the director's voice pick) ·
-  #23 historian *outreach* · #9 deploy (pulled forward — later waves run on
-  production-like infra).
-- **Wave 1 (closes M1):** #7 volley cutscene → M1 gate: Lexington
-  end-to-end (director async-veto review).
-- **Wave 2 (closes M2):** #3 signing ∥ #6 Delaware beats+fallback ∥ #10
-  sand-table prototype; then #12 Trenton. Generate #18 theme candidates
-  during this wave (director picks by ear).
-- **Wave 3 (M3 fan-out, one agent per scene):** #14 Valley Forge (easiest,
-  world exists) · #13 Tea Party (highest novelty — start early) · #16
-  Yorktown (biggest) · #15 Saratoga (needs #10) · #17 Treaty **last**
-  (needs #3's aged-signature helper; the finale deserves the mature
-  toolkit).
-- **Wave 4 (overlaps Wave 3 tail):** #21 shell UI (may start with Wave 3) ·
-  #18 final mix · #20 performance (needs several chapters) · #19
-  accessibility (needs #6 + #3).
-- **Wave 5 (mostly serial):** #22 QA drills → #24 playtests + pacing cuts →
-  #23 historian review completes (post-playtest scripts) → #25 trailer →
-  launch.
+- **Now (parallel):** merge #26 → finish #2 (full v3 VO run, verify
+  ducking/subtitle sync in the director flow) · #4 residual (re-author
+  Lexington zones against the real world) · #7 volley cutscene · capture
+  the Delaware fallback take (#6 residual — one good driven run, saved
+  via the spike's record button) · #23 historian outreach · #9 deploy
+  (still pulled forward) · #18 theme candidates (director picks by ear).
+- **M1 gate:** Lexington end-to-end with real VO — director async-veto
+  review. Then #3 signing and #12 Trenton close M2.
+- **Wave 3 (M3 fan-out, one agent per scene; frames + worlds for the new
+  scenes are being pre-generated now):** #14 Valley Forge · #13 Tea Party
+  (highest novelty — start early) · #16 Yorktown · #15 Saratoga · #27
+  casting round 2 (DRILLMASTER, whispered OFFICER — script lines first,
+  async-veto, then #26-style auditions) · #17 Treaty **last** (needs #3's
+  aged-signature helper).
+- **Wave 4 (overlaps Wave 3 tail):** #21 shell UI (may start now — the
+  director exists) · #18 final mix · #20 performance · #19 accessibility.
+- **Wave 5 (mostly serial):** #22 QA drills (includes the GPU-browser
+  verification PR #11 deferred) → #24 playtests + pacing cuts → #23
+  historian review completes → #25 trailer → launch.
 
-Director pause points: narrator voice pick, main theme pick. Everything
-else proceeds per the approval surface above.
+**Casting rule (standing):** any new diegetic role introduced by script
+revisions triggers a #26-style round — candidates auditioned on the real
+lines with the real audio tags, voice distinct from the existing cast,
+direction lives in the CAST map, director picks by ear. Current roster
+after #26: NARRATOR, BOSUN, MARINER, SERGEANT; #27 adds DRILLMASTER and
+OFFICER when their scenes are built.
+
+Director pause points: narrator/diegetic picks (round 1 in progress),
+main theme pick, casting round 2 picks.
 
 ## Open
 
