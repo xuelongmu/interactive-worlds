@@ -66,6 +66,35 @@ One loop-guard (an anomaly signal, not a budget): if a single scene burns
 more than 5 world re-rolls without an acceptable take, stop and flag the
 prompt/frame instead of re-rolling further.
 
+## Execution order (agents: sequence yourselves by this)
+
+Rationale: #5 is the engineering critical path, #8 the content critical
+path, #23 the calendar critical path — run those first; fan out behind them.
+
+- **Wave 0 (parallel, now):** #5 director · #8 scripts · #4 Lexington
+  integration · #2 narrator prep (VO gated on the director's voice pick) ·
+  #23 historian *outreach* · #9 deploy (pulled forward — later waves run on
+  production-like infra).
+- **Wave 1 (closes M1):** #7 volley cutscene → M1 gate: Lexington
+  end-to-end (director async-veto review).
+- **Wave 2 (closes M2):** #3 signing ∥ #6 Delaware beats+fallback ∥ #10
+  sand-table prototype; then #12 Trenton. Generate #18 theme candidates
+  during this wave (director picks by ear).
+- **Wave 3 (M3 fan-out, one agent per scene):** #14 Valley Forge (easiest,
+  world exists) · #13 Tea Party (highest novelty — start early) · #16
+  Yorktown (biggest) · #15 Saratoga (needs #10) · #17 Treaty **last**
+  (needs #3's aged-signature helper; the finale deserves the mature
+  toolkit).
+- **Wave 4 (overlaps Wave 3 tail):** #21 shell UI (may start with Wave 3) ·
+  #18 final mix · #20 performance (needs several chapters) · #19
+  accessibility (needs #6 + #3).
+- **Wave 5 (mostly serial):** #22 QA drills → #24 playtests + pacing cuts →
+  #23 historian review completes (post-playtest scripts) → #25 trailer →
+  launch.
+
+Director pause points: narrator voice pick, main theme pick. Everything
+else proceeds per the approval surface above.
+
 ## Open
 
 - **Historian engagement (#23):** external review remains the plan of
