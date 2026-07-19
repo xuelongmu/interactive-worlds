@@ -30,8 +30,10 @@ Preview deployments may skip Turnstile only while Vercel Authentication stays
 enabled. Configure `SESSION_PREVIEW_BYPASS=1` and
 `VITE_SESSION_CHALLENGE_MODE=disabled` in the Vercel **Preview** environment,
 never Production. The API accepts the bypass only when Vercel also supplies
-`VERCEL=1` and `VERCEL_ENV=preview`; the public browser flag cannot enable the
-server bypass by itself.
+`VERCEL=1` and `VERCEL_ENV=preview`; both configured switches are required, and
+the public browser flag cannot enable the server bypass by itself. The Vite
+build also embeds Vercel's deployment environment, so an accidental Production
+copy of the public disable flag cannot suppress the production challenge.
 
 Preview still requires `REACTOR_API_KEY`, both Upstash values, a distinct
 `SESSION_CLIENT_HASH_SECRET`, and all three explicit limits. Use stricter

@@ -170,12 +170,22 @@ export function createSessionChallengeFetch(
   }) as typeof fetch;
 }
 
+export function sessionChallengeDisabled(
+  deploymentEnvironment: string | undefined,
+  challengeMode: string | undefined
+): boolean {
+  return deploymentEnvironment === "preview" && challengeMode === "disabled";
+}
+
 /**
  * Install the production-only session challenge adapter. Local Vite
  * development keeps its explicit loopback broker behavior.
  */
 export function installSessionChallenge(): void {
-  const disabledForDeployment = import.meta.env.VITE_SESSION_CHALLENGE_MODE === "disabled";
+  const disabledForDeployment = sessionChallengeDisabled(
+    import.meta.env.VITE_DEPLOYMENT_ENV,
+    import.meta.env.VITE_SESSION_CHALLENGE_MODE
+  );
   if (!import.meta.env.PROD || disabledForDeployment || installed) return;
   installed = true;
   const nativeFetch = window.fetch.bind(window);

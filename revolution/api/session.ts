@@ -207,7 +207,8 @@ function isHttpsUrl(value: string): boolean {
 function configuration(env: ServerEnvironment): BrokerConfig | null {
   const reactorApiKey = env.REACTOR_API_KEY?.trim() ?? "";
   const previewBypass = env.VERCEL === "1" && env.VERCEL_ENV === "preview" &&
-    env.SESSION_PREVIEW_BYPASS === "1";
+    env.SESSION_PREVIEW_BYPASS === "1" &&
+    env.VITE_SESSION_CHALLENGE_MODE === "disabled";
   const turnstileSecretKey = env.TURNSTILE_SECRET_KEY?.trim() ?? "";
   const redisUrl = env.UPSTASH_REDIS_REST_URL?.trim() ?? "";
   const redisToken = env.UPSTASH_REDIS_REST_TOKEN?.trim() ?? "";

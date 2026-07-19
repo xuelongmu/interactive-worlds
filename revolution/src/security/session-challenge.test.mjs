@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createSessionChallengeFetch } from "./session-challenge.ts";
+import {
+  createSessionChallengeFetch,
+  sessionChallengeDisabled,
+} from "./session-challenge.ts";
 
 const ORIGIN = "https://play.example.test";
 const CHALLENGE_HEADERS = {
@@ -25,6 +28,13 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
+
+test("only a Vercel Preview build may disable the browser challenge", () => {
+  assert.equal(sessionChallengeDisabled("preview", "disabled"), true);
+  assert.equal(sessionChallengeDisabled("production", "disabled"), false);
+  assert.equal(sessionChallengeDisabled(undefined, "disabled"), false);
+  assert.equal(sessionChallengeDisabled("preview", undefined), false);
+});
 
 async function bodyOf(init) {
   return init?.body ? JSON.parse(String(init.body)) : null;

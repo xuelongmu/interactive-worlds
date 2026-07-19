@@ -28,6 +28,7 @@ const PREVIEW_ENV = {
   VERCEL: "1",
   VERCEL_ENV: "preview",
   SESSION_PREVIEW_BYPASS: "1",
+  VITE_SESSION_CHALLENGE_MODE: "disabled",
   TURNSTILE_SECRET_KEY: "",
   TURNSTILE_EXPECTED_HOSTNAMES: "",
   SESSION_CLEARANCE_HASH_SECRET: "",
@@ -495,6 +496,7 @@ test("never enables the preview bypass outside an explicitly configured Vercel p
     { ...PREVIEW_ENV, VERCEL: "" },
     { ...PREVIEW_ENV, VERCEL_ENV: "production" },
     { ...PREVIEW_ENV, SESSION_PREVIEW_BYPASS: "" },
+    { ...PREVIEW_ENV, VITE_SESSION_CHALLENGE_MODE: "" },
   ]) {
     const mock = services({ env });
     const response = await handleSessionRequest(sessionRequest(), mock.options);
