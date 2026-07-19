@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  BeatNavigationKeyArbiter,
+  ContextualChoiceKeyArbiter,
   controlAnnouncement,
   defaultControlHandoff,
   instructionHudMarkup,
@@ -13,6 +15,39 @@ import {
   getBranchPresentation,
   selectDelawareDuty,
 } from "./branch-state.ts";
+
+function choiceSnapshot(sceneId, transitionKey, presentation, overrides = {}) {
+  return {
+    sceneId,
+    transitionKey,
+    momentId: presentation.momentId,
+    objective: presentation.objective,
+    actions: presentation.actions,
+    ready: true,
+    selectedChoiceId: presentation.selectedChoiceId,
+    latchedChoiceId: presentation.latchedChoiceId,
+    acknowledgement: presentation.acknowledgement,
+    commandError: null,
+    ...overrides,
+  };
+}
+
+function keyEvent({ code, key = "", target = null, ...overrides }) {
+  let prevented = false;
+  return {
+    code,
+    key,
+    target,
+    repeat: false,
+    ctrlKey: false,
+    altKey: false,
+    metaKey: false,
+    shiftKey: false,
+    preventDefault() { prevented = true; },
+    wasPrevented() { return prevented; },
+    ...overrides,
+  };
+}
 
 test("Witness and Participant defaults accurately name WASD and mouse look", () => {
   for (const renderer of ["splat", "worldmodel"]) {
@@ -56,23 +91,40 @@ test("early controls hide only after movement and look are both demonstrated", (
   );
 });
 
-test("only a usable contextual action is rendered and it uses the actual binding", () => {
+test("contextual choices require ready, usable simultaneous E/F actions", () => {
   const model = new InstructionHudModel();
   const base = defaultControlHandoff("tea-party", "worldmodel");
-  model.transition({
-    ...base,
-    action: { binding: "E", label: "Open chest", usable: false },
-  });
+  const unusable = getBranchPresentation(
+    createBranchState(),
+    "tea-party-deck-duty-choice",
+  );
+  const usable = getBranchPresentation(
+    createBranchState(),
+    "tea-party-deck-duty-choice",
+    { usable: true },
+  );
+  model.transition(base);
+  model.updateChoices(choiceSnapshot("tea-party", 0, unusable));
   assert.equal(model.snapshot().reason, "early");
-  assert.ok(model.snapshot().bindings.every((binding) => binding.binding !== "E"));
+  assert.ok(model.snapshot().bindings.every((binding) => !["E", "F"].includes(binding.binding)));
 
-  model.transition({
-    ...base,
-    action: { binding: "E", label: "Open chest", usable: true },
-  });
-  assert.deepEqual(model.snapshot().bindings, [{ binding: "E", label: "Open chest", usable: true }]);
+  model.updateChoices(choiceSnapshot("tea-party", 0, usable, { ready: false }));
+  assert.equal(model.snapshot().reason, "early");
+  model.updateChoices(choiceSnapshot("tea-party", 0, usable));
+  assert.equal(model.snapshot().objective, "Choose your first deck duty.");
+  assert.deepEqual(
+    model.snapshot().bindings.map(({ binding, label }) => ({ binding, label })),
+    [
+      { binding: "E", label: "Break a chest" },
+      { binding: "F", label: "Sweep the deck" },
+    ],
+  );
   assert.equal(model.snapshot().reason, "action");
-  assert.equal(controlAnnouncement(model.snapshot()), "Action available. E — Open chest.");
+  assert.equal(
+    controlAnnouncement(model.snapshot()),
+    "Objective. Choose your first deck duty. Actions available. " +
+      "E — Break a chest. F — Sweep the deck.",
+  );
 });
 
 test("renderer transitions reset demonstrated guidance and pause suppresses the layer", () => {
@@ -110,54 +162,54 @@ test("paused or disabled input is not credited as demonstrated", () => {
   assert.equal(model.snapshot().reason, "early");
 });
 
-test("#52 branch presentation supplies exact actions without leaking into subtitles", () => {
-  const base = defaultControlHandoff("delaware", "worldmodel");
-  const presentation = getBranchPresentation(createBranchState(), "delaware-pole-choice");
-  const choice = {
-    ...base,
-    action: presentation.action,
-    acknowledgement: presentation.acknowledgement,
-  };
-  assert.deepEqual(choice.action, {
-    binding: "E",
-    label: "Pole from the bow",
-    usable: true,
-  });
-  assert.equal(choice.acknowledgement, null);
+test("branch presentation v2 supplies one objective and exact simultaneous actions", () => {
+  const presentation = getBranchPresentation(
+    createBranchState(),
+    "delaware-duty-choice",
+    { usable: true },
+  );
+  assert.equal(presentation.objective, "Choose your duty for the crossing.");
+  assert.deepEqual(
+    presentation.actions.map(({ binding, label, usable }) => ({ binding, label, usable })),
+    [
+      { binding: "E", label: "Pole from the bow", usable: true },
+      { binding: "F", label: "Clear ice from the hull", usable: true },
+    ],
+  );
+  assert.equal(presentation.acknowledgement, null);
 
   const neutral = getBranchPresentation(createBranchState(), "out-of-range");
-  const outOfRange = {
-    ...base,
-    action: neutral.action,
-    acknowledgement: neutral.acknowledgement,
-  };
-  assert.equal(outOfRange.action, null);
+  assert.equal(neutral.objective, null);
+  assert.equal(neutral.actions, null);
 });
 
-test("Trenton acknowledgement and usable action share only the instruction layer", () => {
+test("Trenton acknowledgement, objective, and E/F choices share the instruction layer", () => {
   const selected = selectDelawareDuty(createBranchState(), "clear-ice");
-  const presentation = getBranchPresentation(selected, "trenton-duty-callback");
-  const controls = {
-    ...defaultControlHandoff("trenton", "worldmodel"),
-    action: presentation.action,
-    acknowledgement: presentation.acknowledgement,
-  };
+  const presentation = getBranchPresentation(
+    selected,
+    "trenton-perspective-choice",
+    { usable: true },
+  );
   const model = new InstructionHudModel();
-  model.transition(controls);
+  model.transition(defaultControlHandoff("trenton", "worldmodel"));
+  model.updateChoices(choiceSnapshot("trenton", 0, presentation));
   const snapshot = model.snapshot();
 
   assert.equal(snapshot.reason, "action");
-  assert.equal(snapshot.guidance, "At the crossing, you chose to clear ice from the hull.");
-  assert.deepEqual(snapshot.bindings, [{
-    binding: "E",
-    label: "Clear the gun path",
-    usable: true,
-  }]);
-  assert.equal(snapshot.bindings[0], presentation.action);
+  assert.equal(snapshot.objective, "Choose where to advance.");
+  assert.equal(snapshot.acknowledgement, "At the crossing, you chose to clear ice from the hull.");
+  assert.deepEqual(
+    snapshot.bindings.map(({ binding, label }) => ({ binding, label })),
+    [
+      { binding: "E", label: "Stay with the column" },
+      { binding: "F", label: "Move toward the guns" },
+    ],
+  );
   assert.equal(
     controlAnnouncement(snapshot),
-    "Instruction. At the crossing, you chose to clear ice from the hull. " +
-      "Action available. E — Clear the gun path."
+    "Confirmation. At the crossing, you chose to clear ice from the hull. " +
+      "Objective. Choose where to advance. Actions available. " +
+      "E — Stay with the column. F — Move toward the guns."
   );
 });
 
@@ -195,21 +247,235 @@ test("Director callback bridge preserves exact control and pause detail", () => 
   assert.equal(events[1].detail, pause);
 });
 
-test("unusable and null #58 actions never become prompts", () => {
+test("backend command errors stay visible and retryable while confirmed latches hide actions", () => {
   const model = new InstructionHudModel();
-  const state = createBranchState();
-  const unusable = getBranchPresentation(state, "delaware-clear-ice-choice", false);
-  model.transition({
-    ...defaultControlHandoff("delaware", "worldmodel"),
-    action: unusable.action,
-  });
-  assert.ok(model.snapshot().bindings.every((binding) => binding.binding !== "E"));
+  const presentation = getBranchPresentation(
+    createBranchState(),
+    "delaware-duty-choice",
+    { usable: true },
+  );
+  const [pole] = presentation.actions;
+  model.transition(defaultControlHandoff("delaware", "worldmodel"));
+  model.updateChoices(choiceSnapshot("delaware", 0, presentation, {
+    commandError: {
+      momentId: pole.momentId,
+      choiceId: pole.choiceId,
+      requestId: pole.requestId,
+      message: "The action was not confirmed. Try again.",
+      visible: true,
+      retryable: true,
+    },
+  }));
+  assert.equal(model.snapshot().reason, "error");
+  assert.equal(model.snapshot().error, "The action was not confirmed. Try again.");
+  assert.deepEqual(model.snapshot().bindings.map(({ binding }) => binding), ["E", "F"]);
 
-  const neutral = getBranchPresentation(state, "out-of-range");
-  model.transition({
-    ...defaultControlHandoff("delaware", "worldmodel"),
-    action: neutral.action,
-    transitionKey: 2,
+  model.updateChoices(choiceSnapshot("delaware", 0, presentation, {
+    selectedChoiceId: pole.choiceId,
+    latchedChoiceId: pole.choiceId,
+    acknowledgement: "Crossing duty confirmed: pole from the bow.",
+  }));
+  const confirmed = model.snapshot();
+  assert.equal(confirmed.reason, "guidance");
+  assert.equal(confirmed.objective, "");
+  assert.equal(confirmed.acknowledgement, "Crossing duty confirmed: pole from the bow.");
+  assert.ok(confirmed.bindings.every(({ binding }) => !["E", "F"].includes(binding)));
+});
+
+test("contextual choice input requests one edge and only confirmed latch completes it", () => {
+  const presentation = getBranchPresentation(
+    createBranchState(),
+    "tea-party-deck-duty-choice",
+    { usable: true },
+  );
+  const requests = [];
+  const arbiter = new ContextualChoiceKeyArbiter((request) => requests.push(request));
+  const snapshot = choiceSnapshot("tea-party", 4, presentation);
+  arbiter.update(snapshot);
+
+  const accepted = keyEvent({ code: "KeyE" });
+  assert.equal(arbiter.handleKeyDown(accepted), true);
+  assert.equal(accepted.wasPrevented(), true);
+  assert.deepEqual(requests, [{
+    momentId: presentation.actions[0].momentId,
+    choiceId: presentation.actions[0].choiceId,
+    requestId: presentation.actions[0].requestId,
+  }]);
+
+  const whilePending = keyEvent({ code: "KeyF" });
+  assert.equal(arbiter.handleKeyDown(whilePending), false);
+  assert.equal(whilePending.wasPrevented(), false);
+  arbiter.handleKeyUp("KeyE");
+  arbiter.handleKeyUp("KeyF");
+
+  arbiter.update({
+    ...snapshot,
+    commandError: {
+      momentId: presentation.actions[0].momentId,
+      choiceId: presentation.actions[0].choiceId,
+      requestId: presentation.actions[0].requestId,
+      message: "Try again.",
+      visible: true,
+      retryable: true,
+    },
   });
-  assert.ok(model.snapshot().bindings.every((binding) => binding.binding !== "E"));
+  const retry = keyEvent({ code: "KeyE" });
+  assert.equal(arbiter.handleKeyDown(retry), true);
+  assert.equal(requests.length, 2);
+  arbiter.handleKeyUp("KeyE");
+
+  arbiter.update({ ...snapshot, latchedChoiceId: presentation.actions[0].choiceId });
+  const afterLatch = keyEvent({ code: "KeyF" });
+  assert.equal(arbiter.handleKeyDown(afterLatch), false);
+  assert.equal(afterLatch.wasPrevented(), false);
+  assert.equal(requests.length, 2);
+});
+
+test("contextual choice guards typing, modifiers, repeats, readiness, and lifecycle resets", () => {
+  const presentation = getBranchPresentation(
+    createBranchState(),
+    "saratoga-analysis-lens-choice",
+    { usable: true },
+  );
+  const requests = [];
+  const arbiter = new ContextualChoiceKeyArbiter((request) => requests.push(request));
+  const ready = choiceSnapshot("saratoga", 8, presentation);
+
+  arbiter.update({ ...ready, ready: false });
+  const notReady = keyEvent({ code: "KeyE" });
+  assert.equal(arbiter.handleKeyDown(notReady), false);
+  assert.equal(notReady.wasPrevented(), false);
+  arbiter.handleKeyUp("KeyE");
+  arbiter.update(ready);
+
+  for (const guarded of [
+    keyEvent({ code: "KeyE", repeat: true }),
+    keyEvent({ code: "KeyE", ctrlKey: true }),
+    keyEvent({ code: "KeyE", altKey: true }),
+    keyEvent({ code: "KeyE", metaKey: true }),
+    keyEvent({ code: "KeyE", target: { tagName: "INPUT" } }),
+  ]) {
+    assert.equal(arbiter.handleKeyDown(guarded), false);
+    assert.equal(guarded.wasPrevented(), false);
+  }
+
+  const first = keyEvent({ code: "KeyF" });
+  assert.equal(arbiter.handleKeyDown(first), true);
+  assert.equal(requests.length, 1);
+  arbiter.resetInput("blur");
+  const afterBlur = keyEvent({ code: "KeyF" });
+  assert.equal(arbiter.handleKeyDown(afterBlur), true);
+  assert.equal(requests.length, 2);
+  arbiter.resetInput("chapter-change");
+  const afterChapterChange = keyEvent({ code: "KeyF" });
+  assert.equal(arbiter.handleKeyDown(afterChapterChange), true);
+  assert.equal(requests.length, 3);
+  arbiter.resetInput("dispose");
+  arbiter.update({ ...ready, transitionKey: 9 });
+  const afterSceneReset = keyEvent({ code: "KeyE" });
+  assert.equal(arbiter.handleKeyDown(afterSceneReset), true);
+  assert.equal(requests.length, 4);
+});
+
+test("Period and Comma navigation accepts code/key fallbacks and requires release edges", () => {
+  const requests = [];
+  const arbiter = new BeatNavigationKeyArbiter((request) => requests.push(request));
+  arbiter.update({
+    sceneId: "lexington",
+    transitionKey: 3,
+    active: true,
+    nextAvailable: true,
+    previousAvailable: true,
+    feedback: null,
+  });
+
+  const next = keyEvent({ code: "Period", key: "" });
+  assert.equal(arbiter.handleKeyDown(next), true);
+  assert.equal(next.wasPrevented(), true);
+  const held = keyEvent({ code: "Period", key: "." });
+  assert.equal(arbiter.handleKeyDown(held), false);
+  assert.equal(held.wasPrevented(), false);
+  arbiter.handleKeyUp({ code: "Period", key: "." });
+
+  const previousFallback = keyEvent({ code: "", key: "," });
+  assert.equal(arbiter.handleKeyDown(previousFallback), true);
+  assert.equal(previousFallback.wasPrevented(), true);
+  assert.deepEqual(requests, [
+    { type: "nextBeat", sceneId: "lexington", transitionKey: 3 },
+    { type: "previousBeat", sceneId: "lexington", transitionKey: 3 },
+  ]);
+});
+
+test("beat navigation guards repeats, typing, modifiers, menu state, availability, and disposal", () => {
+  const requests = [];
+  const arbiter = new BeatNavigationKeyArbiter((request) => requests.push(request));
+  const active = {
+    sceneId: "delaware",
+    transitionKey: 5,
+    active: true,
+    nextAvailable: true,
+    previousAvailable: true,
+    feedback: null,
+  };
+  arbiter.update(active);
+  for (const guarded of [
+    keyEvent({ code: "Period", key: ".", repeat: true }),
+    keyEvent({ code: "Period", key: ".", ctrlKey: true }),
+    keyEvent({ code: "Period", key: ".", altKey: true }),
+    keyEvent({ code: "Period", key: ".", metaKey: true }),
+    keyEvent({ code: "Period", key: ".", shiftKey: true }),
+    keyEvent({ code: "Period", key: ".", target: { tagName: "TEXTAREA" } }),
+  ]) {
+    assert.equal(arbiter.handleKeyDown(guarded), false);
+    assert.equal(guarded.wasPrevented(), false);
+  }
+
+  arbiter.update({ ...active, active: false });
+  const menuOwned = keyEvent({ code: "Period", key: "." });
+  assert.equal(arbiter.handleKeyDown(menuOwned), false);
+  assert.equal(menuOwned.wasPrevented(), false);
+  arbiter.handleKeyUp(menuOwned);
+  arbiter.update({ ...active, nextAvailable: false });
+  const unavailable = keyEvent({ code: "Period", key: "." });
+  assert.equal(arbiter.handleKeyDown(unavailable), false);
+  assert.equal(unavailable.wasPrevented(), false);
+
+  arbiter.resetInput("dispose");
+  arbiter.update(active);
+  const afterDispose = keyEvent({ code: "Period", key: "." });
+  assert.equal(arbiter.handleKeyDown(afterDispose), true);
+  assert.equal(requests.length, 1);
+});
+
+test("beat navigation help and feedback remain in the instruction layer", () => {
+  const model = new InstructionHudModel();
+  model.transition(defaultControlHandoff("yorktown", "gameplay"));
+  model.updateBeatNavigation({
+    sceneId: "yorktown",
+    transitionKey: 0,
+    active: true,
+    nextAvailable: true,
+    previousAvailable: false,
+    feedback: null,
+  });
+  assert.deepEqual(model.snapshot().bindings, [
+    { binding: ".", label: "Next beat", modality: "keyboard-mouse", available: true },
+    { binding: ",", label: "Previous beat", modality: "keyboard-mouse", available: false },
+  ]);
+
+  model.updateBeatNavigationResult({
+    outcome: "clamped",
+    request: { type: "previousBeat", sceneId: "yorktown", transitionKey: 0 },
+    message: "Already at the first beat.",
+  });
+  assert.equal(model.snapshot().reason, "error");
+  assert.equal(model.snapshot().error, "Already at the first beat.");
+  model.updateBeatNavigationResult({
+    outcome: "error",
+    request: { type: "nextBeat", sceneId: "yorktown", transitionKey: 99 },
+    message: "Stale result.",
+  });
+  assert.equal(model.snapshot().error, "Already at the first beat.");
+  model.setPaused(true);
+  assert.equal(model.snapshot().reason, "hidden");
 });

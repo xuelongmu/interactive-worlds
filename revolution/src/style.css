@@ -453,20 +453,36 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   text-align: center;
   white-space: nowrap;
 }
-.instruction-hud[data-reason="action"] .instruction-hud__binding kbd {
+.instruction-hud[data-reason="action"] .instruction-hud__binding kbd,
+.instruction-hud[data-reason="error"] .instruction-hud__binding kbd {
   color: #171109;
   background: #d7b65e;
   border-color: #f1d485;
 }
-.instruction-hud[data-reason="action"] .instruction-hud__binding > span::before {
+.instruction-hud[data-reason="action"] .instruction-hud__binding > span::before,
+.instruction-hud[data-reason="error"] .instruction-hud__binding > span::before {
   content: "— ";
 }
+.instruction-hud__objective,
 .instruction-hud__guidance {
   margin-top: 8px;
   color: #f1eadc;
   font: 13px/1.4 Georgia, "Times New Roman", serif;
 }
-.instruction-hud__guidance:empty { display: none; }
+.instruction-hud__objective {
+  margin: 0 0 8px;
+  color: #f6e9c3;
+}
+.instruction-hud__acknowledgement,
+.instruction-hud__error {
+  margin-top: 8px;
+}
+.instruction-hud__acknowledgement { color: #d9cba8; }
+.instruction-hud__error { color: #f0b9a7; }
+.instruction-hud__objective:empty,
+.instruction-hud__guidance:empty,
+.instruction-hud__acknowledgement:empty,
+.instruction-hud__error:empty { display: none; }
 .visually-hidden {
   position: absolute !important;
   width: 1px !important;

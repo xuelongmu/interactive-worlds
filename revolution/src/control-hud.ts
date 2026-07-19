@@ -437,6 +437,18 @@ export class InstructionHudModel {
     this.beatNavigation = next;
   }
 
+  updateBeatNavigationResult(result: BeatNavigationResult) {
+    if (
+      !this.beatNavigation
+      || this.beatNavigation.sceneId !== result.request.sceneId
+      || this.beatNavigation.transitionKey !== result.request.transitionKey
+    ) return;
+    this.beatNavigation = {
+      ...this.beatNavigation,
+      feedback: result.outcome === "navigated" ? null : result,
+    };
+  }
+
   clearBeatNavigation() {
     this.beatNavigation = null;
   }
@@ -505,8 +517,14 @@ export class InstructionHudModel {
 
     const choices = controlsLayerActive ? this.choices : null;
     const choiceActions = choices?.ready
+      && choices.momentId !== null
+      && choices.latchedChoiceId === null
       && choices.actions?.length === 2
-      && choices.actions.every((action) => action.usable)
+      && choices.actions[0].binding === "E"
+      && choices.actions[1].binding === "F"
+      && choices.actions.every((action) => (
+        action.usable && action.momentId === choices.momentId
+      ))
       ? choices.actions
       : null;
     const objective = choiceActions ? choices?.objective?.trim() ?? "" : "";
@@ -526,7 +544,7 @@ export class InstructionHudModel {
     if (choiceActions) {
       return {
         visible: true,
-        reason: "action",
+        reason: error ? "error" : "action",
         bindings: [...choiceActions, ...beatBindings],
         guidance: contextualGuidance,
         objective,
@@ -624,7 +642,7 @@ export function controlAnnouncement(snapshot: InstructionHudSnapshot): string {
     snapshot.objective ? `Objective. ${snapshot.objective}` : "",
     snapshot.guidance ? `Instruction. ${snapshot.guidance}` : "",
     bindings
-      ? `${snapshot.reason === "action" ? "Actions available" : "Controls reminder"}. ${bindings}.`
+      ? `${snapshot.objective ? "Actions available" : "Controls reminder"}. ${bindings}.`
       : "",
   ].filter(Boolean).join(" ");
 }
@@ -649,6 +667,7 @@ export interface InstructionHudController {
   update(detail: ControlHandoffDetail): void;
   updateChoices(snapshot: ContextualChoiceSnapshot): void;
   updateBeatNavigation(snapshot: BeatNavigationSnapshot): void;
+  updateBeatNavigationResult(result: BeatNavigationResult): void;
   resetInput(reason?: ContextualChoiceResetReason): void;
   setPaused(paused: boolean): void;
   setGuidance(message: string): void;
@@ -800,6 +819,10 @@ export function mountInstructionHud(
     updateBeatNavigation: (snapshot) => {
       beatArbiter?.update(snapshot);
       model.updateBeatNavigation(snapshot);
+      render();
+    },
+    updateBeatNavigationResult: (result) => {
+      model.updateBeatNavigationResult(result);
       render();
     },
     resetInput: (reason = "reset") => resetInput(reason),
