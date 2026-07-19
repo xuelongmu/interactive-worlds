@@ -72,6 +72,9 @@ function tokenBroker(): Plugin {
 
 export default defineConfig({
   plugins: [tokenBroker()],
+  define: {
+    "import.meta.env.VITE_DEPLOYMENT_ENV": JSON.stringify(process.env.VERCEL_ENV ?? ""),
+  },
   server: { port: Number(process.env.PORT ?? 5173), strictPort: !!process.env.PORT },
   build: {
     rollupOptions: {

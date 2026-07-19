@@ -23,6 +23,17 @@ const ENV = {
   SESSION_GLOBAL_DAILY_LIMIT: "100",
 };
 
+const PREVIEW_ENV = {
+  ...ENV,
+  VERCEL: "1",
+  VERCEL_ENV: "preview",
+  SESSION_PREVIEW_BYPASS: "1",
+  VITE_SESSION_CHALLENGE_MODE: "disabled",
+  TURNSTILE_SECRET_KEY: "",
+  TURNSTILE_EXPECTED_HOSTNAMES: "",
+  SESSION_CLEARANCE_HASH_SECRET: "",
+};
+
 function sessionRequest({
   method = "POST",
   token,
@@ -128,6 +139,20 @@ class FakeRedis {
       ];
     }
 
+    if (keys.length === 2) {
+      const [client, global] = keys;
+      const clientUsed = Number(this.get(client) ?? 0);
+      if (clientUsed >= clientLimit) return [0, "client", clientUsed, 0];
+      const globalUsed = Number(this.get(global) ?? 0);
+      if (globalUsed >= globalLimit) return [0, "global", clientUsed, globalUsed];
+      return [
+        1,
+        "ok",
+        this.increment(client, clientTtl),
+        this.increment(global, globalTtl),
+      ];
+    }
+
     const [clearance, client, global] = keys;
     if (!this.entry(clearance)) return [0, "clearance", 0, 0];
     const clientUsed = Number(this.get(client) ?? 0);
@@ -184,7 +209,6 @@ function services({
     assert.equal(new Headers(init?.headers).get("Reactor-API-Key"), env.REACTOR_API_KEY);
     return Response.json({ jwt: "short-lived-jwt", ...reactor }, { status: reactorStatus });
   };
-
   const options = {
     env,
     fetchImpl,
@@ -447,6 +471,37 @@ test("revoked, unknown, expired, malformed, and duplicate clearance cookies chal
       assert.equal(mock.calls.redis, 0);
       assert.match(response.headers.get("set-cookie") ?? "", /Max-Age=0/);
     });
+  }
+});
+
+test("allows an explicitly configured Vercel preview without Turnstile", async () => {
+  const mock = services({ env: PREVIEW_ENV });
+  const nativePreviewRequest = new Request("https://preview.example.test/api/session", {
+    method: "POST",
+    headers: { "x-vercel-forwarded-for": ADDRESS },
+  });
+  const response = await handleSessionRequest(nativePreviewRequest, mock.options);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(mock.calls, { turnstile: 0, redis: 1, reactor: 1 });
+  assert.equal(
+    mock.redis.evalCalls[0].keys.every((key) => key.startsWith("iw:{session-broker-preview}:")),
+    true
+  );
+  assert.equal(JSON.stringify(mock.redis.evalCalls).includes(ADDRESS), false);
+});
+
+test("never enables the preview bypass outside an explicitly configured Vercel preview", async () => {
+  for (const env of [
+    { ...PREVIEW_ENV, VERCEL: "" },
+    { ...PREVIEW_ENV, VERCEL_ENV: "production" },
+    { ...PREVIEW_ENV, SESSION_PREVIEW_BYPASS: "" },
+    { ...PREVIEW_ENV, VITE_SESSION_CHALLENGE_MODE: "" },
+  ]) {
+    const mock = services({ env });
+    const response = await handleSessionRequest(sessionRequest(), mock.options);
+    assert.equal(response.status, 503);
+    assert.deepEqual(mock.calls, { turnstile: 0, redis: 0, reactor: 0 });
   }
 });
 
