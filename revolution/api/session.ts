@@ -5,6 +5,7 @@ const DEFAULT_REACTOR_MODEL = "reactor/lingbot-world-2";
 const ALLOWED_REACTOR_MODELS = new Set([
   DEFAULT_REACTOR_MODEL,
   "reactor/lingbot",
+  "reactor/helios",
 ]);
 const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const TURNSTILE_ACTION = "session";
@@ -159,7 +160,7 @@ type Admission = {
   reason: AdmissionReason;
 };
 
-type ReactorModelName = "reactor/lingbot-world-2" | "reactor/lingbot";
+type ReactorModelName = "reactor/lingbot-world-2" | "reactor/lingbot" | "reactor/helios";
 
 type ParsedClearance =
   | { kind: "missing" }

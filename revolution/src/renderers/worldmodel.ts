@@ -1,6 +1,7 @@
 import { LingbotWorld2Model, type LingbotWorld2Message } from "@reactor-models/lingbot-world-2";
 import { LingbotModel } from "@reactor-models/lingbot";
-import { DEFAULT_BASE_URL } from "@reactor-team/js-sdk";
+import { HeliosModel } from "@reactor-models/helios";
+import { DEFAULT_BASE_URL, type FileRef } from "@reactor-team/js-sdk";
 import type { ControlHandoffDetail, EngineEvent, SceneManifest } from "../engine/types";
 import { PausableTimeouts } from "../engine/timers";
 import { resolveWorldModelInput } from "../engine/worldmodel-input";
@@ -111,6 +112,7 @@ export type LookV = "idle" | "up" | "down";
 export const REACTOR_WORLD_MODELS = {
   "lingbot-world-2": "reactor/lingbot-world-2",
   lingbot: "reactor/lingbot",
+  helios: "reactor/helios",
 } as const;
 
 export type ReactorWorldModelName = typeof REACTOR_WORLD_MODELS[keyof typeof REACTOR_WORLD_MODELS];
@@ -120,6 +122,8 @@ const REACTOR_MODEL_ALIASES: Readonly<Record<string, ReactorWorldModelName>> = {
   "reactor/lingbot-world-2": REACTOR_WORLD_MODELS["lingbot-world-2"],
   lingbot: REACTOR_WORLD_MODELS.lingbot,
   "reactor/lingbot": REACTOR_WORLD_MODELS.lingbot,
+  helios: REACTOR_WORLD_MODELS.helios,
+  "reactor/helios": REACTOR_WORLD_MODELS.helios,
 };
 
 /** Query string wins so a deployed build can be moved off an overloaded model immediately. */
@@ -137,6 +141,10 @@ export function resolveLegacyLingbotMovement(
   lateral: Lateral
 ): Longitudinal | Lateral {
   return longitudinal !== "idle" ? longitudinal : lateral;
+}
+
+export function supportsReactorWorldNavigation(modelName = resolveReactorWorldModelName()): boolean {
+  return modelName !== REACTOR_WORLD_MODELS.helios;
 }
 
 /** Legacy LingBot has one movement axis, so longitudinal input wins over strafe. */
@@ -171,12 +179,53 @@ class CompatibleLingbotModel extends LingbotModel {
   }
 }
 
+/** Helios preserves the authored image/prompt stream but intentionally has no camera navigation. */
+class CompatibleHeliosModel extends HeliosModel {
+  private pendingImage: FileRef | null = null;
+
+  override setImage({ image }: { image?: FileRef }): Promise<void> {
+    if (!image) return Promise.reject(new Error("Helios conditioning image is required"));
+    this.pendingImage = image;
+    return Promise.resolve();
+  }
+
+  override setPrompt({ prompt = "" }: { prompt?: string }): Promise<void> {
+    if (!this.pendingImage) return super.setPrompt({ prompt });
+    const image = this.pendingImage;
+    this.pendingImage = null;
+    return this.setConditioning({ image, prompt });
+  }
+
+  override async reset(): Promise<void> {
+    this.pendingImage = null;
+    await super.reset();
+  }
+
+  setMoveLongitudinal(_params: { move_longitudinal?: Longitudinal }): Promise<void> {
+    return Promise.resolve();
+  }
+
+  setMoveLateral(_params: { move_lateral?: Lateral }): Promise<void> {
+    return Promise.resolve();
+  }
+
+  setLookHorizontal(_params: { look_horizontal?: LookH }): Promise<void> {
+    return Promise.resolve();
+  }
+
+  setLookVertical(_params: { look_vertical?: LookV }): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
 export function createReactorWorldModel(modelName: ReactorWorldModelName): LingbotWorld2Model {
   const model = modelName === REACTOR_WORLD_MODELS.lingbot
     ? new CompatibleLingbotModel()
-    : new LingbotWorld2Model();
-  // Both official clients share the lifecycle, media, conditioning, and message
-  // surface consumed below; the adapter supplies World 2's two movement methods.
+    : modelName === REACTOR_WORLD_MODELS.helios
+      ? new CompatibleHeliosModel()
+      : new LingbotWorld2Model();
+  // The official clients share the lifecycle, media, conditioning, and message
+  // surface consumed below; adapters normalize their control/conditioning differences.
   return model as unknown as LingbotWorld2Model;
 }
 
@@ -285,6 +334,10 @@ export class WorldModelSession {
 
   get phase(): WorldModelSessionPhase {
     return this.lifecyclePhase;
+  }
+
+  get supportsNavigation(): boolean {
+    return supportsReactorWorldNavigation(this.modelName);
   }
 
   static async mintJwt(
@@ -988,6 +1041,7 @@ export class WorldModelScenePlayer {
   private blackFrameSamples = 0;
   private runtimeFallbackStarted = false;
   private stickyCapacityStatus: string | null = null;
+  private navigationEnabled = true;
   private rolloverDeadline: number | null = null;
   private controlTimers = new PausableTimeouts();
   private presentation = new WorldModelPresentationGate((mode) => this.onPresented(mode));
@@ -1079,6 +1133,7 @@ export class WorldModelScenePlayer {
   canResumePointerInput(): boolean {
     return this.presented
       && this.mode === "live"
+      && this.navigationEnabled !== false
       && !this.disposed
       && !this.rollover.recycling
       && !this.runtimeFallbackStarted;
@@ -1137,6 +1192,7 @@ export class WorldModelScenePlayer {
       onTelemetry: this.opts.onTelemetry,
     });
     this.session = session;
+    this.navigationEnabled = session.supportsNavigation;
     session.attach({
       video: this.video,
       onEvent: this.opts.onEvent,
@@ -1155,6 +1211,7 @@ export class WorldModelScenePlayer {
       {
         target: this.video,
         isPresented: () => this.inputIsUsable(),
+        navigationEnabled: () => this.navigationEnabled,
         onAction: () => this.opts.onEvent({ type: "action", name: "interact" }),
       }
     );
@@ -1294,6 +1351,10 @@ export class WorldModelScenePlayer {
   }
 
   private emitLiveControls(enabled: boolean): void {
+    if (this.navigationEnabled === false) {
+      this.opts.onControlHandoff?.({ renderer: "worldmodel", controlsEnabled: false });
+      return;
+    }
     this.opts.onControlHandoff?.({
       renderer: "worldmodel",
       controlsEnabled: enabled,
@@ -1519,6 +1580,7 @@ export interface WorldModelInputBindingOptions {
   isPresented?: () => boolean;
   onAction?: () => void;
   onActivity?: (kind: "movement" | "look" | "action") => void;
+  navigationEnabled?: () => boolean;
 }
 
 export function bindWorldModelKeys(
@@ -1529,6 +1591,7 @@ export function bindWorldModelKeys(
   const keys = new Set<string>();
   let lookIdleTimer = 0;
   const isPresented = options.isPresented ?? (() => true);
+  const navigationEnabled = options.navigationEnabled ?? (() => true);
   const apply = () => {
     const { longitudinal, lateral, lookH, lookV } = resolveWorldModelInput(keys, isLocked());
     void session.setMovement(longitudinal, lateral);
@@ -1548,6 +1611,7 @@ export function bindWorldModelKeys(
       }
       return;
     }
+    if (!navigationEnabled()) return;
     if (event.code.startsWith("Arrow")) event.preventDefault();
     keys.add(event.code);
     apply();
@@ -1557,10 +1621,11 @@ export function bindWorldModelKeys(
   };
   const up = (event: KeyboardEvent) => {
     keys.delete(event.code);
+    if (!navigationEnabled()) return;
     apply();
   };
   const pointerMove = (event: MouseEvent) => {
-    if (!isPresented() || isLocked()) return;
+    if (!navigationEnabled() || !isPresented() || isLocked()) return;
     if (options.target && document.pointerLockElement !== options.target) return;
     const { h, v } = resolveWorldModelPointerLook(event.movementX, event.movementY);
     if (h === "idle" && v === "idle") return;
@@ -1570,7 +1635,7 @@ export function bindWorldModelKeys(
     lookIdleTimer = window.setTimeout(() => void session.setLook("idle", "idle"), 80);
   };
   const requestPointer = () => {
-    if (isPresented() && !isLocked()) void options.target?.requestPointerLock();
+    if (navigationEnabled() && isPresented() && !isLocked()) void options.target?.requestPointerLock();
   };
   document.addEventListener("keydown", down);
   document.addEventListener("keyup", up);

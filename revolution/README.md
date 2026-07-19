@@ -28,8 +28,11 @@ LingBot World 2 remains the default. To move one browser immediately to the
 compatible legacy LingBot runtime, append `?reactorModel=lingbot` to any app
 URL and reload. Use `?reactorModel=lingbot-world-2` to switch back. To select a
 deployment-wide build default, set `VITE_REACTOR_MODEL=reactor/lingbot` (or
-`reactor/lingbot-world-2`) before building. The server allowlists these two
-values and scopes each short-lived JWT to the selected model.
+`reactor/lingbot-world-2`) before building. Use `?reactorModel=helios` for a
+seed-image, prompt-steered cinematic fallback. Helios keeps E/F narrative
+actions but intentionally disables WASD, mouse look, and their HUD hints. The
+server allowlists these three values and scopes each short-lived JWT to the
+selected model.
 
 Legacy LingBot supports the same seed-image, prompt, live video, WASD, and look
 flow used here, but it has a single movement direction at a time: when a user

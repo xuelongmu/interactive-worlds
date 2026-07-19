@@ -14,7 +14,7 @@ import { assetExists, preloadSceneAssets } from "./assets";
 import { loadState, markSceneComplete, setCurrentScene } from "./state";
 import { scenes, sceneById } from "../scenes";
 import { SplatScene } from "../renderers/splat";
-import { WorldModelScenePlayer } from "../renderers/worldmodel";
+import { supportsReactorWorldNavigation, WorldModelScenePlayer } from "../renderers/worldmodel";
 import { prewarmDirectiveAt, WorldModelPrewarmController } from "./worldmodel-prewarm";
 import { splitChapterHeading } from "../shell";
 import { renderStallHint, StallHintTimer } from "./stall";
@@ -621,7 +621,9 @@ export class Director {
     this.stallMessage = renderer === "splat"
       ? "WASD to walk · Move the mouse to look"
       : renderer === "worldmodel"
-        ? "WASD to move · Arrow keys to look"
+        ? supportsReactorWorldNavigation()
+          ? "WASD to move · Arrow keys to look"
+          : "Cinematic mode · Press E or F when a choice appears"
         : "Use the objects in the scene to continue";
 
     const events: (keyof DocumentEventMap)[] = [
