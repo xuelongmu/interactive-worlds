@@ -4,6 +4,9 @@ import type { SceneManifest } from "../../src/engine/types";
 import { CueEngine } from "../../src/engine/cues";
 import { AudioEngine } from "../../src/engine/audio";
 import { WorldModelSession, bindWorldModelKeys } from "../../src/renderers/worldmodel";
+import { installSessionChallenge } from "../../src/security/session-challenge";
+
+installSessionChallenge();
 
 /** SPIKE 1 — Participant register.
  *  Questions this spike answers:

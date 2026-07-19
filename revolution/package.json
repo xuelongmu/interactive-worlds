@@ -6,18 +6,21 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test:server": "node --test tests/session.test.mjs",
     "typecheck": "tsc --noEmit",
     "pipeline:frames": "node pipeline/frames.mjs",
     "pipeline:vo": "node pipeline/vo.mjs",
     "pipeline:sfx": "node pipeline/sfx.mjs",
+    "pipeline:lexington-volley": "node pipeline/lexington-volley.mjs",
     "pipeline:worlds": "node pipeline/worlds.mjs",
     "pipeline:models": "node pipeline/models.mjs",
-    "test": "vitest run"
+    "test": "vitest run src"
   },
   "dependencies": {
     "@reactor-models/lingbot-world-2": "^0.3.3",
     "@reactor-team/js-sdk": "^2.12.1",
     "@sparkjsdev/spark": "^2.1.0",
+    "@upstash/redis": "1.38.0",
     "three": "^0.185.1"
   },
   "devDependencies": {

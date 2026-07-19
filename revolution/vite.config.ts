@@ -79,6 +79,7 @@ export default defineConfig({
         main: resolve(root, "index.html"),
         "spike-worldmodel": resolve(root, "spikes/worldmodel/index.html"),
         "spike-splat": resolve(root, "spikes/splat/index.html"),
+        "spike-lexington-volley": resolve(root, "spikes/lexington-volley/index.html"),
         "spike-sandtable": resolve(root, "spikes/sandtable/index.html"),
       },
     },

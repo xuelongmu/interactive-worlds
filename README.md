@@ -17,6 +17,7 @@ frames conditioning both world generators.
 | `docs/gdd.md` | game design document (creative source of truth) |
 | `docs/decisions.md` | binding director decisions |
 | `docs/architecture.md` | technical architecture + spike results |
+| `docs/deployment.md` | production hosting, session broker, and large-asset strategy |
 | `docs/narration-scripts.md` | cue-based narration scripts (three scenes) |
 | `revolution/` | the app: engine, renderers, scene manifests, spikes, asset pipeline |
 
