@@ -1,4 +1,5 @@
 import type { EngineEvent, SceneManifest } from "../engine/types";
+import type { DirectorOptions } from "../engine/director";
 import rawPlan from "../../pipeline/sfx.plan.json";
 
 export type SoundBus = "ambience" | "diegetic" | "sfx";
@@ -145,6 +146,7 @@ export class SoundDesignController {
   onEngineEvent = (event: EngineEvent, sceneId: string): void => {
     if (event.type === "scene-start" && sceneId !== this.currentSceneId) {
       this.playback.stopAll();
+      this.playback.setPaused(false);
       this.currentSceneId = sceneId;
       this.playCounts.clear();
       this.lastPlayedAt.clear();
@@ -209,6 +211,46 @@ export class SoundDesignController {
   }
 }
 
+export interface SoundDirectorHooks {
+  onEngineEvent: NonNullable<DirectorOptions["onEngineEvent"]>;
+  onPauseState: NonNullable<DirectorOptions["onPauseState"]>;
+}
+
+/** Typed shell-side consumption of #58's observer seams. Story dispatch stays in Director. */
+export function createSoundDirectorHooks(controller: SoundDesignController): SoundDirectorHooks {
+  return {
+    onEngineEvent: controller.onEngineEvent,
+    onPauseState: ({ paused }) => controller.setPaused(paused),
+  };
+}
+
+type NarrationObserver = Pick<MutationObserver, "observe" | "disconnect">;
+type NarrationObserverFactory = (callback: MutationCallback) => NarrationObserver;
+
+/**
+ * The Director already exposes spoken playback through its subtitle surface.
+ * Observe that surface in the shell so the separate SFX context ducks for the
+ * exact spoken interval without adding a second story or timing callback.
+ */
+export function observeNarrationDucking(
+  container: ParentNode,
+  controller: Pick<SoundDesignController, "setNarrationActive">,
+  createObserver: NarrationObserverFactory = (callback) => new MutationObserver(callback)
+): () => void {
+  const subtitle = container.querySelector<HTMLElement>(".subtitle-bar");
+  if (!subtitle) throw new Error("sound design requires Director's subtitle surface");
+
+  const sync = () => controller.setNarrationActive(Boolean(subtitle.textContent?.trim()));
+  const observer = createObserver(sync);
+  observer.observe(subtitle, { childList: true, characterData: true, subtree: true });
+  sync();
+
+  return () => {
+    observer.disconnect();
+    controller.setNarrationActive(false);
+  };
+}
+
 interface ActiveSound {
   cue: SoundCue;
   source: AudioBufferSourceNode;
@@ -246,7 +288,7 @@ export class BrowserSoundPlayback implements SoundPlaybackPort {
       if (!buffer || generation !== this.loadGeneration || !this.context) return;
       const source = this.context.createBufferSource();
       const gain = this.context.createGain();
-      const target = dbToGain(cue.gainDb);
+      const target = dbToGain(cue.gainDb + (this.narrationActive ? cue.duckUnderNarrationDb : 0));
       source.buffer = buffer;
       source.loop = cue.loop;
       source.connect(gain);
@@ -279,9 +321,11 @@ export class BrowserSoundPlayback implements SoundPlaybackPort {
   setNarrationActive(active: boolean): void {
     this.narrationActive = active;
     if (!this.context) return;
-    const target = active ? dbToGain(soundDesignPlan.policy.narrationDuckDb) : 1;
-    for (const bus of this.buses.values()) {
-      bus.gain.setTargetAtTime(target, this.context.currentTime, 0.15);
+    for (const sound of this.active) {
+      const target = dbToGain(
+        sound.cue.gainDb + (active ? sound.cue.duckUnderNarrationDb : 0)
+      );
+      sound.gain.gain.setTargetAtTime(target, this.context.currentTime, 0.15);
     }
   }
 
