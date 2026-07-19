@@ -38,7 +38,7 @@
     { "id": "TEA-070", "trigger": { "type": "model-event", "name": "chests-done", "orTimer": 150 },
       "guidance": "Keep working the chests over the rail.",
       "subtitle": "Nothing else was touched. No one was hurt, nothing was stolen, and a padlock they broke was replaced the next day. The men swept the decks before they left. It was, witnesses said, the quietest destruction they had ever seen." },
-    { "id": "TEA-080", "trigger": { "type": "model-event", "name": "deck-clear", "orTimer": 210, "orAfterPrevious": 0.5 },
+    { "id": "TEA-080", "trigger": { "type": "timer", "seconds": 210, "orAfterPrevious": 0.5 },
       "guidance": "Help clear the last chests and leave the deck clean.",
       "subtitle": "Parliament's answer came in the spring. Boston's port was closed, its charter gutted, its government handed to the army. The other colonies were expected to take the lesson. Instead they began raising militias. Sixteen months later, the war began on a village green west of Boston.",
       "then": "scene:lexington" }
@@ -48,8 +48,7 @@
     { "at": 15, "name": "chest-open",
       "prompt": "Same ship deck at night: the viewer's own hands swing a hatchet into a large wooden tea chest at the rail, splitting it open, then tip it so loose black tea pours over the side into dark harbor water. Other disguised men do the same along the rail. Lantern light, sleet, cold breath. Realistic, very low light." },
     { "at": 60, "name": "chests-done",
-      "prompt": "Same ship deck at night, nearly cleared: the last broken tea chests go over the rail, men sweep the deck planks with brooms, the harbor water below dark with floating tea. The silent crowd still watches from the wharf. Lantern light. Realistic, very low light." },
-    { "at": 66.5, "name": "deck-clear" }
+      "prompt": "Same ship deck at night, nearly cleared: the last broken tea chests go over the rail, men sweep the deck planks with brooms, the harbor water below dark with floating tea. The silent crowd still watches from the wharf. Lantern light. Realistic, very low light." }
   ],
   "next": { "scene": "lexington", "preloadAt": "TEA-060" }
 }
