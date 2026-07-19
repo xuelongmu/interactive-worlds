@@ -18,9 +18,9 @@ function readEnvValue(name: string): string {
 }
 
 /**
- * Dev token broker: mints short-lived Reactor JWTs so the API key never
- * reaches the client. In production this becomes a serverless function
- * with identical behavior.
+ * Dev-only token broker: mints short-lived Reactor JWTs so the API key never
+ * reaches the client. It intentionally bypasses production Turnstile,
+ * clearance, and Redis admission so local behavior is explicit.
  */
 function tokenBroker(): Plugin {
   return {

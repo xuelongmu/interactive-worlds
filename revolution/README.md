@@ -65,13 +65,15 @@ through) shows the parsed cue list without calling the API.
 
 Vercel builds this directory as a Vite static app and deploys
 `api/session.ts` as the server-only Reactor token broker. Production token
-minting requires a one-time Turnstile challenge and an atomic Upstash Redis
-admission check for replay, per-client rate, and global daily budget. Generated
-media and conditioning references stay outside the app deployment in versioned
-object storage/CDN releases because a single splat can approach 200 MB. See
-[production deployment](../docs/deployment.md) for fresh-clone setup, secret
-handling, asset publishing, verification, and the external account steps that
-must be completed before claiming a public world-model run.
+minting first requests an HttpOnly browser clearance: the initial POST returns
+`428 challenge_required`, one Turnstile exchange sets the hardened cookie and
+returns a JWT, and later POSTs reuse server-validated clearance without another
+widget. Every mint still passes atomic Upstash Redis per-client and global
+admission. Generated media and conditioning references stay outside the app
+deployment in versioned object storage/CDN releases because a single splat can
+approach 200 MB. See [production deployment](../docs/deployment.md) for the
+clearance expiry/revocation contract, fresh-clone setup, secret handling, asset
+publishing, verification, and external account steps.
 
 ## Layout
 

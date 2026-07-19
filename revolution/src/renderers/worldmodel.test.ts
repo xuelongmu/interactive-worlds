@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LingbotWorld2Message, LingbotWorld2Model } from "@reactor-models/lingbot-world-2";
 import {
   canDispatchWorldModelAction,
+  formatWorldModelError,
   frameHasVisibleContent,
   isGroundedWorldModelEvent,
   isWorldModelActionKey,
@@ -143,7 +144,7 @@ describe("WorldModelSession lifecycle", () => {
 
     expect(session.phase).toBe("prepared");
     expect(model.calls).toEqual([
-      "listen:statusChanged", "listen:video", "listen:message",
+      "listen:statusChanged", "listen:error", "listen:video", "listen:message",
       "mint", "connect", "listen:image", "listen:conditions",
       "upload", "setImage", "setPrompt:winter river",
     ]);
@@ -282,6 +283,24 @@ describe("WorldModelSession lifecycle", () => {
     await session.disconnect({ dispose: true });
     model.emitEvent("statusChanged", "disconnected");
     expect(onUnexpectedDisconnect).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the SDK error visible when a later status only says disconnected", async () => {
+    const model = new FakeModel();
+    const onStatus = vi.fn();
+    const session = new WorldModelSession({
+      mintJwt: async () => "jwt",
+      onStatus,
+      timeouts: { mint: 100, connect: 100, ready: 100 },
+    }, model as unknown as LingbotWorld2Model);
+
+    await session.prepareTransport();
+    model.emitEvent("error", new Error("WebRTC handshake failed"));
+    model.emitEvent("statusChanged", "disconnected");
+
+    expect(onStatus).toHaveBeenLastCalledWith("Connection error: WebRTC handshake failed");
+    expect(formatWorldModelError(new Error("bad eyJabc.def.ghi token")))
+      .toBe("bad [redacted token] token");
   });
 
   it("uses an authenticated keepalive termination request on pagehide", async () => {
@@ -466,8 +485,29 @@ describe("presentation and rollover gates", () => {
     expect(unbindKeys).toHaveBeenCalledOnce();
     expect(disconnect).toHaveBeenCalledOnce();
     expect(player.startFallback).toHaveBeenCalledOnce();
-    expect(player.startFallback).toHaveBeenCalledWith(true);
+    expect(player.startFallback).toHaveBeenCalledWith(
+      true,
+      "Live connection lost: Reactor session disconnected"
+    );
     expect(player.mode).toBe("fallback");
+  });
+
+  it("does not overwrite a live failure when no fallback video is shipped", async () => {
+    const onStatus = vi.fn();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.disposed = false;
+    player.hasPoster = false;
+    player.fallbackUsesWallClock = false;
+    player.video = { srcObject: {}, style: { visibility: "visible" } };
+    player.poster = { style: { display: "none" } };
+    player.opts = { manifest: { assets: {} }, onStatus };
+    player.presentation = { markFallbackReady: vi.fn() };
+
+    await player.startFallback(false, "Live connection failed: WebRTC handshake failed");
+
+    expect(onStatus).toHaveBeenLastCalledWith(
+      "Live connection failed: WebRTC handshake failed"
+    );
   });
 
   it("seeks a recovered recorded fallback to the current authored clock", async () => {
