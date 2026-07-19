@@ -28,6 +28,15 @@ export type WorldModelSessionPhase =
   | "stopped"
   | "disposed";
 
+export function formatWorldModelError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  const safe = raw
+    .replace(/eyJ[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){1,2}/g, "[redacted token]")
+    .replace(/\s+/g, " ")
+    .trim();
+  return (safe || "unknown connection error").slice(0, 240);
+}
+
 export type WorldModelTelemetryName =
   | "token-mint"
   | "connect-to-runtime-ready"
@@ -189,6 +198,7 @@ export class WorldModelSession {
   private beginPromise: Promise<void> | null = null;
   private disconnectPromise: Promise<void> | null = null;
   private permanentListenersInstalled = false;
+  private lastConnectionError: string | null = null;
   private unsubscribes: (() => void)[] = [];
   private pendingSignals = new Set<(error?: Error) => void>();
   private timers = new Set<ReturnType<typeof setTimeout>>();
@@ -641,17 +651,28 @@ export class WorldModelSession {
     if (this.permanentListenersInstalled) return;
     this.permanentListenersInstalled = true;
     const statusHandler = (status: string) => {
-      this.hooks.onStatus?.(status);
+      this.hooks.onStatus?.(
+        status === "disconnected" && this.lastConnectionError
+          ? `Connection error: ${this.lastConnectionError}`
+          : status
+      );
       if (
         status === "disconnected"
         && ["runtime-ready", "conditioning", "prepared", "starting", "streaming", "recycling"].includes(this.phase)
       ) {
-        this.hooks.onUnexpectedDisconnect?.(status);
+        this.hooks.onUnexpectedDisconnect?.(this.lastConnectionError ?? status);
       }
     };
+    const errorHandler = (error: unknown) => {
+      const reason = formatWorldModelError(error);
+      this.lastConnectionError = reason;
+      this.hooks.onStatus?.(`Connection error: ${reason}`);
+    };
     this.model.on("statusChanged", statusHandler);
+    this.model.on("error", errorHandler);
     this.unsubscribes.push(
       () => this.model.off("statusChanged", statusHandler),
+      () => this.model.off("error", errorHandler),
       this.model.onMainVideo((_track, stream) => {
         if (this.isTerminal()) return;
         this.stream = stream;
@@ -1259,10 +1280,12 @@ export class WorldModelScenePlayer {
       await this.startLive();
       this.mode = "live";
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = formatWorldModelError(error);
+      const visibleError = `Live connection failed: ${reason}`;
       console.warn("[worldmodel] live session unavailable, falling back:", error);
       this.telemetry({ name: "fallback", reason });
       if (this.disposed) return;
+      this.opts.onStatus?.(visibleError);
       this.cancelVideoFrames();
       this.unbindKeys?.();
       this.unbindKeys = null;
@@ -1271,7 +1294,7 @@ export class WorldModelScenePlayer {
       await failed?.disconnect({ reason, dispose: true });
       this.opts.onBranchTransientReset?.("fallback");
       try {
-        await this.startFallback();
+        await this.startFallback(false, visibleError);
       } catch (fallbackError) {
         if (this.disposed) return;
         throw fallbackError;
@@ -1434,7 +1457,10 @@ export class WorldModelScenePlayer {
     }
   }
 
-  private async startFallback(preserveLiveClock = false): Promise<void> {
+  private async startFallback(
+    preserveLiveClock = false,
+    unavailableStatus?: string
+  ): Promise<void> {
     const { manifest, onStatus } = this.opts;
     this.video.srcObject = null;
     this.video.style.visibility = "hidden";
@@ -1460,7 +1486,7 @@ export class WorldModelScenePlayer {
       this.revealLiveVideo();
       this.video.addEventListener("timeupdate", this.onFallbackTimeUpdate);
     } else {
-      onStatus?.("no fallback video - running beats on a wall clock");
+      onStatus?.(unavailableStatus ?? "no fallback video - running beats on a wall clock");
       this.fallbackUsesWallClock = true;
       if (preserveLiveClock) this.startWallClock();
     }
@@ -1666,7 +1692,8 @@ export class WorldModelScenePlayer {
     this.stopSceneClock();
     this.telemetry({ name: "fallback", reason, durationMs });
     this.emitLiveControls(false);
-    this.opts.onStatus?.("Live output unavailable - switching to recorded fallback");
+    const visibleError = `Live connection lost: ${formatWorldModelError(reason)}`;
+    this.opts.onStatus?.(visibleError);
     this.cancelVideoFrames();
     this.unbindKeys?.();
     this.unbindKeys = null;
@@ -1675,7 +1702,7 @@ export class WorldModelScenePlayer {
     await failed?.disconnect({ reason, dispose: true });
     if (this.disposed) return;
     this.mode = "fallback";
-    await this.startFallback(true);
+    await this.startFallback(true, visibleError);
   }
 
   private cancelVideoFrames(): void {

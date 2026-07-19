@@ -4,6 +4,7 @@ import { BRANCH_ACTION_MAPPINGS } from "../branch-state";
 import {
   canDispatchWorldModelAction,
   bindWorldModelKeys,
+  formatWorldModelError,
   frameHasVisibleContent,
   isGroundedWorldModelEvent,
   isWorldModelActionKey,
@@ -215,6 +216,7 @@ describe("WorldModelSession lifecycle", () => {
     expect(commands.map((call) => call.startsWith("setPrompt:") ? "setPrompt" : call)).toEqual([
       "mint", "connect", "reset", "upload", "setImage", "setPrompt",
     ]);
+    expect(model.calls).toContain("listen:error");
     expect(model.calls.find((call) => call.startsWith("setPrompt:"))).toContain("winter river");
     expect(model.calls).not.toContain("start");
     expect(model.temporaryListenerCount()).toBe(0);
@@ -484,6 +486,27 @@ describe("WorldModelSession lifecycle", () => {
     expect(onUnexpectedDisconnect).toHaveBeenCalledOnce();
   });
 
+  it("keeps the SDK error visible when a later status only says disconnected", async () => {
+    const model = new FakeModel();
+    const onStatus = vi.fn();
+    const onUnexpectedDisconnect = vi.fn();
+    const session = new WorldModelSession({
+      mintJwt: async () => "jwt",
+      onStatus,
+      onUnexpectedDisconnect,
+      timeouts: { mint: 100, connect: 100, ready: 100 },
+    }, model as unknown as LingbotWorld2Model);
+
+    await session.prepareTransport();
+    model.emitEvent("error", new Error("WebRTC handshake failed"));
+    model.emitEvent("statusChanged", "disconnected");
+
+    expect(onStatus).toHaveBeenLastCalledWith("Connection error: WebRTC handshake failed");
+    expect(onUnexpectedDisconnect).toHaveBeenCalledWith("WebRTC handshake failed");
+    expect(formatWorldModelError(new Error("bad eyJabc.def.ghi token")))
+      .toBe("bad [redacted token] token");
+  });
+
   it("uses an authenticated keepalive termination request on pagehide", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -666,8 +689,29 @@ describe("presentation and rollover gates", () => {
     expect(unbindKeys).toHaveBeenCalledOnce();
     expect(disconnect).toHaveBeenCalledOnce();
     expect(player.startFallback).toHaveBeenCalledOnce();
-    expect(player.startFallback).toHaveBeenCalledWith(true);
+    expect(player.startFallback).toHaveBeenCalledWith(
+      true,
+      "Live connection lost: Reactor session disconnected"
+    );
     expect(player.mode).toBe("fallback");
+  });
+
+  it("does not overwrite a live failure when no fallback video is shipped", async () => {
+    const onStatus = vi.fn();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.disposed = false;
+    player.hasPoster = false;
+    player.fallbackUsesWallClock = false;
+    player.video = { srcObject: {}, style: { visibility: "visible" } };
+    player.poster = { style: { display: "none" } };
+    player.opts = { manifest: { assets: {} }, onStatus };
+    player.presentation = { markFallbackReady: vi.fn() };
+
+    await player.startFallback(false, "Live connection failed: WebRTC handshake failed");
+
+    expect(onStatus).toHaveBeenLastCalledWith(
+      "Live connection failed: WebRTC handshake failed"
+    );
   });
 
   it("seeks a recovered recorded fallback to the current authored clock", async () => {
