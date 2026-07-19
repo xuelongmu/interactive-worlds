@@ -1,3 +1,5 @@
+import type { BranchPresentationState } from "../branch-state";
+
 /** Normalized event vocabulary. Every renderer emits these; the cue engine
  *  consumes them. This is the seam that keeps scenes renderer-agnostic. */
 export type EngineEvent =
@@ -80,7 +82,10 @@ export interface ControlHandoffDetail {
   controlsEnabled: boolean;
   movement?: { binding: string; label: string };
   look?: { binding: string; label: string };
-  action?: { binding: string; label: string; usable: boolean };
+  /** Canonical branch action. `null` is the explicit neutral/out-of-range state. */
+  action?: BranchPresentationState["action"];
+  /** Non-narrative acknowledgement supplied by the branch presentation contract. */
+  acknowledgement?: string;
   transitionKey: number;
 }
 

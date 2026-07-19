@@ -9,6 +9,7 @@ import {
   runnerHasMovementInput,
   runnerCanResumePointerInput,
 } from "./director";
+import type { BranchPresentationState } from "../branch-state";
 import type { SceneManifest } from "./types";
 import { prewarmDirectiveAt, WorldModelPrewarmController } from "./worldmodel-prewarm";
 import type { WorldModelSession } from "../renderers/worldmodel";
@@ -109,19 +110,49 @@ describe("Director engine-event boundary", () => {
     expect(order).toEqual(["cue:model-event", "observer:delaware:model-event"]);
   });
 
-  it("adds stable scene and transition identity to renderer control state", () => {
-    expect(controlHandoffForScene("delaware", 4, {
+  it("adds stable identity and propagates canonical branch presentation verbatim", () => {
+    const action = {
+      binding: "E",
+      label: "Clear the gun path",
+      usable: false,
+    } as const;
+    const presentation: BranchPresentationState = {
+      selectedDuty: "clear-ice",
+      acknowledgement: "At the crossing, you chose to clear ice from the hull.",
+      action,
+    };
+    const handoff = controlHandoffForScene("delaware", 4, {
       renderer: "worldmodel",
       controlsEnabled: true,
       movement: { binding: "WASD", label: "Move" },
-      action: { binding: "E", label: "Interact", usable: true },
-    })).toEqual({
+    }, presentation);
+
+    expect(handoff).toEqual({
       sceneId: "delaware",
       transitionKey: 4,
       renderer: "worldmodel",
       controlsEnabled: true,
       movement: { binding: "WASD", label: "Move" },
-      action: { binding: "E", label: "Interact", usable: true },
+      action,
+      acknowledgement: "At the crossing, you chose to clear ice from the hull.",
+    });
+    expect(handoff.action).toBe(action);
+  });
+
+  it("preserves the canonical neutral/out-of-range action without inference", () => {
+    expect(controlHandoffForScene("trenton", 5, {
+      renderer: "gameplay",
+      controlsEnabled: true,
+    }, {
+      selectedDuty: null,
+      acknowledgement: null,
+      action: null,
+    })).toEqual({
+      sceneId: "trenton",
+      transitionKey: 5,
+      renderer: "gameplay",
+      controlsEnabled: true,
+      action: null,
     });
   });
 });

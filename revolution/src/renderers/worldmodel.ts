@@ -1188,7 +1188,6 @@ export class WorldModelScenePlayer {
       controlsEnabled: enabled,
       movement: { binding: "WASD", label: "Move" },
       look: { binding: "Mouse / arrows", label: "Look" },
-      action: { binding: "E / Space / Enter", label: "Interact", usable: enabled },
     });
   }
 

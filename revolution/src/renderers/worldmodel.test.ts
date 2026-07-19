@@ -519,6 +519,22 @@ describe("presentation and rollover gates", () => {
     expect(canDispatchWorldModelAction("KeyE", true, false)).toBe(true);
     expect(canDispatchWorldModelAction("KeyE", true, false, true)).toBe(false);
   });
+
+  it("does not advertise a generic action through the director handoff", () => {
+    const onControlHandoff = vi.fn();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.opts = { onControlHandoff };
+
+    player.emitLiveControls(true);
+
+    expect(onControlHandoff).toHaveBeenCalledWith({
+      renderer: "worldmodel",
+      controlsEnabled: true,
+      movement: { binding: "WASD", label: "Move" },
+      look: { binding: "Mouse / arrows", label: "Look" },
+    });
+    expect(onControlHandoff.mock.calls[0][0]).not.toHaveProperty("action");
+  });
 });
 
 describe("scripted event continuity", () => {
