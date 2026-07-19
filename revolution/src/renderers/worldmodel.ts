@@ -77,6 +77,7 @@ interface WorldModelSessionTimeouts {
   conditions: number;
   begin: number;
   input: number;
+  branch: number;
 }
 
 const DEFAULT_TIMEOUTS: WorldModelSessionTimeouts = {
@@ -87,6 +88,7 @@ const DEFAULT_TIMEOUTS: WorldModelSessionTimeouts = {
   conditions: 30_000,
   begin: 15_000,
   input: 3_000,
+  branch: 5_000,
 };
 
 const ALLOWED_TRANSITIONS: Record<WorldModelSessionPhase, ReadonlySet<WorldModelSessionPhase>> = {
@@ -212,6 +214,8 @@ export class WorldModelSession {
   private sentPrompt = "";
   private desiredPrompt = "";
   private pendingBranchPrompt: PendingBranchPrompt | null = null;
+  private branchPromptReserved = false;
+  private branchPromptSignal: PendingSignal | null = null;
   private readiness: BranchRuntimeReadiness = {
     sessionConfirmed: false,
     imageConfirmed: false,
@@ -353,23 +357,66 @@ export class WorldModelSession {
   }
 
   async requestBranchAction(request: BranchActionRequest, heldPrompt: string): Promise<void> {
-    if (!this.inputEnabled || this.isTerminal() || this.pendingBranchPrompt) {
+    if (!this.inputEnabled || this.isTerminal() || this.branchPromptReserved) {
       throw new Error("Branch action is not ready.");
     }
+    this.branchPromptReserved = true;
     this.promptEvents.set("branch-choice", heldPrompt);
     this.recomposePrompt();
     const prompt = this.desiredPrompt;
+    const operation = this.runBranchPrompt(request, prompt).finally(() => {
+      this.branchPromptReserved = false;
+      this.branchPromptSignal = null;
+      void this.flushPrompt();
+    });
+    return operation;
+  }
+
+  private async runBranchPrompt(request: BranchActionRequest, prompt: string): Promise<void> {
+    // Finish any unrelated set_prompt before assigning errors to this request.
+    await this.promptFlush;
+    if (!this.inputEnabled || this.isTerminal() || !this.branchPromptReserved) {
+      throw new Error("Branch action was cancelled.");
+    }
+
     this.pendingBranchPrompt = { request, prompt };
+    let commandFailure: Error | null = null;
+    const confirmation = this.waitForSignal<LingbotWorld2Message>(
+      (handler) => this.model.onMessage(handler),
+      (message) => {
+        if (message.type === "prompt_accepted" && message.prompt === prompt) return true;
+        if (message.type === "command_error" && message.command === "set_prompt") {
+          commandFailure = new Error(message.reason);
+          return true;
+        }
+        return false;
+      },
+      this.timeout("branch"),
+      "branch prompt confirmation timeout",
+    );
+    this.branchPromptSignal = confirmation;
+
     try {
-      await this.model.setPrompt({ prompt });
+      await Promise.all([
+        this.model.setPrompt({ prompt }),
+        confirmation.promise,
+      ]);
+      if (commandFailure) throw commandFailure;
     } catch (error) {
-      this.pendingBranchPrompt = null;
-      this.hooks.onBranchRuntimeEvent?.({
-        type: "command_error",
-        requestId: request.requestId,
-        message: error instanceof Error ? error.message : String(error),
-      });
+      // A backend command_error is already normalized by handleMessage. A
+      // local rejection or missing acceptance still needs the same correlated,
+      // retryable outcome.
+      if (this.pendingBranchPrompt?.request.requestId === request.requestId) {
+        this.pendingBranchPrompt = null;
+        this.hooks.onBranchRuntimeEvent?.({
+          type: "command_error",
+          requestId: request.requestId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
       throw error;
+    } finally {
+      confirmation.cancel();
     }
   }
 
@@ -385,6 +432,9 @@ export class WorldModelSession {
     this.desired = { longitudinal: "idle", lateral: "idle", lookH: "idle", lookV: "idle" };
     this.promptEvents.clear();
     this.pendingBranchPrompt = null;
+    this.branchPromptReserved = false;
+    this.branchPromptSignal?.cancel(new Error("branch prompt cancelled"));
+    this.branchPromptSignal = null;
     this.recomposePrompt();
     if (this.inputEnabled && !this.isTerminal()) {
       await this.flushDesiredInput();
@@ -770,11 +820,11 @@ export class WorldModelSession {
   }
 
   private async flushPrompt(): Promise<void> {
-    if (this.pendingBranchPrompt || this.isTerminal() || !this.desiredPrompt || this.desiredPrompt === this.sentPrompt) return;
+    if (this.branchPromptReserved || this.pendingBranchPrompt || this.isTerminal() || !this.desiredPrompt || this.desiredPrompt === this.sentPrompt) return;
     if (this.promptFlush) return this.promptFlush;
     let lastAttempted = "";
     const run = async () => {
-      while (!this.pendingBranchPrompt && !this.isTerminal() && this.desiredPrompt !== this.sentPrompt) {
+      while (!this.branchPromptReserved && !this.pendingBranchPrompt && !this.isTerminal() && this.desiredPrompt !== this.sentPrompt) {
         const prompt = this.desiredPrompt;
         lastAttempted = prompt;
         const confirmation = this.waitForSignal<Extract<LingbotWorld2Message, { type: "prompt_accepted" }>>(
@@ -795,7 +845,7 @@ export class WorldModelSession {
       console.warn("[worldmodel] prompt update failed:", error);
     }).finally(() => {
       this.promptFlush = null;
-      if (!this.pendingBranchPrompt && this.sentPrompt === lastAttempted && this.desiredPrompt !== this.sentPrompt) {
+      if (!this.branchPromptReserved && !this.pendingBranchPrompt && this.sentPrompt === lastAttempted && this.desiredPrompt !== this.sentPrompt) {
         void this.flushPrompt();
       }
     });

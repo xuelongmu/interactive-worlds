@@ -340,8 +340,11 @@ describe("WorldModelSession lifecycle", () => {
     const mapping = BRANCH_ACTION_MAPPINGS[1];
     const request = { momentId: mapping.momentId, choiceId: mapping.choiceId, requestId: mapping.requestId };
 
-    await session.requestBranchAction(request, "Hands hold the broom briefly.");
+    const failedRequest = session.requestBranchAction(request, "Hands hold the broom briefly.");
+    const rejection = expect(failedRequest).rejects.toThrow("try again");
+    await Promise.resolve();
     model.emit({ type: "command_error", command: "set_prompt", reason: "try again" });
+    await rejection;
     expect(runtimeEvents).toHaveBeenCalledWith({
       type: "command_error",
       requestId: mapping.requestId,
@@ -350,6 +353,71 @@ describe("WorldModelSession lifecycle", () => {
     model.autoConditions = true;
     await session.requestBranchAction(request, "Hands hold the broom briefly.");
     expect(runtimeEvents).toHaveBeenLastCalledWith({
+      type: "branch-confirmed",
+      id: mapping.confirmationEventId,
+      requestId: mapping.requestId,
+    });
+  });
+
+  it("bounds a missing branch acceptance, emits retryable correlation, and permits retry", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const model = new FakeModel();
+    const runtimeEvents = vi.fn();
+    const session = new WorldModelSession({
+      mintJwt: async () => "jwt",
+      onBranchRuntimeEvent: runtimeEvents,
+      timeouts: { mint: 100, connect: 100, ready: 100, upload: 100, conditions: 100, begin: 100, input: 100, branch: 100 },
+    }, model as unknown as LingbotWorld2Model);
+    await session.prepare(new Blob(), "scene");
+    await session.begin();
+    await session.setInputEnabled(true);
+    const mapping = BRANCH_ACTION_MAPPINGS[2];
+    const request = { momentId: mapping.momentId, choiceId: mapping.choiceId, requestId: mapping.requestId };
+    model.autoConditions = false;
+
+    const pending = session.requestBranchAction(request, "Hands hold the pole briefly.");
+    const rejection = expect(pending).rejects.toThrow("branch prompt confirmation timeout");
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(101);
+    await rejection;
+    expect(runtimeEvents).toHaveBeenLastCalledWith({
+      type: "command_error",
+      requestId: mapping.requestId,
+      message: "branch prompt confirmation timeout",
+    });
+
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(101);
+    model.autoConditions = true;
+    await session.requestBranchAction(request, "Hands hold the pole briefly.");
+    expect(runtimeEvents).toHaveBeenLastCalledWith({
+      type: "branch-confirmed",
+      id: mapping.confirmationEventId,
+      requestId: mapping.requestId,
+    });
+  });
+
+  it("serializes behind an unrelated prompt update without misattributing its error", async () => {
+    const model = new FakeModel();
+    const runtimeEvents = vi.fn();
+    const { session } = makeSession(model);
+    session.attach({ onBranchRuntimeEvent: runtimeEvents });
+    await session.prepare(new Blob(), "scene");
+    await session.begin();
+    await session.setInputEnabled(true);
+    let finishUnrelated = () => {};
+    (session as any).promptFlush = new Promise<void>((resolve) => { finishUnrelated = resolve; });
+    const mapping = BRANCH_ACTION_MAPPINGS[3];
+    const request = { momentId: mapping.momentId, choiceId: mapping.choiceId, requestId: mapping.requestId };
+
+    const pending = session.requestBranchAction(request, "Hands clear ice briefly.");
+    await Promise.resolve();
+    model.emit({ type: "command_error", command: "set_prompt", reason: "unrelated update failed" });
+    expect(runtimeEvents).not.toHaveBeenCalled();
+    finishUnrelated();
+    await pending;
+    expect(runtimeEvents).toHaveBeenCalledExactlyOnceWith({
       type: "branch-confirmed",
       id: mapping.confirmationEventId,
       requestId: mapping.requestId,
