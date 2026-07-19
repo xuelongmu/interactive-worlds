@@ -92,11 +92,18 @@ async function generateWorld(entry) {
     console.log(`(paste into worlds.config.mjs as worldId to pin this take)`);
   }
 
-  const worldRes = await fetch(`${API}/worlds/${worldId}`, { headers });
-  if (!worldRes.ok) throw new Error(`world fetch failed ${worldRes.status}`);
-  const world = await worldRes.json();
-  const splats = world.assets?.splats;
-  const spzUrl = splats?.spz_urls?.["500k"] ?? splats?.spz_urls?.full_res;
+  // Assets can publish a few moments after the operation reports done.
+  const world = await pollUntil(
+    async () => {
+      const worldRes = await fetch(`${API}/worlds/${worldId}`, { headers });
+      if (!worldRes.ok) throw new Error(`world fetch failed ${worldRes.status}`);
+      const body = await worldRes.json();
+      return body.assets?.splats?.spz_urls ? body : null;
+    },
+    { intervalMs: 15_000, timeoutMs: 20 * 60 * 1000, label: `assets of ${entry.scene}` }
+  );
+  const splats = world.assets.splats;
+  const spzUrl = splats.spz_urls["500k"] ?? splats.spz_urls.full_res;
   if (!spzUrl) throw new Error("world has no spz asset");
   await download(spzUrl, `public/assets/worlds/${entry.scene}.spz`);
 

@@ -19,7 +19,7 @@ export const worlds = [
   },
   {
     scene: "assembly-room",
-    worldId: null,
+    worldId: "7fb1b3f0-a623-43a5-8ce0-efa89ef6540f",
     image: "public/reference/assembly-room.jpg",
     prompt:
       "Interior of the Pennsylvania State House assembly room in summer 1776, eye level. " +
@@ -30,7 +30,7 @@ export const worlds = [
   },
   {
     scene: "valley-forge",
-    worldId: null,
+    worldId: "185eea37-2d59-4f27-8745-cc29ba29df2a",
     image: "public/reference/valley-forge.jpg",
     prompt:
       "A Continental Army winter encampment at Valley Forge, December 1777, at dusk. " +
