@@ -26,6 +26,86 @@ Interactive story of the American Revolution. Nine scenes, linear order:
 - Interaction instructions belong to diegetic voices (a mariner, an officer),
   never the narrator.
 
+## Sound-design cue ledger
+
+This ledger is the authored contract for non-verbal sound. Stable sound IDs map
+to `revolution/pipeline/sfx.plan.json`; spoken lines remain VO, and music remains
+issue #18. “Duck −6 dB” means the listed ambience/diegetic/SFX bus yields under
+narration. Timing values below are sound take lengths and fade requirements, not
+scene timing fields; issue #45 owns scene and narration timing.
+
+### The Tea Party
+
+| Cue / trigger | Type | Output · bus | Duration / loop / fades | Spatial / duck / stop | ElevenLabs text-to-sound-effects prompt | Caveat |
+|---|---|---|---|---|---|---|
+| **TEA-AMB-001** · scene start | ambience | `amb/wharf-night.mp3` · ambience | 22s, loop; 1.5s in / 1s out | Wide sparse bed; duck −6 dB; stop on scene exit | A harbor wharf at night in winter: halyards tapping against wooden masts, water lapping on pilings, the low rustle of a large crowd standing nearly silent, one distant church bell. Sparse and quiet. No music, no clear voices. | The crowd stays indistinct: no chants or invented speech. |
+| **TEA-SFX-001** · `model-event:chest-open` | diegetic event | `sfx/tea-chest.mp3` · diegetic | 6s, once; 0 / 0.25s | Close chest and rail; duck −6 dB; natural end | A hatchet splitting open a large wooden tea chest: two sharp axe blows into wood, splintering planks, then a long pour of dry loose tea leaves rushing out and splashing into harbor water below. No music, no voices. | Tea is split and poured; do not imply theft or injury. |
+| **TEA-SFX-002** · actual `model-event:chest-work` interactions | diegetic event | `sfx/tea-chest-work.mp3` · diegetic | 10s; repeatable, 3s cooldown, max 4; 0 / 0.3s | Work shifts among nearby chests; duck −6 dB; stop at `chests-done` | Repeated work opening tea chests on an 18th century merchant ship at night: rope tackle strains, a heavy wooden chest scrapes across deck planks, several measured hatchet blows split wood, loose dry tea pours over the rail into water. Sparse individual actions with quiet gaps, not a crowd spectacle. No music, no speech, no human voices. | Exact tool rhythm is interpretive; the event must come from interaction, not a timer. |
+| **TEA-SFX-003** · `model-event:chests-done` | transition | `sfx/tea-deck-clear.mp3` · SFX | 6s, once; 0 / 0.5s | Final chest to broad deck sweep; duck −6 dB; stop at `deck-clear` | The last tea chest work ending on an 18th century ship deck: a final short pour of loose tea into harbor water, broken wood set down, then a stiff broom sweeps tea leaves and splinters across wet deck planks. The activity resolves into quiet water and rigging. No music, no speech, no human voices. | Deck sweeping is recorded; the precise final sequence is staged. |
+| **TEA-SIL-001** · `model-event:deck-clear` | authored silence | no file · diegetic + SFX | Hold through the TEA-080 handoff; 0.5s out | Stop interaction buses; sparse wharf bed only | Generation prohibited. Do not fill the silence. | Protects the return to Parliament narration; #45 aligns `deck-clear` after the 6s completion take. |
+
+### Lexington Green
+
+| Cue / trigger | Type | Output · bus | Duration / loop / fades | Spatial / duck / stop | ElevenLabs text-to-sound-effects prompt | Caveat |
+|---|---|---|---|---|---|---|
+| **LEX-AMB-001** · scene start | ambience | `amb/green-dawn.mp3` · ambience | 22s, loop; 1.2s in / 0.5s out | Open field, distant drum; duck −6 dB; stop at `action:first-shot` | Quiet New England village green at dawn: birdsong, light wind through spring grass, a dog barking far away, a distant military drum. No music, no voices. | No battle activity before the disputed first shot. |
+| **LEX-SFX-001** · `action:first-shot` | diegetic event | `sfx/lexington-first-shot.mp3` · SFX | 4s, once; no fade | Deliberately unlocalized; no narration duck; natural end before volley | One isolated 18th century flintlock musket shot across an open New England village green at dawn, followed only by its natural echo and a brief return to still air. Exactly one shot: no volley, no second gun, no screams, no drum, no music, no speech, no human voices. | Who fired and where are unknown; never identify or localize a shooter. |
+| **LEX-SFX-002** · volley cutscene audio | transition | `sfx/musket-volley.mp3` · SFX | 8s baked event; 0 / 1s | Field-width cutscene mix; no duck; stop with cutscene | A ragged volley of 18th century flintlock muskets: one sharp shot first, then dozens firing raggedly, echo across an open field, distant screams and a drum. No music. | This combined baseline file is volley-only in the runtime edit and never substitutes for LEX-SFX-001. |
+| **LEX-SIL-001** · `action:cutscene-volley-complete` | authored silence | no file · all non-VO buses | 4s hold; hard silence | Full-field stillness before LEX-080 | Generation prohibited. Do not add aftermath ambience, score, or sweetener. | #45 owns the delayed narration trigger; violence remains restrained. |
+
+### The Declaration
+
+| Cue / trigger | Type | Output · bus | Duration / loop / fades | Spatial / duck / stop | ElevenLabs text-to-sound-effects prompt | Caveat |
+|---|---|---|---|---|---|---|
+| **DEC-AMB-001** · scene start | ambience | `amb/assembly-room.mp3` · ambience | 22s, loop; 1.2s in / 1s out | Quiet room; distant quill; duck −6 dB; stop at `action:sign-complete` | Quiet 18th century interior room tone: muffled street sounds through shuttered windows, occasional flies buzzing, a wooden chair creak, a single quill scratching on paper. No music, no voices. | Reconstructed room texture; no legible street speech. |
+| **DEC-SIL-001** · `action:sign-complete` | authored silence | no file · all non-VO buses | 8s ink-dry hold; 0.5s out | Room tone falls away; resume at DEC-061 | Generation prohibited. Do not add quill, heartbeat, or music. | Issue #3 owns Declaration files; this non-engine mapping is the handoff and does not edit its manifest. |
+
+### Crossing the Delaware
+
+| Cue / trigger | Type | Output · bus | Duration / loop / fades | Spatial / duck / stop | ElevenLabs text-to-sound-effects prompt | Caveat |
+|---|---|---|---|---|---|---|
+| **DEL-AMB-001** · scene start | ambience | `amb/river-ice-storm.mp3` · ambience | 22s, loop; 1.5s in / 1s out | Wide river; hull/oarlocks near; duck −6 dB; scene exit | Night river crossing in a winter storm: wind and driving sleet, chunks of ice grinding and knocking against a wooden hull, oars creaking in oarlocks, water lapping. No music, no voices. | Leutze’s painting is not an audio reference. |
+| **DEL-SFX-001** · `action:boarded` | diegetic event | `sfx/delaware-horses.mp3` · diegetic | 8s, once; 0.2 / 0.4s | Neighboring cargo boat, never beside the ear; duck −6 dB; natural end | Two draft horses standing inside a broad wooden Durham boat at night: hooves shift and stamp carefully on wet timber, leather harness creaks, the wooden hull flexes softly. Sparse, close, restrained animal and equipment sounds. No music, no speech, no human voices. | Horses and artillery crossed in separate boats; do not place them in every boat. |
+| **DEL-SFX-002** · actual `model-event:ice-strike` contacts | diegetic event | `sfx/delaware-ice-hull.mp3` · diegetic | 8s; repeatable, 8s cooldown, max 3; 0 / 0.3s | At hull side; duck −6 dB; stop at `landing` | A heavy sheet of river ice grinds along and strikes the side of a large 18th century wooden Durham boat at night: scraping ice, two hard hull knocks, timber creaking, an oarlock shuddering, black water sloshing. No music, no speech, no human voices. | Exact impacts are staged interaction feedback, not a literal event count. |
+| **DEL-AMB-002** · `model-event:storm` | transition ambience | `amb/delaware-storm-surge.mp3` · ambience | 14s, loop; 2.5s in / 1.5s out | Wide layer with center midrange open; duck −6 dB; stop at `landing` | A nor'easter intensifying over a wide winter river at night: wind rises steadily, hard sleet drives across open water, choppy waves slap a wooden boat, loose ice grinds nearby. Strong but with space in the midrange for documentary narration. No thunder, no music, no speech, no human voices. | Accounts support rain, sleet, and snow; do not assert thunder. |
+
+### Trenton
+
+| Cue / trigger | Type | Output · bus | Duration / loop / fades | Spatial / duck / stop | ElevenLabs text-to-sound-effects prompt | Caveat |
+|---|---|---|---|---|---|---|
+| **TRE-AMB-001** · scene start | ambience | `amb/trenton-sleet.mp3` · ambience | 22s, loop; 1s in / 1s out | Street-width wind, close boots/wheels; duck −6 dB; scene exit | A town street in a driving sleet storm at dawn: hard sleet rattling on ice and wood, gusting wind funneled between houses, boots and iron-shod wheels crunching on frozen ruts. Cold and harsh. No music, no voices. | Do not invent shouted commands. |
+| **TRE-SFX-001** · `model-event:guns-open` | diegetic event | `sfx/cannon-street.mp3` · SFX | 8s, once; 0 / 0.5s | Ahead with building reflections; duck −6 dB; stop at `surrender` | 18th century field cannon firing down a narrow town street: two deep concussive cannon blasts in close succession, echo slapping off house fronts, debris and ice falling after. No music, no voices. | Two reports are representative, not a battery count. |
+| **TRE-SIL-001** · `model-event:surrender` | authored silence | no file · diegetic + SFX | Through the quiet-field beat; 0.75s out | Cannon/events stop; sleet remains | Generation prohibited. Add no cheers or victory sting. | Preserves the field falling quiet; final music belongs to #18. |
+
+### Saratoga
+
+| Cue / trigger | Type | Output · bus | Duration / loop / fades | Spatial / duck / stop | ElevenLabs text-to-sound-effects prompt | Caveat |
+|---|---|---|---|---|---|---|
+| **SAR-AMB-001** · scene start | ambience | `amb/command-tent.mp3` · ambience | 22s, loop; 1.2s in / 0.75s out | Enclosed canvas, work far outside; duck −6 dB; stop at charge handoff | Inside a military command tent, 18th century: canvas snapping softly in wind, an oil lantern sputtering, papers shifting, distant axes chopping wood and a faraway drum. Calm and focused. No music, no voices. | Far drum is texture, not a documented signal. |
+| **SAR-SFX-001** · scene-scoped `action:control-granted` | transition | `sfx/cavalry-charge.mp3` · SFX | 10s, once; 0.25 / 0.75s | Viewer-centered hoof movement; duck −6 dB; stop at `charge-end` | A cavalry horse at full gallop through a battle: pounding hooves on turf, hard breathing, musket fire crackling in waves left and right, men shouting far off, one bugle note. No music. | Shout and bugle texture stays indistinct and interpretive. |
+
+### Valley Forge
+
+| Cue / trigger | Type | Output · bus | Duration / loop / fades | Spatial / duck / stop | ElevenLabs text-to-sound-effects prompt | Caveat |
+|---|---|---|---|---|---|---|
+| **VAL-AMB-001** · scene start | ambience | `amb/valley-forge-wind.mp3` · ambience | 22s, loop; 1.8s in / 1.5s out | Broad wind; door, axe, coughs separated; duck −6 dB; scene exit | A snowed-in military camp at dusk: steady bitter wind over open snow, a loose wooden door knocking, one distant axe, quiet persistent coughing from inside log huts all around. Bleak and empty. No music, no clear voices. | Coughs are non-verbal texture; drill cadence remains VO-owned. |
+| **VAL-SIL-001** · VAL-060 hold | authored silence | no file · diegetic + SFX | Hold dusk; no added fade | Wind alone | Generation prohibited. No emotional sweetener or music. | Purposeful restraint is the sound identity. |
+
+### Yorktown
+
+| Cue / trigger | Type | Output · bus | Duration / loop / fades | Spatial / duck / stop | ElevenLabs text-to-sound-effects prompt | Caveat |
+|---|---|---|---|---|---|---|
+| **YOR-AMB-001** · scene start | ambience | `amb/siege-camp.mp3` · ambience | 22s, loop; 1.2s in / 1s out | Rain/trench near, cannon distant; duck −6 dB; scene exit | A siege encampment at night in light rain: rain on canvas tents, distant heavy siege cannon firing every few seconds with long rolling echoes, picks and shovels working soil, low wind. No music, no voices. | Cannon is siege context, not an unloaded-musket assault foreground. |
+| **YOR-SFX-001** · scene-scoped `action:control-granted` | diegetic event | `sfx/redoubt-bayonet-assault.mp3` · diegetic | 10s, once; 0.25 / 0.8s | Close movement, restrained impacts; duck −6 dB; stop at `redoubt-taken` | A restrained night assault on an 18th century earthen redoubt in light rain: hurried boots in mud, soldiers climbing timber obstacles, wood splintering, metal bayonets striking wood and equipment, then the activity subsides. Distant and non-graphic. No muskets, no gunshots, no explosions, no music, no speech, no human voices. | Hard invariant: unloaded muskets; reject any gunshot, explosion, voice, or score leakage. |
+| **YOR-SFX-002** · `model-event:assault-end` | transition | `sfx/surrender-drum.mp3` · SFX | 10s, once; 0.5 / 1s | Parapet to distant field; duck −6 dB; stop at `zone-enter:field-walk` | A single military snare drum beating a slow parley signal, alone, echoing over an open field, wind underneath, boots of a marching column faint in the distance. No music, no voices. | Parley drum is supported; exact rhythm/distance are interpretive. |
+
+### Treaty of Paris
+
+| Cue / trigger | Type | Output · bus | Duration / loop / fades | Spatial / duck / stop | ElevenLabs text-to-sound-effects prompt | Caveat |
+|---|---|---|---|---|---|---|
+| **PAR-AMB-001** · scene start | ambience | `amb/paris-studio.mp3` · ambience | 22s, loop; 1.5s in / 1.2s out | Interior; carriage beyond wall; duck −6 dB; stop at `zone-enter:signature-frame` | An 18th century painter's studio: a tall clock ticking, a small coal fire settling, a brush working on stretched canvas, carriage wheels passing outside on cobblestones now and then. Warm, still, interior. No music, no voices. | Reconstructed studio texture, not a documented recording. |
+| **PAR-SIL-001** · `zone-enter:signature-frame` | authored silence | no file · all non-VO buses | Through the 10s aged-signature hold; 1.2s out | Near silence through scene exit | Generation prohibited. No payoff sound or score. | The signature payoff remains wordless; factual void dwells also remain unscored. |
+
 ## Cast (ElevenLabs)
 
 Speaker labels below are the ones `pipeline/vo.mjs` matches on: a line must
