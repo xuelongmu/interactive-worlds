@@ -101,7 +101,8 @@ async function oneTimeChallenge(): Promise<string> {
  * coupling the renderer to a specific challenge provider.
  */
 export function installSessionChallenge(): void {
-  if (!import.meta.env.PROD || installed) return;
+  const disabledForDeployment = import.meta.env.VITE_SESSION_CHALLENGE_MODE === "disabled";
+  if (!import.meta.env.PROD || disabledForDeployment || installed) return;
   installed = true;
   const nativeFetch = window.fetch.bind(window);
 

@@ -46,8 +46,10 @@ type RedisEval = {
 
 type BrokerConfig = {
   reactorApiKey: string;
+  challengeMode: "turnstile" | "preview-bypass";
   turnstileSecretKey: string;
   expectedHostnames: Set<string>;
+  redisNamespace: string;
   redisUrl: string;
   redisToken: string;
   clientHashSecret: string;
@@ -98,6 +100,8 @@ function isHttpsUrl(value: string): boolean {
 
 function configuration(env: ServerEnvironment): BrokerConfig | null {
   const reactorApiKey = env.REACTOR_API_KEY?.trim() ?? "";
+  const previewBypass = env.VERCEL === "1" && env.VERCEL_ENV === "preview" &&
+    env.SESSION_PREVIEW_BYPASS === "1";
   const turnstileSecretKey = env.TURNSTILE_SECRET_KEY?.trim() ?? "";
   const redisUrl = env.UPSTASH_REDIS_REST_URL?.trim() ?? "";
   const redisToken = env.UPSTASH_REDIS_REST_TOKEN?.trim() ?? "";
@@ -112,19 +116,22 @@ function configuration(env: ServerEnvironment): BrokerConfig | null {
   const validHostnames = hostnames.length > 0 && hostnames.every((hostname) =>
     /^[a-z0-9.-]+(?::\d+)?$/i.test(hostname)
   );
+  const validChallengeConfig = previewBypass || (!!turnstileSecretKey && validHostnames);
 
   if (
-    !reactorApiKey || !turnstileSecretKey || !isHttpsUrl(redisUrl) || !redisToken ||
+    !reactorApiKey || !validChallengeConfig || !isHttpsUrl(redisUrl) || !redisToken ||
     clientHashSecret.length < 32 || !clientLimit || !clientWindowSeconds ||
-    !globalDailyLimit || !validHostnames
+    !globalDailyLimit
   ) {
     return null;
   }
 
   return {
     reactorApiKey,
+    challengeMode: previewBypass ? "preview-bypass" : "turnstile",
     turnstileSecretKey,
     expectedHostnames: new Set(hostnames),
+    redisNamespace: previewBypass ? "iw:{session-broker-preview}" : "iw:{session-broker}",
     redisUrl,
     redisToken,
     clientHashSecret,
@@ -211,13 +218,12 @@ async function admit(
     hmacHex(config.clientHashSecret, address),
   ]);
   const day = now.toISOString().slice(0, 10);
-  const namespace = "iw:{session-broker}";
   const result = await redis.eval(
     ADMISSION_SCRIPT,
     [
-      `${namespace}:challenge:${challengeHash}`,
-      `${namespace}:client:${clientHash}`,
-      `${namespace}:global:${day}`,
+      `${config.redisNamespace}:challenge:${challengeHash}`,
+      `${config.redisNamespace}:client:${clientHash}`,
+      `${config.redisNamespace}:global:${day}`,
     ],
     [
       config.clientLimit,
@@ -259,38 +265,47 @@ export async function handleSessionRequest(
     return json(400, { error: "client address unavailable" });
   }
 
-  let challengeToken = "";
-  try {
-    const body = await request.json() as { challengeToken?: unknown };
-    if (typeof body.challengeToken === "string") challengeToken = body.challengeToken.trim();
-  } catch {
-    return json(400, { error: "invalid request" });
-  }
-  if (!challengeToken || challengeToken.length > 2048) {
-    return json(400, { error: "challenge required" });
-  }
-
   const fetchImpl = options.fetchImpl ?? fetch;
-  let challengeValid = false;
-  try {
-    challengeValid = await validateChallenge(
-      challengeToken,
-      address,
-      config,
-      fetchImpl,
-      options.randomUUID ?? (() => crypto.randomUUID())
-    );
-  } catch {
-    return json(502, { error: "challenge verification unavailable" });
-  }
-  if (!challengeValid) {
-    return json(403, { error: "challenge rejected" });
+  const randomUUID = options.randomUUID ?? (() => crypto.randomUUID());
+  let admissionProof: string;
+  if (config.challengeMode === "preview-bypass") {
+    // Deployment Protection authenticates preview viewers. A server-generated
+    // nonce keeps preview admission independent from production challenge keys.
+    admissionProof = `preview:${randomUUID()}`;
+  } else {
+    let challengeToken = "";
+    try {
+      const body = await request.json() as { challengeToken?: unknown };
+      if (typeof body.challengeToken === "string") challengeToken = body.challengeToken.trim();
+    } catch {
+      return json(400, { error: "invalid request" });
+    }
+    if (!challengeToken || challengeToken.length > 2048) {
+      return json(400, { error: "challenge required" });
+    }
+
+    let challengeValid = false;
+    try {
+      challengeValid = await validateChallenge(
+        challengeToken,
+        address,
+        config,
+        fetchImpl,
+        randomUUID
+      );
+    } catch {
+      return json(502, { error: "challenge verification unavailable" });
+    }
+    if (!challengeValid) {
+      return json(403, { error: "challenge rejected" });
+    }
+    admissionProof = challengeToken;
   }
 
   const redis = options.redis ?? new Redis({ url: config.redisUrl, token: config.redisToken });
   let admission: Admission;
   try {
-    admission = await admit(challengeToken, address, config, redis, options.now?.() ?? new Date());
+    admission = await admit(admissionProof, address, config, redis, options.now?.() ?? new Date());
   } catch {
     return json(503, { error: "session service unavailable" });
   }

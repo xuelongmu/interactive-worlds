@@ -13,13 +13,30 @@ build. The Turnstile **site key** is intentionally public; it is not a secret.
 2. Keep the build settings from `revolution/vercel.json`: `npm run build` and
    output directory `dist`.
 3. Complete the Turnstile and Redis setup below, then add every required
-   production environment variable. Add the full set to Preview only when live
-   paid sessions from previews are intentional.
+   production environment variable. Use the narrower authenticated-preview
+   configuration below only when live paid sessions from previews are
+   intentional.
 4. Deploy. Verify that `GET /api/session` returns `405`, an unchallenged POST is
    rejected, and a missing policy variable makes POST fail closed with `503`.
 5. Open `/`, `/spikes/splat/`, and `/spikes/worldmodel/`. In the world-model
    spike, connect, wait for moving video, and verify WASD/arrows affect the
    stream before disconnecting. A token response alone does not prove WebRTC.
+
+### Authenticated preview sessions
+
+Preview deployments may skip Turnstile only while Vercel Authentication stays
+enabled. Configure `SESSION_PREVIEW_BYPASS=1` and
+`VITE_SESSION_CHALLENGE_MODE=disabled` in the Vercel **Preview** environment,
+never Production. The API accepts the bypass only when Vercel also supplies
+`VERCEL=1` and `VERCEL_ENV=preview`; the public browser flag cannot enable the
+server bypass by itself.
+
+Preview still requires `REACTOR_API_KEY`, both Upstash values, a distinct
+`SESSION_CLIENT_HASH_SECRET`, and all three explicit limits. Use stricter
+limits than production. Preview counters use `iw:{session-broker-preview}` so
+they cannot consume production's Redis counters, although successful preview
+requests still consume Reactor capacity. Removing either bypass variable makes
+preview fail closed again.
 
 ## Paid-session abuse controls
 
@@ -54,6 +71,8 @@ durable Upstash Redis database. Configure these values in Vercel:
 | `SESSION_CLIENT_WINDOW_SECONDS` | server config | fixed-window duration |
 | `SESSION_GLOBAL_DAILY_LIMIT` | server config | maximum admitted tokens per UTC day |
 | `REACTOR_API_KEY` | server secret | Reactor token-mint credential |
+| `SESSION_PREVIEW_BYPASS` | preview-only server config | explicitly permits the server bypass on authenticated Vercel previews |
+| `VITE_SESSION_CHALLENGE_MODE` | preview-only public build value | set to `disabled` so preview clients do not request a challenge |
 
 There are deliberately no code defaults for the three limits. Pick values from
 the account's real concurrency/spend tolerance (for example, a small number of

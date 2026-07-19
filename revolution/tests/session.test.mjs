@@ -15,6 +15,15 @@ const ENV = {
   SESSION_GLOBAL_DAILY_LIMIT: "100",
 };
 
+const PREVIEW_ENV = {
+  ...ENV,
+  VERCEL: "1",
+  VERCEL_ENV: "preview",
+  SESSION_PREVIEW_BYPASS: "1",
+  TURNSTILE_SECRET_KEY: "",
+  TURNSTILE_EXPECTED_HOSTNAMES: "",
+};
+
 const sessionRequest = ({ method = "POST", token = "one-time-challenge", ip = "203.0.113.9" } = {}) => {
   const headers = new Headers({ "content-type": "application/json" });
   if (ip) headers.set("x-vercel-forwarded-for", ip);
@@ -25,7 +34,12 @@ const sessionRequest = ({ method = "POST", token = "one-time-challenge", ip = "2
   });
 };
 
-function services({ turnstile = {}, admission = [1, "ok", 1, 1], reactor = {} } = {}) {
+function services({
+  turnstile = {},
+  admission = [1, "ok", 1, 1],
+  reactor = {},
+  redisNamespace = "iw:{session-broker}",
+} = {}) {
   const calls = { turnstile: 0, redis: 0, reactor: 0 };
   const fetchImpl = async (url, init) => {
     if (String(url).includes("turnstile")) {
@@ -51,6 +65,7 @@ function services({ turnstile = {}, admission = [1, "ok", 1, 1], reactor = {} } 
       calls.redis += 1;
       assert.match(script, /redis\.call\("EXISTS", replay\)/);
       assert.equal(keys.length, 3);
+      assert.equal(keys.every((key) => key.startsWith(`${redisNamespace}:`)), true);
       assert.equal(keys.some((key) => key.includes("203.0.113.9")), false);
       assert.equal(keys.some((key) => key.includes("one-time-challenge")), false);
       assert.deepEqual(args.slice(0, 3), [2, 600, 100]);
@@ -106,6 +121,31 @@ test("requires Vercel's trusted client address before validation", async () => {
 
   assert.equal(response.status, 400);
   assert.deepEqual(mock.calls, { turnstile: 0, redis: 0, reactor: 0 });
+});
+
+test("allows an explicitly configured Vercel preview without Turnstile", async () => {
+  const mock = services({ redisNamespace: "iw:{session-broker-preview}" });
+  const nativePreviewRequest = new Request("https://preview.example.test/api/session", {
+    method: "POST",
+    headers: { "x-vercel-forwarded-for": "203.0.113.9" },
+  });
+  const response = await handleSessionRequest(nativePreviewRequest, options(mock, PREVIEW_ENV));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(mock.calls, { turnstile: 0, redis: 1, reactor: 1 });
+});
+
+test("never enables the preview bypass outside an explicitly configured Vercel preview", async () => {
+  for (const env of [
+    { ...PREVIEW_ENV, VERCEL: "" },
+    { ...PREVIEW_ENV, VERCEL_ENV: "production" },
+    { ...PREVIEW_ENV, SESSION_PREVIEW_BYPASS: "" },
+  ]) {
+    const mock = services();
+    const response = await handleSessionRequest(sessionRequest(), options(mock, env));
+    assert.equal(response.status, 503);
+    assert.deepEqual(mock.calls, { turnstile: 0, redis: 0, reactor: 0 });
+  }
 });
 
 test("rejects a missing play challenge before any external call", async () => {
