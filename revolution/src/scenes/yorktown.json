@@ -31,7 +31,7 @@
     { "id": "YOR-060", "trigger": { "type": "model-event", "name": "assault-end", "orTimer": 150 },
       "subtitle": "October 19th, 1781. The British army marches out between two lines — French on one side, American on the other — a mile long, to a field where the weapons are laid down. Legend says their bands played a tune called The World Turned Upside Down.",
       "then": "settle:splat" },
-    { "id": "YOR-070", "trigger": { "type": "zone-enter", "zone": "field-walk", "orAfterPrevious": 10 },
+    { "id": "YOR-070", "trigger": { "type": "zone-enter", "zone": "field-walk" },
       "guidance": "Walk out onto the surrender field.",
       "subtitle": "Cornwallis did not come. He sent his sword out with a deputy, who tried to surrender it to the French commander first. Rochambeau pointed across the road, to Washington. Washington directed him to his own deputy. The forms mattered, that day." },
     { "id": "YOR-080", "trigger": { "type": "zone-enter", "zone": "field-end", "orTimer": 210, "orAfterPrevious": 12 },
