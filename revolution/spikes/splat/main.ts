@@ -37,6 +37,10 @@ async function assetExists(url: string): Promise<boolean> {
 }
 
 let resolvedSplat = splatUrl ?? manifest.assets.splat;
+if (splatUrl && !colliderUrl) {
+  // reviewing a custom take: never raycast it against the Lexington collider
+  delete manifest.assets.collider;
+}
 if (!splatUrl && !(await assetExists(manifest.assets.splat!))) {
   resolvedSplat = FALLBACK_SPLAT;
   usingFallback = true;
@@ -79,8 +83,11 @@ const cueEngine = new CueEngine(manifest.cues, {
     }),
   action: (cue) => {
     cueLog.unshift(cue.id + (cue.then ? ` → ${cue.then}` : ""));
-    if (cue.lockControls) {
-      scene.controlsLocked = true;
+    if (cue.lockControls) scene.controlsLocked = true;
+  },
+  // `then:` transitions wait for the line to finish (audio-first contract)
+  after: (cue) => {
+    if (cue.then === "cutscene:volley") {
       // Spike stand-in for the volley cutscene: hold black 3s, then aftermath cues.
       setTimeout(() => {
         scene.controlsLocked = false;

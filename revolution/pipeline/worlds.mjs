@@ -7,7 +7,7 @@
  *    node pipeline/worlds.mjs lexington       # one scene
  *    node pipeline/worlds.mjs lexington --world-id <id>   # adopt an existing world
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { requireKey, projectRoot, download, pollUntil } from "./lib.mjs";
 import { worlds } from "./worlds.config.mjs";
@@ -108,9 +108,13 @@ async function generateWorld(entry) {
   await download(spzUrl, `public/assets/worlds/${entry.scene}.spz`);
 
   const colliderUrl = world.assets?.mesh?.collider_mesh_url;
+  const colliderPath = resolve(projectRoot, `public/assets/worlds/${entry.scene}-collider.glb`);
   if (colliderUrl) {
     await download(colliderUrl, `public/assets/worlds/${entry.scene}-collider.glb`);
   } else {
+    // remove any stale collider from a previous take so the renderer really
+    // does fall back to flat ground rather than raycasting the wrong world
+    if (existsSync(colliderPath)) rmSync(colliderPath);
     console.log("  (no collider mesh on this world — scene falls back to flat ground)");
   }
 
@@ -129,7 +133,15 @@ if (selected.length === 0) {
 }
 for (const entry of selected) {
   const already = existsSync(resolve(projectRoot, `public/assets/worlds/${entry.scene}.spz`));
-  if (already && !worldIdFlag) {
+  // A local asset only counts if it came from the currently pinned world —
+  // pinning a new take in worlds.config.mjs must trigger a re-download.
+  let localWorldId = null;
+  const metaPath = resolve(projectRoot, `public/assets/worlds/${entry.scene}.meta.json`);
+  if (existsSync(metaPath)) {
+    try { localWorldId = JSON.parse(readFileSync(metaPath, "utf8")).worldId ?? null; } catch { /* refetch */ }
+  }
+  const pinMatches = !entry.worldId || entry.worldId === localWorldId;
+  if (already && !worldIdFlag && pinMatches) {
     console.log(`${entry.scene}: asset exists, skipping (delete the .spz to regenerate)`);
     continue;
   }

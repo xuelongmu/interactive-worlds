@@ -81,6 +81,7 @@ for (const frame of frames) {
   const url = body.images?.[0]?.url;
   if (!url) throw new Error(`no image url in fal response: ${JSON.stringify(body).slice(0, 300)}`);
   const image = await fetch(url);
+  if (!image.ok) throw new Error(`image download failed for ${frame.file}: ${image.status}`);
   writeFileSync(resolve(outDir, frame.file), Buffer.from(await image.arrayBuffer()));
   console.log(`  ✓ public/reference/${frame.file}`);
   cache[frame.file] = signature;

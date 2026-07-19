@@ -29,8 +29,18 @@ export class WorldModelSession {
     lookV: "idle" as LookV,
   };
   private unsubscribes: (() => void)[] = [];
+  /** Serializes input commands so a stale movement/look update can never
+   *  resolve after (and override) a newer one. */
+  private commandChain: Promise<void> = Promise.resolve();
   /** timestamps for command->chunk latency measurement (spike HUD) */
   lastCommandAt = 0;
+
+  private enqueue(send: () => Promise<void>): Promise<void> {
+    this.commandChain = this.commandChain
+      .then(send)
+      .catch((error) => console.warn("[worldmodel] command failed:", error));
+    return this.commandChain;
+  }
 
   constructor(private opts: WorldModelOptions) {
     this.model = new LingbotWorld2Model();
@@ -125,12 +135,12 @@ export class WorldModelSession {
     if (longitudinal !== this.current.longitudinal) {
       this.current.longitudinal = longitudinal;
       this.lastCommandAt = performance.now();
-      await this.model.setMoveLongitudinal({ move_longitudinal: longitudinal });
+      await this.enqueue(() => this.model.setMoveLongitudinal({ move_longitudinal: longitudinal }));
     }
     if (lateral !== this.current.lateral) {
       this.current.lateral = lateral;
       this.lastCommandAt = performance.now();
-      await this.model.setMoveLateral({ move_lateral: lateral });
+      await this.enqueue(() => this.model.setMoveLateral({ move_lateral: lateral }));
     }
   }
 
@@ -138,12 +148,12 @@ export class WorldModelSession {
     if (h !== this.current.lookH) {
       this.current.lookH = h;
       this.lastCommandAt = performance.now();
-      await this.model.setLookHorizontal({ look_horizontal: h });
+      await this.enqueue(() => this.model.setLookHorizontal({ look_horizontal: h }));
     }
     if (v !== this.current.lookV) {
       this.current.lookV = v;
       this.lastCommandAt = performance.now();
-      await this.model.setLookVertical({ look_vertical: v });
+      await this.enqueue(() => this.model.setLookVertical({ look_vertical: v }));
     }
   }
 
@@ -172,11 +182,19 @@ export function bindWorldModelKeys(session: WorldModelSession): () => void {
     void session.setMovement(longitudinal, lateral);
     void session.setLook(lookH, lookV);
   };
+  const inFormField = (e: KeyboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    return !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+  };
   const down = (e: KeyboardEvent) => {
+    if (inFormField(e)) return;
     if (e.code.startsWith("Arrow")) e.preventDefault();
     keys.add(e.code); apply();
   };
-  const up = (e: KeyboardEvent) => { keys.delete(e.code); apply(); };
+  const up = (e: KeyboardEvent) => {
+    if (inFormField(e)) return;
+    keys.delete(e.code); apply();
+  };
   document.addEventListener("keydown", down);
   document.addEventListener("keyup", up);
   return () => {

@@ -66,7 +66,8 @@ for (const cue of cues) {
   if (!res.ok) throw new Error(`tts failed for ${cue.id}: ${res.status} ${await res.text()}`);
   writeFileSync(resolve(OUT_DIR, `${cue.id}.mp3`), Buffer.from(await res.arrayBuffer()));
   cache[cue.id] = signature;
+  // persist after every paid call so a mid-run failure never re-bills done cues
+  saveCache(CACHE_FILE, cache);
   generated++;
 }
-saveCache(CACHE_FILE, cache);
 console.log(`done — ${generated} generated, ${cues.length - generated} cached`);

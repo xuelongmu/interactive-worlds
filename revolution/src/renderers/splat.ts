@@ -29,7 +29,9 @@ export class SplatScene {
   private insideZones = new Set<string>();
   private zoneBoxes: { def: ZoneDef; box: THREE.Box3 }[] = [];
   private debugGroup = new THREE.Group();
-  private collider: THREE.Mesh | null = null;
+  /** whole collider scene — Marble colliders can contain multiple meshes */
+  private collider: THREE.Object3D | null = null;
+  private colliderMeshes: THREE.Mesh[] = [];
   private raycaster = new THREE.Raycaster();
   private eyeHeight: number;
   private speed: number;
@@ -41,13 +43,16 @@ export class SplatScene {
 
   /** Shift the world so the collider ground under the origin sits at y=0.
    *  The world origin is the capture camera at roughly eye height, so cast
-   *  from just above it — casting from the sky hits tree canopy instead. */
+   *  from just above it — casting from the sky hits tree canopy instead.
+   *  Idempotent (resets any previous shift first) because the metric-scale
+   *  metadata and the collider mesh load in either order. */
   private alignGroundToOrigin() {
     if (!this.collider) return;
+    this.worldGroup.position.y = 0;
     this.worldGroup.updateMatrixWorld(true);
     this.raycaster.set(new THREE.Vector3(0, 0.5, 0), new THREE.Vector3(0, -1, 0));
     this.raycaster.far = 100;
-    const hit = this.raycaster.intersectObject(this.collider, false)[0];
+    const hit = this.raycaster.intersectObject(this.collider, true)[0];
     if (hit) {
       this.worldGroup.position.y -= hit.point.y;
       console.info(`[splat] ground aligned (shifted ${(-hit.point.y).toFixed(2)}m)`);
@@ -60,6 +65,7 @@ export class SplatScene {
     const { container, manifest } = opts;
     this.eyeHeight = manifest.locomotion?.eyeHeight ?? 1.65;
     this.speed = manifest.locomotion?.speed ?? 1.4; // slow, deliberate walk
+    this.yaw = manifest.entry?.yaw ?? 0;
     this.yaw = manifest.entry?.yaw ?? 0;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -94,6 +100,8 @@ export class SplatScene {
           if (meta?.metric_scale_factor) {
             this.worldGroup.scale.setScalar(meta.metric_scale_factor);
             console.info(`[splat] metric scale ×${meta.metric_scale_factor.toFixed(2)}`);
+            // meta and collider load in either order — re-align on both.
+            this.alignGroundToOrigin();
           }
         })
         .catch(() => undefined);
@@ -103,14 +111,15 @@ export class SplatScene {
     if (colliderUrl) {
       new GLTFLoader().load(colliderUrl, (gltf) => {
         gltf.scene.traverse((node) => {
-          if (this.collider === null && node instanceof THREE.Mesh) {
+          if (node instanceof THREE.Mesh) {
             node.visible = false;
             (node.material as THREE.Material & { wireframe?: boolean }).wireframe = true;
-            this.collider = node;
+            this.colliderMeshes.push(node);
           }
         });
         // Collider shares the splat's source frame — same flip.
         gltf.scene.quaternion.set(1, 0, 0, 0);
+        this.collider = gltf.scene;
         this.worldGroup.add(gltf.scene);
         this.alignGroundToOrigin();
       });
@@ -154,7 +163,7 @@ export class SplatScene {
     this.keys.add(e.code);
     if (e.code === "KeyZ") {
       this.debugGroup.visible = !this.debugGroup.visible;
-      if (this.collider) this.collider.visible = this.debugGroup.visible;
+      for (const mesh of this.colliderMeshes) mesh.visible = this.debugGroup.visible;
     }
   };
   private onKeyUp = (e: KeyboardEvent) => this.keys.delete(e.code);
@@ -191,7 +200,8 @@ export class SplatScene {
         this.camera.position.clone().setY(this.camera.position.y + 2),
         new THREE.Vector3(0, -1, 0)
       );
-      const hit = this.raycaster.intersectObject(this.collider, false)[0];
+      this.raycaster.far = 100;
+      const hit = this.raycaster.intersectObject(this.collider, true)[0];
       if (hit) this.camera.position.y = hit.point.y + this.eyeHeight;
     } else {
       this.camera.position.y = this.eyeHeight;
