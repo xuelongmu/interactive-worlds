@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "node --test --experimental-strip-types src/*.test.mjs src/engine/*.test.mjs && vitest run src/engine/audio.test.ts src/engine/cues.test.ts src/engine/director.test.ts src/renderers/worldmodel.test.ts src/scenes/diegetic-vo.test.ts",
     "build": "vite build",
     "preview": "vite preview",
     "test:server": "node --test tests/session.test.mjs",
@@ -13,8 +14,7 @@
     "pipeline:sfx": "node pipeline/sfx.mjs",
     "pipeline:lexington-volley": "node pipeline/lexington-volley.mjs",
     "pipeline:worlds": "node pipeline/worlds.mjs",
-    "pipeline:models": "node pipeline/models.mjs",
-    "test": "vitest run src"
+    "pipeline:models": "node pipeline/models.mjs"
   },
   "dependencies": {
     "@reactor-models/lingbot-world-2": "^0.3.3",
