@@ -5,6 +5,7 @@ import type {
   RuntimePauseDetail,
   SceneManifest,
 } from "./types";
+import type { BranchPresentationState } from "../branch-state";
 import { CueEngine } from "./cues";
 import { AudioEngine, type BusName } from "./audio";
 import { assetExists, preloadSceneAssets } from "./assets";
@@ -36,6 +37,8 @@ interface Runner {
   setPaused(paused: boolean): void;
   /** current rendered frame, for splat -> world-model conditioning */
   captureFrame?(): Promise<Blob | null>;
+  /** Canonical action/acknowledgement for the active branch interaction. */
+  getBranchPresentation?(): BranchPresentationState;
 }
 
 export type DirectorExitTarget = "title" | "chapters" | "settings";
@@ -101,9 +104,18 @@ export function canPrewarmWorldModelTarget(
 export function controlHandoffForScene(
   sceneId: string,
   transitionKey: number,
-  detail: Omit<ControlHandoffDetail, "sceneId" | "transitionKey">
+  detail: Omit<ControlHandoffDetail, "sceneId" | "transitionKey">,
+  presentation?: BranchPresentationState | null
 ): ControlHandoffDetail {
-  return { sceneId, transitionKey, ...detail };
+  const handoff = { sceneId, transitionKey, ...detail };
+  if (!presentation) return handoff;
+  return {
+    ...handoff,
+    action: presentation.action,
+    ...(presentation.acknowledgement === null
+      ? {}
+      : { acknowledgement: presentation.acknowledgement }),
+  };
 }
 
 const SYSTEM_ACTIONS = new Set([
@@ -380,7 +392,12 @@ export class Director {
     if (!this.current) return;
     this.activeRenderer = detail.renderer;
     this.opts.onControlHandoff?.(
-      controlHandoffForScene(this.current.id, this.controlTransitionKey, detail)
+      controlHandoffForScene(
+        this.current.id,
+        this.controlTransitionKey,
+        detail,
+        this.runner?.getBranchPresentation?.()
+      )
     );
   }
 
