@@ -38,10 +38,14 @@ entry in the pipeline's `CAST` map, or its lines are skipped with a warning.
 | BOSUN | Tea Party, on deck (TEA-050) | Chris — Boston, non-rhotic | Low, urgent whisper passed within the work party. Controlled and conspiratorial, not shouted. |
 | MARINER | Delaware, Marblehead fisherman (DEL-020 + bark pool) | Harry — Fierce Warrior | Shouted over wind and ice. Competent and unbothered; this is his trade. |
 | SERGEANT | Trenton, in the column (TRE-020) | George — War-torn Sergeant | Barked, urgent. Driving tired men toward gunfire. |
+| DRILLMASTER | Valley Forge parade ground (bark pool) | Commander Blake — option A | Projected drill cadence across the snow in French, German, and deliberately broken English; distant and half-lost in wind. |
+| OFFICER | Yorktown, Redoubt 10 (YOR-041) | Callum — option C | Whispered with audible breath and terse command authority at close range; never narration or horror color. |
 
-Voice ids live in `revolution/.env` (`ELEVENLABS_<SPEAKER>_VOICE_ID`); delivery
-and per-speaker v3 audio tags live in the `CAST` map in `pipeline/vo.mjs`, so
-the prose here stays clean for subtitle use.
+Round-one voice ids live in `revolution/.env`
+(`ELEVENLABS_<SPEAKER>_VOICE_ID`). The director-approved round-two voice ids,
+delivery, v3 audio tags, and frozen-take hashes live in the `CAST` map in
+`pipeline/vo.mjs`, so the prose here stays clean for subtitle use and the
+selected audition bytes cannot be silently regenerated.
 
 ---
 
@@ -262,6 +266,13 @@ from inside the huts — quiet, constant, everywhere. No music.
 **VAL-050 — dwell on the parade ground, 4s**
 > NARRATOR: In February a Prussian officer arrived — Baron von Steuben, lately of Frederick the Great's staff. He spoke no English. He drilled them anyway, a hundred men at a time, swearing in three languages. By spring, the survivors could maneuver like professionals.
 
+**Event barks — diegetic, repeatable drill sequence across the parade ground:**
+> DRILLMASTER: En avant — marche!
+> DRILLMASTER: Halte! Alignez-vous!
+> DRILLMASTER: Rechts um!
+> DRILLMASTER: Schultert das Gewehr!
+> DRILLMASTER: Quick! Make ready — again!
+
 **VAL-060 — player reaches the far edge of camp. Final beat; hold the dusk.**
 > NARRATOR: The army marched out of Valley Forge in June, into a war it would not lose. No battle was fought here; nothing was decided. The army survived the winter, and the revolution survived with it.
 
@@ -288,6 +299,10 @@ one drum, boots on a road, and wind.
 
 **YOR-040 — night falls on the table; wake into the assault burst**
 > NARRATOR: October 14th. The redoubts will be taken tonight, by bayonet, in darkness. The muskets go in unloaded — a single accidental shot would warn the whole line. The Americans take number ten. Their commander is a twenty-six-year-old colonel named Alexander Hamilton.
+
+**YOR-041 — movement two begins; whispered immediately before the advance**
+> OFFICER: No shot. Bayonets only.
+> OFFICER: Keep low. Follow close.
 
 **YOR-050 — redoubt-taken event: the burst peaks, then quiet**
 > NARRATOR: The allied guns move into the new line, and from there they can reach every square yard of the town. Three days later, a British drummer climbs onto the parapet and beats for a parley.

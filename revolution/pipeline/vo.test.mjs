@@ -16,8 +16,12 @@ function run(...args) {
 test("dry-run still parses the complete cast", () => {
   const result = run("--dry-run");
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /parsed 69 spoken lines/);
-  assert.match(result.stdout, /NARRATOR 63, BOSUN 1, MARINER 4, SERGEANT 1/);
+  assert.match(result.stdout, /parsed 76 spoken lines/);
+  assert.match(
+    result.stdout,
+    /NARRATOR 63, BOSUN 1, MARINER 4, SERGEANT 1, DRILLMASTER 5, OFFICER 2/
+  );
+  assert.doesNotMatch(result.stdout + result.stderr, /unknown speaker/);
 });
 
 test("--only selects one exact spoken line without credentials", () => {
@@ -41,4 +45,13 @@ test("a bare line id is rejected instead of starting a full paid run", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /unknown argument\(s\): TEA-050\.bosun/);
   assert.doesNotMatch(result.stdout + result.stderr, /ELEVENLABS_API_KEY/);
+});
+
+test("round-two frozen lines have stable distinct ids without credentials", () => {
+  for (const id of ["VAL-BARK-5", "YOR-041.officer", "YOR-041.officer-2"]) {
+    const result = run("--dry-run", "--only", id);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, new RegExp(`selected ${id.replaceAll(".", "\\.")}`));
+    assert.doesNotMatch(result.stdout + result.stderr, /ELEVENLABS_API_KEY/);
+  }
 });

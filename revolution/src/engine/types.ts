@@ -94,6 +94,23 @@ export interface RuntimePauseDetail {
   canResumePointerInput: boolean;
 }
 
+export interface ListenerPose {
+  position: [number, number, number];
+  forward: [number, number, number];
+  up: [number, number, number];
+}
+
+export interface BarkDef {
+  url: string;
+  /** Fixed source position in scene-local meters. Omit for non-spatial barks. */
+  position?: [number, number, number];
+  /** Random delay range before each repetition. Defaults to 18–35 seconds. */
+  intervalSeconds?: [number, number];
+  refDistance?: number;
+  maxDistance?: number;
+  rolloffFactor?: number;
+}
+
 export interface SceneManifest {
   id: string;
   title: string;
@@ -116,9 +133,8 @@ export interface SceneManifest {
   cues: Cue[];
   audio: {
     ambience?: string[];
-    /** repeatable diegetic bark pool, played at random intervals (vo.mjs
-     *  emits `<SCENE>-BARK-N.mp3`) */
-    barks?: string[];
+    /** repeatable diegetic bark pool, optionally positioned in scene space */
+    barks?: (string | BarkDef)[];
   };
   /** scripted world-model beats: seconds into the scene -> model-event name + steering prompt */
   modelEvents?: { at: number; name: string; prompt?: string }[];

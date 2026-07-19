@@ -1,0 +1,60 @@
+{
+  "issue": "https://github.com/xuelongmu/interactive-worlds/issues/27",
+  "decision": "https://github.com/xuelongmu/interactive-worlds/issues/27#issuecomment-5017168767",
+  "approvalStatus": "director-approved",
+  "approvedAt": "2026-07-19",
+  "modelId": "eleven_v3",
+  "outputFormat": "mp3_44100_128",
+  "sourceHandoff": "review-artifacts/interactive-worlds/issue-27/american-revolution-casting-round-two-2026-07-19/takes",
+  "roles": [
+    {
+      "speaker": "DRILLMASTER",
+      "selection": "A — Commander Blake",
+      "voiceId": "Z2yQ1EdlDmcIgh9Pn4Lw",
+      "tag": "[shouting]",
+      "settings": {
+        "stability": 0.5,
+        "similarity_boost": 0.75,
+        "style": 0.6
+      },
+      "lines": [
+        "En avant — marche!",
+        "Halte! Alignez-vous!",
+        "Rechts um!",
+        "Schultert das Gewehr!",
+        "Quick! Make ready — again!"
+      ],
+      "sourceFilename": "drillmaster-a-blake.mp3",
+      "runtimeFilename": "VAL-DRILLMASTER.mp3",
+      "cdnPath": "/assets/audio/vo/VAL-DRILLMASTER.mp3",
+      "sha256": "5cf7e3a52228bf001bef8896f00c255dd2018e86f4ca3edef866363c9668b2f3",
+      "bytes": 183946,
+      "durationSeconds": 11.44,
+      "provenance": "Exact frozen audition take selected by the director; copied byte-for-byte with no regeneration or audio processing.",
+      "runtimeNotes": "One five-command cadence sequence, repeated as a positionally attenuated Valley Forge bark-pool entry across the parade ground. Commands are dramatized, not attributed quotations."
+    },
+    {
+      "speaker": "OFFICER",
+      "selection": "C — Callum",
+      "voiceId": "N2lVS1w4EtoT3dr4eOWO",
+      "tag": "[whispers]",
+      "settings": {
+        "stability": 0.5,
+        "similarity_boost": 0.75,
+        "style": 0.35
+      },
+      "lines": [
+        "No shot. Bayonets only.",
+        "Keep low. Follow close."
+      ],
+      "sourceFilename": "officer-c-callum.mp3",
+      "runtimeFilename": "YOR-041.officer.mp3",
+      "cdnPath": "/assets/audio/vo/YOR-041.officer.mp3",
+      "sha256": "e6a0f1cc87955a590f59e2ad347a4bd6fa6a3cb0f02f589b418cea00a7d67261",
+      "bytes": 94502,
+      "durationSeconds": 5.84,
+      "provenance": "Exact frozen audition take selected by the director; copied byte-for-byte with no regeneration or audio processing.",
+      "runtimeNotes": "Two whispered movement-two commands play as one frozen cue immediately before the Redoubt 10 world-model handoff. Commands are dramatized, not attributed quotations."
+    }
+  ]
+}
