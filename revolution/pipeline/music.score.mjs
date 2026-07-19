@@ -16,6 +16,8 @@ import { fileURLToPath } from "node:url";
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const SELECTED_TAKE_SHA256 =
   "a9e526b4bc6745366ce25d767825caa5e5521edc3a2f98c628ee216776fdbc15";
+export const SELECTED_TAKE_ID = "b-ink-and-string";
+export const SELECTED_TAKE_DURATION_SECONDS = 36.024;
 export const DEFAULT_SOURCE = "artifacts/music-theme-candidates/takes/b-ink-and-string.mp3";
 export const OUTPUT_DIR = "public/assets/audio/music";
 
@@ -29,6 +31,40 @@ export const SCORE_CUES = Object.freeze([
 
 export function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+export const SCORE_PLAN_SHA256 = sha256(JSON.stringify({
+  selectedTake: SELECTED_TAKE_ID,
+  selectedTakeSha256: SELECTED_TAKE_SHA256,
+  selectedTakeDurationSeconds: SELECTED_TAKE_DURATION_SECONDS,
+  cues: SCORE_CUES,
+}));
+
+export const SCORE_OUTPUT_PLAN = Object.freeze([
+  { id: "main-title", file: "main-title.mp3", durationSeconds: SELECTED_TAKE_DURATION_SECONDS },
+  ...SCORE_CUES.map(({ id, duration }) => ({
+    id,
+    file: `${id}.mp3`,
+    durationSeconds: duration,
+  })),
+]);
+
+export function validateScoreManifestPlan(manifest) {
+  if (manifest.selectedTake !== SELECTED_TAKE_ID ||
+      manifest.selectedTakeSha256 !== SELECTED_TAKE_SHA256 ||
+      manifest.scorePlanSha256 !== SCORE_PLAN_SHA256) {
+    throw new Error("score manifest does not match the selected take and committed score plan");
+  }
+  if (!Array.isArray(manifest.outputs) || manifest.outputs.length !== SCORE_OUTPUT_PLAN.length) {
+    throw new Error("score manifest output list does not match the committed score plan");
+  }
+  for (const [index, expected] of SCORE_OUTPUT_PLAN.entries()) {
+    const actual = manifest.outputs[index];
+    if (actual?.id !== expected.id || actual?.file !== expected.file ||
+        actual?.durationSeconds !== expected.durationSeconds) {
+      throw new Error(`score manifest output does not match plan: ${expected.id}`);
+    }
+  }
 }
 
 export function parseArgs(argv) {
@@ -105,8 +141,9 @@ export function buildScore(source) {
   }
 
   const manifest = {
-    selectedTake: "b-ink-and-string",
+    selectedTake: SELECTED_TAKE_ID,
     selectedTakeSha256: SELECTED_TAKE_SHA256,
+    scorePlanSha256: SCORE_PLAN_SHA256,
     sourceFile: basename(sourcePath),
     outputs: outputs.map(({ id, path }) => ({
       id,
@@ -126,6 +163,7 @@ export function auditScore(source) {
   const manifestPath = resolve(outputDir, "score-manifest.json");
   if (!existsSync(manifestPath)) throw new Error("score manifest missing; run --build first");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  validateScoreManifestPlan(manifest);
   for (const output of manifest.outputs) {
     const path = resolve(outputDir, output.file);
     if (!existsSync(path)) throw new Error(`score output missing: ${output.file}`);

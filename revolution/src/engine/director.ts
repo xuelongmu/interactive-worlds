@@ -363,14 +363,6 @@ export class Director {
         },
       });
       this.cueEngine = cueEngine;
-      this.updateTimer = window.setInterval(() => {
-        if (!this.paused) {
-          cueEngine.update(0.1);
-          const pose = this.runner?.getAudioListenerPose?.();
-          if (pose) this.audio.setListenerPose(pose);
-        }
-      }, 100);
-
       // The chapter sting owns the card by itself. Only after it ends may
       // ambience and narration begin; the latter then continues over black
       // while the renderer loads.
@@ -379,6 +371,13 @@ export class Director {
       // narration over black is the loading screen — start the scene now
       if (startCueId) cueEngine.startAt(startCueId);
       else this.emitEngineEvent({ type: "scene-start" });
+      this.updateTimer = window.setInterval(() => {
+        if (!this.paused) {
+          cueEngine.update(0.1);
+          const pose = this.runner?.getAudioListenerPose?.();
+          if (pose) this.audio.setListenerPose(pose);
+        }
+      }, 100);
 
       const minHold = new Promise((r) => setTimeout(r, 2500));
       await Promise.all([this.createRunner(manifest), minHold]);

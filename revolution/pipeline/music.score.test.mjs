@@ -6,8 +6,12 @@ import { fileURLToPath } from "node:url";
 import {
   DEFAULT_SOURCE,
   SCORE_CUES,
+  SCORE_OUTPUT_PLAN,
+  SCORE_PLAN_SHA256,
+  SELECTED_TAKE_ID,
   SELECTED_TAKE_SHA256,
   parseArgs,
+  validateScoreManifestPlan,
 } from "./music.score.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -43,6 +47,24 @@ test("requires an explicit safe mode and rejects mistyped arguments", () => {
   assert.throws(() => parseArgs(["--build", "--audit"]), /exactly one mode/);
   assert.throws(() => parseArgs(["--buid"]), /unknown argument/);
   assert.throws(() => parseArgs(["--build", "--source"]), /requires a path/);
+});
+
+test("audit plan validation rejects stale output metadata", () => {
+  const manifest = {
+    selectedTake: SELECTED_TAKE_ID,
+    selectedTakeSha256: SELECTED_TAKE_SHA256,
+    scorePlanSha256: SCORE_PLAN_SHA256,
+    outputs: SCORE_OUTPUT_PLAN.map((output) => ({ ...output, sha256: "test" })),
+  };
+  assert.doesNotThrow(() => validateScoreManifestPlan(manifest));
+
+  const stale = structuredClone(manifest);
+  stale.outputs[1].durationSeconds += 1;
+  assert.throws(() => validateScoreManifestPlan(stale), /does not match plan/);
+  assert.throws(
+    () => validateScoreManifestPlan({ ...manifest, scorePlanSha256: "stale" }),
+    /does not match the selected take/
+  );
 });
 
 test("wires only the four approved post-narration swells", () => {
