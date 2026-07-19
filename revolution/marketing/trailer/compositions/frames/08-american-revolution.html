@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>American Revolution</title>
+  </head>
+  <body>
+    <template>
+      <style>
+        #root {
+          position: absolute;
+          inset: 0;
+          width: 1920px;
+          height: 1080px;
+          overflow: hidden;
+          container-type: size;
+          color: #0d0c0a;
+          background: #e7dbbe;
+        }
+
+        #root,
+        #root * {
+          box-sizing: border-box;
+        }
+
+        .clip {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+        }
+
+        [id="f08-american-revolution-ground"] {
+          z-index: 0;
+          background:
+            radial-gradient(
+              ellipse 52% 68% at 46% 43%,
+              rgba(255, 255, 255, 0.58) 0%,
+              rgba(231, 219, 190, 0.34) 39%,
+              rgba(78, 64, 29, 0.08) 67%,
+              rgba(231, 219, 190, 0) 84%
+            ),
+            radial-gradient(
+              ellipse 28% 38% at 91% 79%,
+              rgba(200, 160, 73, 0.16) 0%,
+              rgba(200, 160, 73, 0) 74%
+            ),
+            #e7dbbe;
+        }
+
+        [id="f08-american-revolution-paper-source"] {
+          position: absolute;
+          inset: -42px;
+          width: 2004px;
+          height: 1164px;
+          max-width: none;
+          object-fit: cover;
+          object-position: 50% 50%;
+          opacity: 0.08;
+          filter: grayscale(1) sepia(0.6) blur(10px) contrast(0.76);
+          transform: scale(1.04);
+        }
+
+        [id="f08-american-revolution-paper-wash"] {
+          position: absolute;
+          inset: 0;
+          background: rgba(231, 219, 190, 0.78);
+        }
+
+        [id="f08-american-revolution-grain"] {
+          position: absolute;
+          inset: 0;
+          opacity: 0.2;
+          background-image:
+            repeating-linear-gradient(
+              4deg,
+              rgba(13, 12, 10, 0.03) 0,
+              rgba(13, 12, 10, 0.03) 1px,
+              transparent 1px,
+              transparent 6px
+            ),
+            repeating-linear-gradient(
+              92deg,
+              rgba(255, 255, 255, 0.08) 0,
+              rgba(255, 255, 255, 0.08) 1px,
+              transparent 1px,
+              transparent 11px
+            );
+        }
+
+        [id="f08-american-revolution-lockup"] {
+          z-index: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        [id="f08-american-revolution-panel"] {
+          position: absolute;
+          top: 154px;
+          left: 184px;
+          width: 1552px;
+          height: 652px;
+        }
+
+        [id="f08-american-revolution-rule-top"],
+        [id="f08-american-revolution-rule-bottom"] {
+          position: absolute;
+          left: 0;
+          width: 1552px;
+          height: 8px;
+          overflow: visible;
+        }
+
+        [id="f08-american-revolution-rule-top"] {
+          top: 0;
+        }
+
+        [id="f08-american-revolution-rule-bottom"] {
+          bottom: 0;
+        }
+
+        [data-lockup-rule] {
+          fill: none;
+          stroke: #0d0c0a;
+          stroke-width: 1;
+          stroke-linecap: square;
+          vector-effect: non-scaling-stroke;
+        }
+
+        [id="f08-american-revolution-kicker"] {
+          position: absolute;
+          top: 51px;
+          left: 0;
+          width: 100%;
+          font-family: Georgia, "Times New Roman", serif;
+          font-size: 15px;
+          font-weight: 400;
+          line-height: 1;
+          letter-spacing: 0.24em;
+          text-align: center;
+          text-transform: uppercase;
+          opacity: 0;
+        }
+
+        [id="f08-american-revolution-title"] {
+          position: absolute;
+          top: 139px;
+          left: 0;
+          width: 100%;
+          height: 330px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          font-family: Georgia, "Times New Roman", serif;
+          font-size: 148px;
+          font-weight: 400;
+          line-height: 0.84;
+          letter-spacing: -0.024em;
+          text-align: center;
+          text-transform: uppercase;
+        }
+
+        [data-title-line] {
+          display: block;
+          transform-origin: 50% 50%;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+
+        [id="f08-american-revolution-title-line-2"] {
+          font-style: italic;
+        }
+
+        [id="f08-american-revolution-meta"] {
+          position: absolute;
+          top: 506px;
+          left: 0;
+          width: 100%;
+          font-family: "JetBrains Mono", Consolas, monospace;
+          font-size: 18px;
+          font-weight: 400;
+          line-height: 1;
+          letter-spacing: 0.16em;
+          text-align: center;
+          text-transform: uppercase;
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+
+        [id="f08-american-revolution-headphones"] {
+          position: absolute;
+          top: 578px;
+          left: 0;
+          width: 100%;
+          font-family: Georgia, "Times New Roman", serif;
+          font-size: 15px;
+          font-weight: 400;
+          line-height: 1;
+          letter-spacing: 0.22em;
+          text-align: center;
+          text-transform: uppercase;
+          opacity: 0;
+          will-change: opacity;
+        }
+
+        [id="f08-american-revolution-page"] {
+          position: absolute;
+          top: 846px;
+          right: 78px;
+          font-family: "JetBrains Mono", Consolas, monospace;
+          font-size: 13px;
+          font-weight: 400;
+          line-height: 1;
+          letter-spacing: 0.08em;
+          opacity: 0;
+        }
+      </style>
+
+      <div
+        id="root"
+        data-composition-id="08-american-revolution"
+        data-width="1920"
+        data-height="1080"
+        data-duration="4"
+      >
+        <div
+          id="f08-american-revolution-ground"
+          class="clip"
+          data-start="0"
+          data-duration="4"
+          data-track-index="0"
+          aria-hidden="true"
+        >
+          <img
+            id="f08-american-revolution-paper-source"
+            src="assets/images/title-screen.png"
+            alt=""
+          />
+          <div id="f08-american-revolution-paper-wash"></div>
+          <div id="f08-american-revolution-grain"></div>
+        </div>
+
+        <div
+          id="f08-american-revolution-lockup"
+          class="clip"
+          data-start="0"
+          data-duration="4"
+          data-track-index="1"
+        >
+          <div id="f08-american-revolution-panel">
+            <svg
+              id="f08-american-revolution-rule-top"
+              viewBox="0 0 1552 8"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <path data-lockup-rule id="f08-american-revolution-rule-top-path" d="M 0 4 L 1552 4" />
+            </svg>
+
+            <span id="f08-american-revolution-kicker">A living history of independence</span>
+
+            <div id="f08-american-revolution-title" aria-label="American Revolution">
+              <span id="f08-american-revolution-title-line-1" data-title-line>American</span>
+              <span id="f08-american-revolution-title-line-2" data-title-line>Revolution</span>
+            </div>
+
+            <div id="f08-american-revolution-meta">An interactive documentary &middot; 1773&mdash;1783</div>
+            <div id="f08-american-revolution-headphones">Enter the story &middot; leave your mark</div>
+
+            <svg
+              id="f08-american-revolution-rule-bottom"
+              viewBox="0 0 1552 8"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <path data-lockup-rule id="f08-american-revolution-rule-bottom-path" d="M 0 4 L 1552 4" />
+            </svg>
+          </div>
+
+          <span id="f08-american-revolution-page">08</span>
+        </div>
+      </div>
+
+      <script>
+        (() => {
+          window.__timelines = window.__timelines || {};
+
+          const timeline = gsap.timeline({ paused: true });
+          const rulePaths = [
+            document.getElementById("f08-american-revolution-rule-top-path"),
+            document.getElementById("f08-american-revolution-rule-bottom-path"),
+          ];
+
+          rulePaths.forEach((path) => {
+            const length = path.getTotalLength();
+            path.style.strokeDasharray = String(length);
+            path.style.strokeDashoffset = String(length);
+            timeline.to(
+              path,
+              {
+                strokeDashoffset: 0,
+                duration: 0.82,
+                ease: "power2.out",
+              },
+              0.1,
+            );
+          });
+
+          timeline.to(
+            "#f08-american-revolution-kicker",
+            { opacity: 0.62, duration: 0.38, ease: "power1.out" },
+            0.48,
+          );
+
+          const content = [
+            {
+              id: "f08-american-revolution-title-line-1",
+              text: "AMERICAN",
+              baseDuration: 0.3,
+              secondsPerCharacter: 0.025,
+              lead: 0,
+            },
+            {
+              id: "f08-american-revolution-title-line-2",
+              text: "REVOLUTION",
+              baseDuration: 0.32,
+              secondsPerCharacter: 0.025,
+              lead: 0.07,
+            },
+          ];
+
+          let cursor = 0.82;
+          const sequence = content.map((entry) => {
+            const start = cursor + entry.lead;
+            const duration = entry.baseDuration + entry.text.length * entry.secondsPerCharacter;
+            cursor = start + duration;
+            return { ...entry, start, duration };
+          });
+
+          sequence.forEach((entry) => {
+            timeline.fromTo(
+              document.getElementById(entry.id),
+              { opacity: 0, y: 38, scale: 0.982 },
+              {
+                opacity: 1,
+                y: 0,
+                scale: 1,
+                duration: entry.duration,
+                ease: "power3.out",
+              },
+              entry.start,
+            );
+          });
+
+          timeline.fromTo(
+            "#f08-american-revolution-meta",
+            { opacity: 0, y: 10 },
+            { opacity: 0.78, y: 0, duration: 0.34, ease: "power2.out" },
+            2.08,
+          );
+
+          timeline.to(
+            "#f08-american-revolution-headphones",
+            { opacity: 0.78, duration: 0.36, ease: "power1.out" },
+            2.45,
+          );
+
+          timeline.to(
+            "#f08-american-revolution-page",
+            { opacity: 0.7, duration: 0.28, ease: "power1.out" },
+            2.72,
+          );
+
+          window.__timelines["08-american-revolution"] = timeline;
+        })();
+      </script>
+    </template>
+  </body>
+</html>

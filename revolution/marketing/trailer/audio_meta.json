@@ -1,0 +1,23 @@
+{
+  "bgm": {
+    "path": "assets/audio/b-ink-and-string.mp3",
+    "volume": 0.68
+  },
+  "voices": [],
+  "ambience": [
+    { "file": "assets/audio/amb-wharf.mp3", "start_s": 0, "duration_s": 5, "volume": 0.17 },
+    { "file": "assets/audio/amb-lexington.mp3", "start_s": 8, "duration_s": 5, "volume": 0.12 },
+    { "file": "assets/audio/amb-delaware.mp3", "start_s": 13, "duration_s": 6, "volume": 0.18 },
+    { "file": "assets/audio/amb-valley-forge.mp3", "start_s": 23, "duration_s": 5, "volume": 0.12 },
+    { "file": "assets/audio/amb-paris.mp3", "start_s": 28, "duration_s": 4, "volume": 0.1 }
+  ],
+  "sfx": [
+    {
+      "frame": 3,
+      "file": "assets/audio/musket-volley.mp3",
+      "offset_s": 4.35,
+      "duration_s": 0.65,
+      "volume": 0.5
+    }
+  ]
+}

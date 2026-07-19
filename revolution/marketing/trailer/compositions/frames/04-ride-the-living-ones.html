@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <template>
+      <style>
+        #root {
+          position: absolute;
+          inset: 0;
+          width: 1920px;
+          height: 1080px;
+          overflow: hidden;
+          color: #ffffff;
+          container-type: size;
+        }
+
+        [id="f04-ride-the-living-ones-ground"] {
+          position: absolute;
+          inset: 0;
+          overflow: hidden;
+          background: #0d0c0a;
+        }
+
+        [id="f04-ride-the-living-ones-camera"] {
+          position: absolute;
+          inset: -7cqw;
+          transform-origin: 54% 58%;
+          will-change: transform;
+        }
+
+        [id="f04-ride-the-living-ones-plate"] {
+          --dof: 0px;
+          display: block;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          object-position: 50% 44%;
+          filter: blur(var(--dof)) brightness(0.62) saturate(0.68) contrast(1.16);
+          transform-origin: 50% 50%;
+          will-change: filter, transform, opacity;
+        }
+
+        [id="f04-ride-the-living-ones-water"] {
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 46%;
+          height: 42%;
+          background:
+            radial-gradient(ellipse 44% 24% at 56% 48%, rgba(231, 219, 190, 0.12), transparent 72%),
+            repeating-linear-gradient(
+              0deg,
+              transparent 0,
+              transparent 18px,
+              rgba(231, 219, 190, 0.032) 19px,
+              transparent 20px
+            );
+          opacity: 0.54;
+          mix-blend-mode: screen;
+          pointer-events: none;
+        }
+
+        [id="f04-ride-the-living-ones-pole"] {
+          position: absolute;
+          left: 45%;
+          top: 57%;
+          width: 47%;
+          height: 1px;
+          background: rgba(231, 219, 190, 0.18);
+          transform: rotate(-17deg);
+          transform-origin: 0 50%;
+          opacity: 0.58;
+          pointer-events: none;
+        }
+
+        [id="f04-ride-the-living-ones-veil"] {
+          position: absolute;
+          inset: 0;
+          background:
+            linear-gradient(180deg, rgba(13, 12, 10, 0.44) 0%, rgba(13, 12, 10, 0.04) 30%, rgba(13, 12, 10, 0.12) 57%, rgba(13, 12, 10, 0.9) 85%, #0d0c0a 100%),
+            linear-gradient(270deg, #0d0c0a 0%, rgba(13, 12, 10, 0.94) 27%, rgba(13, 12, 10, 0.12) 58%, transparent 75%),
+            radial-gradient(ellipse 42% 31% at 51% 52%, rgba(13, 12, 10, 0.97) 0%, rgba(13, 12, 10, 0.76) 44%, transparent 82%),
+            linear-gradient(90deg, rgba(13, 12, 10, 0.78) 0%, rgba(13, 12, 10, 0.24) 38%, transparent 60%);
+          pointer-events: none;
+        }
+
+        [id="f04-ride-the-living-ones-bloom"] {
+          position: absolute;
+          left: -9%;
+          top: -18%;
+          width: 66%;
+          height: 80%;
+          background: radial-gradient(
+            ellipse at 38% 42%,
+            rgba(231, 219, 190, 0.2) 0%,
+            rgba(78, 64, 29, 0.16) 32%,
+            rgba(107, 87, 39, 0.08) 55%,
+            transparent 74%
+          );
+          opacity: 0.68;
+          pointer-events: none;
+        }
+
+        [id="f04-ride-the-living-ones-title"] {
+          position: absolute;
+          left: 4.6cqw;
+          top: 10.5cqh;
+          width: 58cqw;
+          color: #ffffff;
+          font-family: Georgia, "Times New Roman", serif;
+          font-weight: 400;
+          letter-spacing: -0.018em;
+          line-height: 0.86;
+          text-transform: uppercase;
+        }
+
+        [id="f04-ride-the-living-ones-line-one"] {
+          display: flex;
+          align-items: baseline;
+          min-height: 12cqw;
+          font-size: 12.2cqw;
+          white-space: nowrap;
+        }
+
+        [id="f04-ride-the-living-ones-line-two"] {
+          display: flex;
+          align-items: baseline;
+          gap: 0.38em;
+          min-height: 5.8cqw;
+          margin-top: 4cqh;
+          font-size: 5.55cqw;
+          white-space: nowrap;
+        }
+
+        [data-ride-word] {
+          display: inline-block;
+          transform-origin: 0 70%;
+          will-change: transform, opacity, filter;
+        }
+
+        [id="f04-ride-the-living-ones-word-living"] {
+          font-style: italic;
+        }
+
+        [id="f04-ride-the-living-ones-rule"] {
+          display: block;
+          width: 52cqw;
+          height: 1px;
+          margin-top: 3.4cqh;
+          background: rgba(255, 255, 255, 0.42);
+          transform-origin: 0 50%;
+          will-change: transform, opacity;
+        }
+
+        [id="f04-ride-the-living-ones-page"] {
+          position: absolute;
+          right: 4cqw;
+          top: 77.2cqh;
+          color: rgba(255, 255, 255, 0.75);
+          font-family: "JetBrains Mono", "Courier New", monospace;
+          font-size: 13px;
+          font-weight: 400;
+          letter-spacing: 0.08em;
+          line-height: 1;
+          will-change: transform, opacity;
+        }
+      </style>
+
+      <div
+        id="root"
+        data-composition-id="04-ride-the-living-ones"
+        data-duration="6.6"
+        data-width="1920"
+        data-height="1080"
+      >
+        <div
+          id="f04-ride-the-living-ones-ground"
+          class="clip"
+          data-start="0"
+          data-duration="6.6"
+          data-track-index="0"
+        >
+          <div id="f04-ride-the-living-ones-camera">
+            <img
+              id="f04-ride-the-living-ones-plate"
+              src="assets/images/delaware.jpg"
+              alt=""
+            />
+            <div id="f04-ride-the-living-ones-water"></div>
+            <div id="f04-ride-the-living-ones-pole"></div>
+          </div>
+          <div id="f04-ride-the-living-ones-veil"></div>
+          <div id="f04-ride-the-living-ones-bloom"></div>
+
+          <div id="f04-ride-the-living-ones-title" aria-label="History moves with you">
+            <div id="f04-ride-the-living-ones-line-one">
+              <span id="f04-ride-the-living-ones-word-ride" data-ride-word>HISTORY</span>
+            </div>
+            <div id="f04-ride-the-living-ones-line-two">
+              <span id="f04-ride-the-living-ones-word-the" data-ride-word>MOVES</span>
+              <span id="f04-ride-the-living-ones-word-living" data-ride-word>WITH</span>
+              <span id="f04-ride-the-living-ones-word-ones" data-ride-word>YOU</span>
+            </div>
+            <span id="f04-ride-the-living-ones-rule"></span>
+          </div>
+
+          <div id="f04-ride-the-living-ones-page">04</div>
+        </div>
+      </div>
+
+      <script>
+        window.__timelines = window.__timelines || {};
+
+        const rideTl = gsap.timeline({ paused: true });
+        const rideCamera = document.getElementById("f04-ride-the-living-ones-camera");
+        const ridePlate = document.getElementById("f04-ride-the-living-ones-plate");
+        const rideWater = document.getElementById("f04-ride-the-living-ones-water");
+        const ridePole = document.getElementById("f04-ride-the-living-ones-pole");
+        const rideRule = document.getElementById("f04-ride-the-living-ones-rule");
+        const ridePage = document.getElementById("f04-ride-the-living-ones-page");
+        const rideTitle = document.getElementById("f04-ride-the-living-ones-title");
+        const rideWords = Array.from(rideTitle.querySelectorAll("[data-ride-word]"));
+
+        rideTl.fromTo(
+          ridePlate,
+          { "--dof": "14px", opacity: 0.26, scale: 1.035 },
+          {
+            "--dof": "0px",
+            opacity: 1,
+            scale: 1,
+            duration: 1.4,
+            ease: "power2.inOut",
+          },
+          0,
+        );
+        rideTl.fromTo(
+          rideWater,
+          { opacity: 0.12 },
+          { opacity: 0.54, duration: 1.4, ease: "power2.inOut" },
+          0,
+        );
+        rideTl.fromTo(
+          ridePole,
+          { opacity: 0.12 },
+          { opacity: 0.58, duration: 1.4, ease: "power2.inOut" },
+          0,
+        );
+
+        const rideCameraPhase = { scale: 1, x: 0, y: 0 };
+        rideTl.to(
+          rideCameraPhase,
+          { scale: 1.055, x: -24, y: -8, duration: 2, ease: "power2.inOut" },
+          1.4,
+        );
+        rideTl.to(
+          rideCameraPhase,
+          { scale: 1.078, x: -38, y: -14, duration: 1.1, ease: "power3.out" },
+          3.4,
+        );
+        rideTl.to(
+          rideCameraPhase,
+          { scale: 1.082, x: -40, y: -15, duration: 1.5, ease: "sine.out" },
+          4.5,
+        );
+
+        const rideDrift = { phase: 0 };
+        const rideDriftEnd = Math.PI * 2 * 1.1;
+        rideTl.to(
+          rideDrift,
+          {
+            phase: rideDriftEnd,
+            duration: 6,
+            ease: "none",
+            onUpdate: () => {
+              const progress = rideDrift.phase / rideDriftEnd;
+              const settleEnvelope = progress < 0.75 ? 1 : Math.max(0, (1 - progress) / 0.25);
+              const dx = Math.sin(rideDrift.phase) * 4 * settleEnvelope;
+              const dy = Math.sin(rideDrift.phase * 1.33) * 2 * settleEnvelope;
+              rideCamera.style.transform = `translate3d(${rideCameraPhase.x + dx}px, ${rideCameraPhase.y + dy}px, 0) scale(${rideCameraPhase.scale})`;
+            },
+          },
+          0,
+        );
+
+        const rideSequence = rideWords.map((word) => ({
+          word,
+          text: word.textContent.trim(),
+          duration: 0.2 + word.textContent.trim().length * 0.025,
+        }));
+        let rideRevealAt = 1.55;
+        rideSequence.forEach((entry, index) => {
+          rideTl.fromTo(
+            entry.word,
+            { opacity: 0, y: 46 - index * 7, scale: 0.955, filter: "blur(10px)" },
+            {
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              filter: "blur(0px)",
+              duration: 0.72,
+              ease: "expo.out",
+            },
+            rideRevealAt,
+          );
+          rideRevealAt += entry.duration;
+        });
+
+        rideTl.fromTo(
+          rideRule,
+          { opacity: 0, scaleX: 0 },
+          { opacity: 1, scaleX: 1, duration: 0.8, ease: "power3.out" },
+          3.55,
+        );
+        rideTl.fromTo(
+          ridePage,
+          { opacity: 0, y: 10 },
+          { opacity: 0.75, y: 0, duration: 0.55, ease: "power2.out" },
+          4.05,
+        );
+
+        window.__timelines["04-ride-the-living-ones"] = rideTl;
+      </script>
+    </template>
+  </body>
+</html>

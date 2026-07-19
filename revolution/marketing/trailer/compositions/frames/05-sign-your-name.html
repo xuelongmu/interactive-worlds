@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <template>
+      <style>
+        #root {
+          position: absolute;
+          inset: 0;
+          width: 1920px;
+          height: 1080px;
+          overflow: hidden;
+          container-type: size;
+          color: #0d0c0a;
+        }
+
+        #root,
+        #root * {
+          box-sizing: border-box;
+        }
+
+        [id="f05-sign-your-name-ground"] {
+          position: absolute;
+          inset: 0;
+          width: 1920px;
+          height: 1080px;
+          overflow: hidden;
+          background: #e7dbbe;
+        }
+
+        [id="f05-sign-your-name-texture"] {
+          position: absolute;
+          inset: -36px;
+          width: 1992px;
+          height: 1152px;
+          max-width: none;
+          object-fit: cover;
+          opacity: 0.2;
+          filter: blur(10px) saturate(0.45) contrast(0.82);
+          transform: scale(1.035);
+        }
+
+        [id="f05-sign-your-name-wash"] {
+          position: absolute;
+          inset: 0;
+          background: rgba(231, 219, 190, 0.9);
+        }
+
+        [id="f05-sign-your-name-bloom"] {
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(
+              ellipse 42% 58% at 76% 34%,
+              rgba(255, 255, 255, 0.58) 0%,
+              rgba(231, 219, 190, 0.24) 42%,
+              rgba(78, 64, 29, 0.08) 68%,
+              rgba(231, 219, 190, 0) 82%
+            ),
+            radial-gradient(
+              ellipse 26% 34% at 10% 76%,
+              rgba(200, 160, 73, 0.17) 0%,
+              rgba(200, 160, 73, 0) 74%
+            );
+        }
+
+        [id="f05-sign-your-name-grain"] {
+          position: absolute;
+          inset: 0;
+          opacity: 0.19;
+          background-image:
+            repeating-linear-gradient(
+              3deg,
+              rgba(13, 12, 10, 0.032) 0,
+              rgba(13, 12, 10, 0.032) 1px,
+              transparent 1px,
+              transparent 5px
+            ),
+            repeating-linear-gradient(
+              92deg,
+              rgba(255, 255, 255, 0.05) 0,
+              rgba(255, 255, 255, 0.05) 1px,
+              transparent 1px,
+              transparent 9px
+            );
+        }
+
+        [id="f05-sign-your-name-field"] {
+          position: absolute;
+          top: 0;
+          right: 0;
+          width: 576px;
+          height: 1080px;
+          background: rgba(69, 56, 25, 0.075);
+        }
+
+        [id="f05-sign-your-name-rule"] {
+          position: absolute;
+          top: 210px;
+          left: 92px;
+          width: 1736px;
+          height: 18px;
+          overflow: visible;
+        }
+
+        [id="f05-sign-your-name-rule"] path {
+          fill: none;
+          stroke: #0d0c0a;
+          stroke-width: 2.2;
+          stroke-linecap: round;
+          vector-effect: non-scaling-stroke;
+        }
+
+        [id="f05-sign-your-name-headline"] {
+          position: absolute;
+          top: 300px;
+          left: 92px;
+          width: 1230px;
+          height: 420px;
+          font-family: Georgia, "Times New Roman", serif;
+          font-weight: 400;
+          text-transform: uppercase;
+        }
+
+        [data-phrase="05-sign-your-name-phrase"] {
+          display: block;
+          width: max-content;
+          max-width: 100%;
+          transform-origin: 0 52%;
+          will-change: transform, opacity;
+        }
+
+        [id="f05-sign-your-name-first-phrase"] {
+          margin-bottom: 31px;
+          font-size: 102px;
+          line-height: 0.94;
+          letter-spacing: 0.012em;
+        }
+
+        [id="f05-sign-your-name-history"] {
+          font-size: 204px;
+          font-style: italic;
+          line-height: 0.82;
+          letter-spacing: -0.024em;
+        }
+
+        [id="f05-sign-your-name-meta"] {
+          position: absolute;
+          top: 810px;
+          left: 92px;
+          width: 1736px;
+          height: 54px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          color: rgba(13, 12, 10, 0.72);
+          font-family: "JetBrains Mono", "Courier New", monospace;
+          font-size: 19px;
+          font-weight: 400;
+          line-height: 1;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          will-change: transform, opacity;
+        }
+
+        [id="f05-sign-your-name-place"] {
+          display: flex;
+          align-items: center;
+          gap: 22px;
+        }
+
+        [id="f05-sign-your-name-place"]::before {
+          content: "";
+          display: block;
+          width: 68px;
+          height: 1px;
+          background: rgba(13, 12, 10, 0.42);
+        }
+
+        [id="f05-sign-your-name-page"] {
+          opacity: 0.72;
+          letter-spacing: 0.08em;
+        }
+      </style>
+
+      <div
+        id="root"
+        data-composition-id="05-sign-your-name"
+        data-duration="4.7"
+        data-width="1920"
+        data-height="1080"
+      >
+        <div
+          id="f05-sign-your-name-ground"
+          class="clip"
+          data-start="0"
+          data-duration="4.7"
+          data-track-index="0"
+          aria-hidden="true"
+        >
+          <img
+            id="f05-sign-your-name-texture"
+            src="assets/images/title-screen.png"
+            alt=""
+          />
+          <div id="f05-sign-your-name-wash"></div>
+          <div id="f05-sign-your-name-bloom"></div>
+          <div id="f05-sign-your-name-grain"></div>
+          <div id="f05-sign-your-name-field"></div>
+        </div>
+
+        <svg
+          id="f05-sign-your-name-rule"
+          class="clip"
+          data-start="0"
+          data-duration="4.7"
+          data-track-index="1"
+          viewBox="0 0 1736 18"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path
+            id="f05-sign-your-name-rule-path"
+            d="M 2 10 C 286 7, 521 12, 808 9 S 1384 8, 1734 10"
+          />
+        </svg>
+
+        <div
+          id="f05-sign-your-name-headline"
+          class="clip"
+          data-start="0"
+          data-duration="4.7"
+          data-track-index="2"
+          aria-label="Sign your name to history"
+        >
+          <span
+            id="f05-sign-your-name-first-phrase"
+            data-phrase="05-sign-your-name-phrase"
+          >SIGN YOUR NAME TO</span>
+          <span
+            id="f05-sign-your-name-history"
+            data-phrase="05-sign-your-name-phrase"
+          >HISTORY</span>
+        </div>
+
+        <div
+          id="f05-sign-your-name-meta"
+          class="clip"
+          data-start="0"
+          data-duration="4.7"
+          data-track-index="3"
+        >
+          <span id="f05-sign-your-name-place">PHILADELPHIA &middot; 1776</span>
+          <span id="f05-sign-your-name-page">05</span>
+        </div>
+      </div>
+
+      <script>
+        window.__timelines = window.__timelines || {};
+
+        const inkPath = document.getElementById("f05-sign-your-name-rule-path");
+        const inkLength = inkPath.getTotalLength();
+        inkPath.style.strokeDasharray = String(inkLength);
+        inkPath.style.strokeDashoffset = String(inkLength);
+
+        const signTl = gsap.timeline({ paused: true });
+
+        signTl.fromTo(
+          inkPath,
+          { strokeDashoffset: inkLength },
+          { strokeDashoffset: 0, duration: 1.24, ease: "power2.out" },
+          0.12,
+        );
+
+        const phrases = [
+          {
+            id: "f05-sign-your-name-first-phrase",
+            text: "SIGN YOUR NAME TO",
+            lead: 0.12,
+            baseDuration: 0.3,
+            secondsPerCharacter: 0.018,
+            y: 34,
+          },
+          {
+            id: "f05-sign-your-name-history",
+            text: "HISTORY",
+            lead: 0.18,
+            baseDuration: 0.36,
+            secondsPerCharacter: 0.022,
+            y: 42,
+          },
+        ];
+
+        let phraseCursor = 1.37;
+        const phrasePlan = phrases.map((phrase) => {
+          const start = phraseCursor + phrase.lead;
+          const duration =
+            phrase.baseDuration + phrase.text.length * phrase.secondsPerCharacter;
+          phraseCursor = start + duration;
+          return { ...phrase, start, duration };
+        });
+
+        phrasePlan.forEach((phrase) => {
+          signTl.fromTo(
+            document.getElementById(phrase.id),
+            { opacity: 0, y: phrase.y, scale: 0.975 },
+            {
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              duration: phrase.duration,
+              ease: "power3.out",
+            },
+            phrase.start,
+          );
+        });
+
+        signTl.fromTo(
+          document.getElementById("f05-sign-your-name-meta"),
+          { opacity: 0, y: 12 },
+          { opacity: 1, y: 0, duration: 0.32, ease: "power2.out" },
+          3.12,
+        );
+
+        window.__timelines["05-sign-your-name"] = signTl;
+      </script>
+    </template>
+  </body>
+</html>

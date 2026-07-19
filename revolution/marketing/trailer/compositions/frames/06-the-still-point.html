@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Still Point</title>
+  </head>
+  <body>
+    <template>
+      <style>
+        #root {
+          position: absolute;
+          inset: 0;
+          width: 1920px;
+          height: 1080px;
+          overflow: hidden;
+          container-type: size;
+          color: #ffffff;
+        }
+
+        .clip {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          box-sizing: border-box;
+        }
+
+        [data-frame-role="06-ground"] {
+          z-index: 0;
+          background:
+            radial-gradient(circle at 52% 40%, rgba(231, 219, 190, 0.24) 0%, rgba(78, 64, 29, 0.2) 27%, rgba(107, 87, 39, 0.12) 46%, transparent 68%),
+            radial-gradient(circle at 9% 77%, rgba(200, 160, 73, 0.09) 0%, transparent 34%),
+            #0d0c0a;
+        }
+
+        [data-frame-role="06-scene"] {
+          z-index: 1;
+        }
+
+        [id="f06-the-still-point-world"] {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          transform-origin: 50% 50%;
+          will-change: transform;
+        }
+
+        [id="f06-the-still-point-image"] {
+          --dof: 11px;
+          position: absolute;
+          inset: -6%;
+          display: block;
+          width: 112%;
+          height: 112%;
+          object-fit: cover;
+          object-position: 50% 50%;
+          opacity: 0.56;
+          filter: blur(var(--dof)) saturate(0.45) brightness(0.78) contrast(1.08);
+          will-change: filter, opacity;
+        }
+
+        [data-frame-role="06-atmosphere"] {
+          position: absolute;
+          inset: 0;
+          background:
+            linear-gradient(180deg, rgba(13, 12, 10, 0.9) 0%, rgba(13, 12, 10, 0.08) 19%, rgba(13, 12, 10, 0.1) 63%, rgba(13, 12, 10, 0.98) 88%),
+            radial-gradient(circle at 51% 42%, rgba(231, 219, 190, 0.12) 0%, rgba(78, 64, 29, 0.08) 29%, transparent 59%);
+          pointer-events: none;
+        }
+
+        [data-frame-role="06-vignette"] {
+          position: absolute;
+          inset: 0;
+          box-shadow: inset 0 0 210px rgba(13, 12, 10, 0.78);
+          pointer-events: none;
+        }
+
+        [id="f06-the-still-point-label-lockup"] {
+          position: absolute;
+          top: 78px;
+          left: 78px;
+          width: 520px;
+          color: #ffffff;
+        }
+
+        [id="f06-the-still-point-label"] {
+          display: block;
+          font-family: "JetBrains Mono", "Courier New", monospace;
+          font-size: 15px;
+          font-weight: 400;
+          line-height: 1;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+
+        [id="f06-the-still-point-rule"] {
+          display: block;
+          width: 520px;
+          height: 1px;
+          margin-top: 18px;
+          background: rgba(255, 255, 255, 0.44);
+          transform-origin: 0 50%;
+        }
+
+        [id="f06-the-still-point-pagenum"] {
+          position: absolute;
+          top: 842px;
+          right: 78px;
+          display: block;
+          font-family: "JetBrains Mono", "Courier New", monospace;
+          font-size: 13px;
+          font-weight: 400;
+          line-height: 1;
+          letter-spacing: 0.08em;
+          opacity: 0.75;
+        }
+      </style>
+
+      <div
+        id="root"
+        data-composition-id="06-the-still-point"
+        data-width="1920"
+        data-height="1080"
+        data-duration="5.6"
+      >
+        <div
+          id="f06-the-still-point-ground"
+          class="clip"
+          data-frame-role="06-ground"
+          data-start="0"
+          data-duration="5.6"
+          data-track-index="0"
+        ></div>
+
+        <div
+          id="f06-the-still-point-scene"
+          class="clip"
+          data-frame-role="06-scene"
+          data-start="0"
+          data-duration="5.6"
+          data-track-index="1"
+        >
+          <div id="f06-the-still-point-world">
+            <img
+              id="f06-the-still-point-image"
+              src="assets/images/valley-forge.jpg"
+              alt=""
+            />
+          </div>
+
+          <div data-frame-role="06-atmosphere"></div>
+          <div data-frame-role="06-vignette"></div>
+
+          <div id="f06-the-still-point-label-lockup">
+            <span id="f06-the-still-point-label">VALLEY FORGE &middot; WINTER 1777</span>
+            <span id="f06-the-still-point-rule"></span>
+          </div>
+
+          <span id="f06-the-still-point-pagenum">06</span>
+        </div>
+      </div>
+
+      <script>
+        window.__timelines = window.__timelines || {};
+
+        const stillTl = gsap.timeline({ paused: true });
+        const world = document.getElementById("f06-the-still-point-world");
+        const camera = { scale: 1.08, x: 18, y: 8 };
+
+        function applyCamera() {
+          world.style.transform = `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`;
+        }
+
+        applyCamera();
+
+        stillTl.fromTo(
+          "#f06-the-still-point-image",
+          { "--dof": "11px", opacity: 0.56 },
+          { "--dof": "0px", opacity: 0.72, duration: 1, ease: "power2.inOut" },
+          0,
+        );
+
+        stillTl.to(
+          camera,
+          {
+            scale: 1.13,
+            x: -34,
+            y: -10,
+            duration: 2.8,
+            ease: "power1.inOut",
+            onUpdate: applyCamera,
+          },
+          1,
+        );
+
+        stillTl.fromTo(
+          "#f06-the-still-point-label",
+          { opacity: 0, y: 12 },
+          { opacity: 1, y: 0, duration: 0.85, ease: "power2.out" },
+          1.14,
+        );
+
+        stillTl.fromTo(
+          "#f06-the-still-point-rule",
+          { opacity: 0, scaleX: 0 },
+          { opacity: 1, scaleX: 1, duration: 1.05, ease: "power2.out" },
+          1.42,
+        );
+
+        stillTl.fromTo(
+          "#f06-the-still-point-pagenum",
+          { opacity: 0 },
+          { opacity: 0.75, duration: 0.65, ease: "power1.out" },
+          2.72,
+        );
+
+        window.__timelines["06-the-still-point"] = stillTl;
+      </script>
+    </template>
+  </body>
+</html>

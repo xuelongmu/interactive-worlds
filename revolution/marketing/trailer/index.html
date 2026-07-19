@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #000;
+      }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #0D0C0A;
+      }
+      .scene {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .footage-scene {
+        display: block;
+        object-fit: cover;
+        background: #0d0c0a;
+      }
+      .footage-overlay {
+        pointer-events: none;
+        color: #ffffff;
+        font-family: Georgia, "Times New Roman", serif;
+        background:
+          linear-gradient(90deg, rgba(13, 12, 10, 0.8) 0%, rgba(13, 12, 10, 0.22) 52%, transparent 74%),
+          linear-gradient(0deg, rgba(13, 12, 10, 0.58) 0%, transparent 42%);
+      }
+      .footage-kicker {
+        position: absolute;
+        top: 84px;
+        left: 96px;
+        font: 500 20px/1.2 "JetBrains Mono", "Courier New", monospace;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #ffffff;
+      }
+      .footage-location {
+        position: absolute;
+        right: 92px;
+        bottom: 76px;
+        font: 500 18px/1.2 "JetBrains Mono", "Courier New", monospace;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.82);
+      }
+      .opening-overlay {
+        pointer-events: none;
+        color: #ffffff;
+        font-family: Georgia, "Times New Roman", serif;
+        background: linear-gradient(90deg, rgba(13, 12, 10, 0.76), transparent 66%);
+      }
+      .opening-title {
+        position: absolute;
+        left: 96px;
+        top: 348px;
+        font-size: 122px;
+        line-height: 0.88;
+        letter-spacing: -0.045em;
+        text-transform: uppercase;
+      }
+      .opening-title span { display: block; }
+      .opening-title span:last-child {
+        color: #c8a049;
+        font-style: italic;
+      }
+      .experience-verb {
+        position: absolute;
+        left: 96px;
+        bottom: 142px;
+        font-size: 86px;
+        line-height: 0.92;
+        letter-spacing: -0.035em;
+        text-transform: uppercase;
+      }
+      .experience-detail {
+        position: absolute;
+        left: 100px;
+        bottom: 88px;
+        font: 500 18px/1.2 "JetBrains Mono", "Courier New", monospace;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.84);
+      }
+      .reactor-title {
+        position: absolute;
+        left: 96px;
+        top: 365px;
+        font-size: 126px;
+        line-height: 0.86;
+        letter-spacing: -0.055em;
+        text-transform: uppercase;
+      }
+      .reactor-title span {
+        display: block;
+      }
+      .reactor-title .accent {
+        color: #c8a049;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="36"
+      data-width="1920"
+      data-height="1080"
+    >
+      <div
+        id="el-01-the-wharf"
+        class="scene"
+        data-composition-id="01-the-wharf"
+        data-composition-src="compositions/frames/01-the-wharf.html"
+        data-start="0"
+        data-duration="5.6"
+        data-track-index="0"
+      ></div>
+
+      <div
+        id="el-01-opening-overlay"
+        class="scene opening-overlay clip"
+        data-start="0"
+        data-duration="5.6"
+        data-track-index="3"
+      >
+        <div class="footage-kicker">An interactive documentary · 1773—1783</div>
+        <div class="opening-title" aria-label="The past is a place" data-layout-allow-overlap>
+          <span>The past</span>
+          <span>is a place.</span>
+        </div>
+        <div class="footage-location">Boston · 1773</div>
+      </div>
+
+      <div
+        id="el-02-walk-the-frozen-moments"
+        class="scene"
+        data-composition-id="02-walk-the-frozen-moments"
+        data-composition-src="compositions/frames/02-walk-the-frozen-moments.html"
+        data-start="5"
+        data-duration="3.5"
+        data-track-index="1"
+      ></div>
+
+      <video
+        id="el-03-before-the-first-shot"
+        class="scene footage-scene clip"
+        src="assets/video/worldlabs-lexington.mp4"
+        data-start="8"
+        data-duration="5.4"
+        data-track-index="0"
+        muted
+        playsinline
+        preload="auto"
+      ></video>
+
+      <div
+        id="el-03-worldlabs-overlay"
+        class="scene footage-overlay clip"
+        data-start="8"
+        data-duration="5"
+        data-track-index="3"
+      >
+        <div class="footage-kicker">World Labs · explorable 3D world</div>
+        <div class="experience-verb">Look around.</div>
+        <div class="experience-detail">Move through preserved moments</div>
+        <div class="footage-location">Lexington · 1775</div>
+      </div>
+
+      <video
+        id="el-04-history-moves-with-you"
+        class="scene footage-scene clip"
+        src="assets/video/reactor-delaware-v2.mp4"
+        data-start="13"
+        data-duration="6.6"
+        data-track-index="1"
+        muted
+        playsinline
+        preload="auto"
+      ></video>
+
+      <div
+        id="el-04-reactor-overlay"
+        class="scene footage-overlay clip"
+        data-start="13"
+        data-duration="6"
+        data-track-index="3"
+      >
+        <div class="footage-kicker">Reactor · generative world model</div>
+        <div class="reactor-title" aria-label="History moves with you" data-layout-allow-overlap>
+          <span>History</span>
+          <span class="accent">moves with you</span>
+        </div>
+        <div class="experience-detail">Generate · steer · respond</div>
+        <div class="footage-location">Delaware · 1776</div>
+      </div>
+
+      <div
+        id="el-05-sign-your-name"
+        class="scene"
+        data-composition-id="05-sign-your-name"
+        data-composition-src="compositions/frames/05-sign-your-name.html"
+        data-start="19"
+        data-duration="4.7"
+        data-track-index="0"
+      ></div>
+
+      <div
+        id="el-06-the-still-point"
+        class="scene"
+        data-composition-id="06-the-still-point"
+        data-composition-src="compositions/frames/06-the-still-point.html"
+        data-start="23"
+        data-duration="5.6"
+        data-track-index="1"
+      ></div>
+
+      <div
+        id="el-07-what-remains-unfinished"
+        class="scene"
+        data-composition-id="07-what-remains-unfinished"
+        data-composition-src="compositions/frames/07-what-remains-unfinished.html"
+        data-start="28"
+        data-duration="4.7"
+        data-track-index="0"
+      ></div>
+
+      <div
+        id="el-08-american-revolution"
+        class="scene"
+        data-composition-id="08-american-revolution"
+        data-composition-src="compositions/frames/08-american-revolution.html"
+        data-start="32"
+        data-duration="4"
+        data-track-index="1"
+      ></div>
+
+      <!-- BGM -->
+      <audio
+        id="el-bgm"
+        src="assets/audio/b-ink-and-string.mp3"
+        data-start="0"
+        data-duration="36"
+        data-track-index="11"
+        data-volume="0.68"
+      ></audio>
+
+      <!-- SFX -->
+      <audio
+        id="el-sfx-0"
+        src="assets/audio/musket-volley.mp3"
+        data-start="12.35"
+        data-duration="0.65"
+        data-track-index="20"
+        data-volume="0.5"
+      ></audio>
+
+      <!-- Low diegetic ambience beneath the score -->
+      <audio id="el-amb-wharf" src="assets/audio/amb-wharf.mp3" data-start="0" data-duration="5" data-track-index="12" data-volume="0.17"></audio>
+      <audio id="el-amb-lexington" src="assets/audio/amb-lexington.mp3" data-start="8" data-duration="5" data-track-index="13" data-volume="0.12"></audio>
+      <audio id="el-amb-delaware" src="assets/audio/amb-delaware.mp3" data-start="13" data-duration="6" data-track-index="14" data-volume="0.18"></audio>
+      <audio id="el-amb-valley-forge" src="assets/audio/amb-valley-forge.mp3" data-start="23" data-duration="5" data-track-index="15" data-volume="0.12"></audio>
+      <audio id="el-amb-paris" src="assets/audio/amb-paris.mp3" data-start="28" data-duration="4" data-track-index="16" data-volume="0.1"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = gsap.timeline({ paused: true });
+      // ── frame transitions (injected by transitions.mjs) ──
+      (function () { var tl = window.__timelines["main"];
+        tl.fromTo("#el-01-opening-overlay .footage-kicker", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 0.55);
+        tl.fromTo("#el-01-opening-overlay .opening-title span:first-child", { opacity: 0, y: 34 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 1.05);
+        tl.fromTo("#el-01-opening-overlay .opening-title span:last-child", { opacity: 0, y: 34 }, { opacity: 1, y: 0, duration: 0.9, ease: "power3.out" }, 1.55);
+        tl.fromTo("#el-01-opening-overlay .footage-location", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 2.05);
+        tl.to("#el-01-opening-overlay", { opacity: 0, duration: 0.45, ease: "power2.in" }, 4.55);
+        tl.to("#el-01-the-wharf", { filter: "blur(10px)", scale: 1.03, opacity: 0, duration: 0.6, ease: "power2.inOut" }, 5);
+        tl.fromTo("#el-02-walk-the-frozen-moments", { filter: "blur(10px)", scale: 0.97, opacity: 0 }, { filter: "blur(0px)", scale: 1, opacity: 1, duration: 0.6, ease: "power2.inOut" }, 5);
+        tl.to("#el-02-walk-the-frozen-moments", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 8);
+        tl.fromTo("#el-03-before-the-first-shot", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 8);
+        tl.fromTo("#el-03-worldlabs-overlay .footage-kicker", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 8.55);
+        tl.fromTo("#el-03-worldlabs-overlay .experience-verb", { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.75, ease: "power3.out" }, 9.05);
+        tl.fromTo("#el-03-worldlabs-overlay .experience-detail", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, 9.6);
+        tl.fromTo("#el-03-worldlabs-overlay .footage-location", { opacity: 0 }, { opacity: 1, duration: 0.65, ease: "power2.out" }, 9.15);
+        tl.to("#el-03-worldlabs-overlay", { opacity: 0, duration: 0.35, ease: "power2.in" }, 12.55);
+        tl.to("#el-03-before-the-first-shot", { scale: 2.5, opacity: 0, filter: "blur(8px)", duration: 0.4, ease: "power3.in" }, 13);
+        tl.fromTo("#el-04-history-moves-with-you", { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.4, ease: "power3.out" }, 13);
+        tl.fromTo("#el-04-reactor-overlay .footage-kicker", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.65, ease: "power3.out" }, 13.55);
+        tl.fromTo("#el-04-reactor-overlay .reactor-title span:first-child", { opacity: 0, y: 38 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 14.05);
+        tl.fromTo("#el-04-reactor-overlay .reactor-title .accent", { opacity: 0, y: 38 }, { opacity: 1, y: 0, duration: 0.9, ease: "power3.out" }, 14.55);
+        tl.fromTo("#el-04-reactor-overlay .experience-detail", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, 15.25);
+        tl.fromTo("#el-04-reactor-overlay .footage-location", { opacity: 0 }, { opacity: 1, duration: 0.65, ease: "power2.out" }, 15.1);
+        tl.to("#el-04-reactor-overlay", { opacity: 0, duration: 0.4, ease: "power2.in" }, 18.55);
+        tl.to("#el-04-history-moves-with-you", { filter: "blur(10px)", scale: 1.03, opacity: 0, duration: 0.6, ease: "power2.inOut" }, 19);
+        tl.fromTo("#el-05-sign-your-name", { filter: "blur(10px)", scale: 0.97, opacity: 0 }, { filter: "blur(0px)", scale: 1, opacity: 1, duration: 0.6, ease: "power2.inOut" }, 19);
+        tl.to("#el-05-sign-your-name", { filter: "blur(10px)", scale: 1.03, opacity: 0, duration: 0.7, ease: "power2.inOut" }, 23);
+        tl.fromTo("#el-06-the-still-point", { filter: "blur(10px)", scale: 0.97, opacity: 0 }, { filter: "blur(0px)", scale: 1, opacity: 1, duration: 0.7, ease: "power2.inOut" }, 23);
+        tl.to("#el-06-the-still-point", { opacity: 0, duration: 0.6, ease: "power2.inOut" }, 28);
+        tl.fromTo("#el-07-what-remains-unfinished", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.inOut" }, 28);
+        tl.to("#el-07-what-remains-unfinished", { filter: "blur(10px)", scale: 1.03, opacity: 0, duration: 0.7, ease: "power2.inOut" }, 32);
+        tl.fromTo("#el-08-american-revolution", { filter: "blur(10px)", scale: 0.97, opacity: 0 }, { filter: "blur(0px)", scale: 1, opacity: 1, duration: 0.7, ease: "power2.inOut" }, 32);
+        tl.to({}, { duration: 36 }, 0); // full-span anchor — main.duration() == composition total (Studio master duration)
+      })();
+    </script>
+  </body>
+</html>

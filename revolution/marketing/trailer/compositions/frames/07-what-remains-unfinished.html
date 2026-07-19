@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+  </head>
+  <body>
+    <template>
+      <style>
+        #root {
+          position: absolute;
+          inset: 0;
+          width: 1920px;
+          height: 1080px;
+          overflow: hidden;
+          container-type: size;
+          color: #ffffff;
+        }
+
+        .clip {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+        }
+
+        [id="f07-what-remains-unfinished-ground"] {
+          z-index: 0;
+          background: #0d0c0a;
+        }
+
+        [id="f07-what-remains-unfinished-scene"] {
+          z-index: 1;
+          background: #0d0c0a;
+        }
+
+        [id="f07-what-remains-unfinished-zoom-outer"],
+        [id="f07-what-remains-unfinished-zoom-inner"] {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          will-change: transform;
+        }
+
+        [id="f07-what-remains-unfinished-zoom-outer"] {
+          transform-origin: 50% 50%;
+        }
+
+        [id="f07-what-remains-unfinished-plate"] {
+          display: block;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          filter: sepia(0.12) saturate(0.58) contrast(1.12);
+          opacity: 0.86;
+        }
+
+        [id="f07-what-remains-unfinished-vignette"] {
+          position: absolute;
+          inset: 0;
+          background:
+            linear-gradient(90deg, rgba(13, 12, 10, 0.12), rgba(13, 12, 10, 0.03) 48%, rgba(13, 12, 10, 0.28)),
+            linear-gradient(180deg, rgba(13, 12, 10, 0.2), transparent 26%, transparent 70%, rgba(13, 12, 10, 0.48));
+          pointer-events: none;
+        }
+
+        [id="f07-what-remains-unfinished-sun-bloom"] {
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(
+            ellipse 48% 68% at 72% 44%,
+            rgba(231, 219, 190, 0.2) 0%,
+            rgba(78, 64, 29, 0.11) 42%,
+            rgba(107, 87, 39, 0.07) 60%,
+            transparent 78%
+          );
+          mix-blend-mode: screen;
+          pointer-events: none;
+        }
+
+        [id="f07-what-remains-unfinished-canvas"] {
+          position: absolute;
+          left: 1270px;
+          top: 142px;
+          width: 430px;
+          height: 616px;
+          overflow: hidden;
+          background:
+            radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.52), transparent 34%),
+            repeating-linear-gradient(88deg, rgba(33, 29, 22, 0.025) 0 1px, transparent 1px 7px),
+            #d8c9a7;
+          border-left: 1px solid rgba(255, 255, 255, 0.7);
+          border-right: 1px solid rgba(33, 29, 22, 0.18);
+        }
+
+        [id="f07-what-remains-unfinished-canvas-wash"] {
+          position: absolute;
+          inset: 0;
+          background:
+            linear-gradient(90deg, rgba(33, 29, 22, 0.08), transparent 11%, transparent 91%, rgba(33, 29, 22, 0.06)),
+            radial-gradient(ellipse at 66% 44%, rgba(234, 223, 199, 0.55), transparent 58%);
+          opacity: 0.72;
+        }
+
+        [id="f07-what-remains-unfinished-rule"] {
+          position: absolute;
+          left: 46px;
+          top: 58px;
+          bottom: 58px;
+          width: 1px;
+          background: rgba(33, 29, 22, 0.18);
+        }
+
+        [id="f07-what-remains-unfinished-date"] {
+          position: absolute;
+          left: 68px;
+          top: 70px;
+          min-width: 190px;
+          color: #211d16;
+          font-family: "JetBrains Mono", "Courier New", monospace;
+          font-size: 54px;
+          font-weight: 400;
+          line-height: 1;
+          letter-spacing: 0.08em;
+          white-space: nowrap;
+        }
+
+        [id="f07-what-remains-unfinished-title"] {
+          position: absolute;
+          left: 68px;
+          top: 182px;
+          width: 300px;
+          color: #0d0c0a;
+          font-family: Georgia, "Times New Roman", serif;
+          font-size: 54px;
+          font-weight: 400;
+          line-height: 0.96;
+          letter-spacing: -0.02em;
+          text-transform: uppercase;
+          opacity: 0;
+        }
+
+        [id="f07-what-remains-unfinished-title"] span {
+          display: block;
+        }
+
+        [id="f07-what-remains-unfinished-title"] span:last-child {
+          margin-top: 10px;
+          font-style: italic;
+        }
+
+        [id="f07-what-remains-unfinished-fade"] {
+          position: absolute;
+          inset: 0;
+          background: #0d0c0a;
+          pointer-events: none;
+        }
+      </style>
+
+      <div
+        id="root"
+        data-composition-id="07-what-remains-unfinished"
+        data-start="0"
+        data-duration="4.7"
+        data-width="1920"
+        data-height="1080"
+      >
+        <div
+          id="f07-what-remains-unfinished-ground"
+          class="clip"
+          data-start="0"
+          data-duration="4.7"
+          data-track-index="0"
+        ></div>
+
+        <div
+          id="f07-what-remains-unfinished-scene"
+          class="clip"
+          data-start="0"
+          data-duration="4.7"
+          data-track-index="1"
+        >
+          <div id="f07-what-remains-unfinished-zoom-outer" data-layout-allow-overflow>
+            <div id="f07-what-remains-unfinished-zoom-inner">
+              <img
+                id="f07-what-remains-unfinished-plate"
+                src=".media/images/image_007.jpg"
+                alt=""
+                draggable="false"
+              />
+              <div id="f07-what-remains-unfinished-vignette"></div>
+              <div id="f07-what-remains-unfinished-sun-bloom"></div>
+              <div id="f07-what-remains-unfinished-canvas">
+                <div id="f07-what-remains-unfinished-canvas-wash"></div>
+                <div id="f07-what-remains-unfinished-rule"></div>
+                <div id="f07-what-remains-unfinished-date"></div>
+                <div id="f07-what-remains-unfinished-title" aria-label="What remains unfinished">
+                  <span>What remains</span>
+                  <span>unfinished?</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="f07-what-remains-unfinished-fade"></div>
+        </div>
+      </div>
+
+      <script>
+        window.__timelines = window.__timelines || {};
+
+        const frame07Timeline = gsap.timeline({ paused: true });
+        const frame07Outer = document.getElementById("f07-what-remains-unfinished-zoom-outer");
+        const frame07Inner = document.getElementById("f07-what-remains-unfinished-zoom-inner");
+        const frame07Fade = document.getElementById("f07-what-remains-unfinished-fade");
+        const frame07Date = document.getElementById("f07-what-remains-unfinished-date");
+        const frame07Title = document.getElementById("f07-what-remains-unfinished-title");
+        const frame07DateDriver = { t: 0 };
+        const frame07DateStates = [
+          { t: 0, text: "" },
+          { t: 3.1, text: "1783" },
+        ];
+
+        function frame07TextAt(time) {
+          for (let i = frame07DateStates.length - 1; i >= 0; i -= 1) {
+            if (time >= frame07DateStates[i].t) return frame07DateStates[i].text;
+          }
+          return "";
+        }
+
+        frame07Timeline.fromTo(
+          frame07Fade,
+          { opacity: 1 },
+          { opacity: 0, duration: 1, ease: "power2.out", immediateRender: true },
+          0,
+        );
+
+        frame07Timeline.fromTo(
+          frame07Outer,
+          { scale: 1.22 },
+          { scale: 1.62, duration: 2.1, ease: "power2.inOut", immediateRender: true },
+          1,
+        );
+
+        frame07Timeline.fromTo(
+          frame07Inner,
+          { x: 0, y: 0 },
+          { x: -525, y: 90, duration: 2.1, ease: "power2.inOut", immediateRender: true },
+          1,
+        );
+
+        frame07Timeline.fromTo(
+          frame07Title,
+          { opacity: 0, y: 22 },
+          { opacity: 1, y: 0, duration: 0.72, ease: "power3.out" },
+          1.72,
+        );
+
+        frame07Timeline.to(
+          frame07DateDriver,
+          {
+            t: 4,
+            duration: 4,
+            ease: "none",
+            onUpdate: () => {
+              frame07Date.textContent = frame07TextAt(frame07DateDriver.t);
+            },
+          },
+          0,
+        );
+
+        window.__timelines["07-what-remains-unfinished"] = frame07Timeline;
+      </script>
+    </template>
+  </body>
+</html>
