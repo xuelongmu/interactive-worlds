@@ -8,7 +8,7 @@ export interface CueEngineHooks {
   action?: (cue: Cue) => void;
   /** Deferred side-effects that must wait for the line to finish
    *  (`then:` transitions, cutscenes) — the audio-first contract. */
-  after?: (cue: Cue) => void;
+  after?: (cue: Cue) => void | Promise<void>;
 }
 
 /** Renderer-agnostic trigger evaluation with narrator queueing.
@@ -117,7 +117,7 @@ export class CueEngine {
       // old cue's `then:` transition after teardown
       if (this.stopped) break;
       this.completedAt.set(cue.id, this.clock);
-      this.hooks.after?.(cue);
+      await this.hooks.after?.(cue);
     }
     this.playing = false;
   }

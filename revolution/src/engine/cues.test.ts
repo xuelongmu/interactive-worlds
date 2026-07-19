@@ -34,6 +34,20 @@ describe("CueEngine teardown", () => {
     engine.handleEvent({ type: "scene-start" });
     await vi.waitFor(() => expect(after).toHaveBeenCalledOnce());
   });
+
+  it("serializes an asynchronous after hook before the next queued cue", async () => {
+    let finishAfter!: () => void;
+    const after = vi.fn(() => new Promise<void>((resolve) => { finishAfter = resolve; }));
+    const play = vi.fn().mockResolvedValue(undefined);
+    const next = { ...cue, id: "TEST-020" };
+    const engine = new CueEngine([cue, next], { play, after });
+
+    engine.handleEvent({ type: "scene-start" });
+    await vi.waitFor(() => expect(after).toHaveBeenCalledTimes(1));
+    expect(play).toHaveBeenCalledTimes(1);
+    finishAfter();
+    await vi.waitFor(() => expect(play).toHaveBeenCalledTimes(2));
+  });
 });
 
 describe("CueEngine pacing and review controls", () => {

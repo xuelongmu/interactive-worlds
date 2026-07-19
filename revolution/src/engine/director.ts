@@ -46,6 +46,28 @@ export function completeCutsceneHandoff(emitAftermath: () => void, unlock: () =>
   unlock();
 }
 
+const SYSTEM_ACTIONS = new Set([
+  "boarded",
+  "control-granted",
+  "cutscene-volley-complete",
+  "signature-dwell",
+]);
+
+export function defaultGuidanceForCue(cue: Cue): string | null {
+  const trigger = cue.trigger;
+  const place = trigger.zone?.replaceAll("-", " ");
+  switch (trigger.type) {
+    case "zone-enter": return place ? `Walk toward the ${place} to continue` : "Keep exploring to continue";
+    case "dwell": return place ? `Pause near the ${place} to continue` : "Pause and take in the scene";
+    case "action": return trigger.name && SYSTEM_ACTIONS.has(trigger.name)
+      ? null
+      : "Interact with the scene to continue";
+    case "model-event": return "Keep moving — the next moment is beginning";
+    case "timer": return "The next moment will continue shortly";
+    default: return null;
+  }
+}
+
 /** Runs the story: loads a manifest, instantiates its renderer, wires the
  *  cue + audio engines, and executes `then:` directives. Linear order makes
  *  prediction exact — the next scene preloads while the current one plays,
@@ -71,6 +93,7 @@ export class Director {
   private guidanceCancel: (() => void) | null = null;
   private focusBeforePause: HTMLElement | null = null;
   private sceneBackground: HTMLElement[] = [];
+  private reviewTransitioning = false;
 
   private stage: HTMLElement;
   private canvasHost: HTMLElement;
@@ -167,75 +190,93 @@ export class Director {
   // ---- scene lifecycle -------------------------------------------------
 
   private async runScene(id: string) {
+    if (this.reviewTransitioning) return;
     const manifest = sceneById.get(id);
     if (!manifest) throw new Error(`unknown scene "${id}"`);
 
-    await this.fadeTo(1);
-    await this.teardownScene();
-    this.current = manifest;
-    setCurrentScene(manifest.id);
-    const reviewSceneSelect = this.reviewControlsEl?.querySelector<HTMLSelectElement>("[data-review-scene]");
-    if (reviewSceneSelect) reviewSceneSelect.value = manifest.id;
+    this.setReviewTransitioning(true);
 
-    const chapter = scenes.indexOf(manifest);
-    const heading = splitChapterHeading(manifest.title);
-    this.cardEl.querySelector(".card-kicker")!.textContent =
-      chapter >= 0 ? `Chapter ${CHAPTER_WORDS[chapter] ?? chapter + 1}` : "";
-    this.cardEl.querySelector(".card-title")!.textContent = heading.title;
-    this.cardEl.querySelector(".card-date")!.textContent = heading.date;
-    this.statusEl.textContent = "Preparing the chapter";
-    this.cardEl.classList.add("visible");
+    try {
+      await this.fadeTo(1);
+      await this.teardownScene();
+      this.current = manifest;
+      setCurrentScene(manifest.id);
+      const reviewSceneSelect = this.reviewControlsEl?.querySelector<HTMLSelectElement>("[data-review-scene]");
+      if (reviewSceneSelect) reviewSceneSelect.value = manifest.id;
 
-    const cueEngine = new CueEngine(manifest.cues, {
-      play: async (cue) => {
-        // cast diegetic line first (the script order: shout, then narrator)
-        if (cue.diegeticVo) {
+      const chapter = scenes.indexOf(manifest);
+      const heading = splitChapterHeading(manifest.title);
+      this.cardEl.querySelector(".card-kicker")!.textContent =
+        chapter >= 0 ? `Chapter ${CHAPTER_WORDS[chapter] ?? chapter + 1}` : "";
+      this.cardEl.querySelector(".card-title")!.textContent = heading.title;
+      this.cardEl.querySelector(".card-date")!.textContent = heading.date;
+      this.statusEl.textContent = "Preparing the chapter";
+      this.cardEl.classList.add("visible");
+
+      const cueEngine = new CueEngine(manifest.cues, {
+        play: async (cue) => {
+          // cast diegetic line first (the script order: shout, then narrator)
+          if (cue.diegeticVo) {
+            await this.audio.playVoice({
+              url: cue.diegeticVo,
+              subtitle: cue.diegeticSubtitle,
+              bus: "diegetic",
+              duck: [],
+            });
+          }
           await this.audio.playVoice({
-            url: cue.diegeticVo,
-            subtitle: cue.diegeticSubtitle,
-            bus: "diegetic",
-            duck: [],
+            url: cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`,
+            subtitle: cue.subtitle,
+            bus: cue.diegetic ? "diegetic" : "narration",
+            duck: cue.diegetic ? [] : cue.duck as BusName[] | undefined,
           });
-        }
-        await this.audio.playVoice({
-          url: cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`,
-          subtitle: cue.subtitle,
-          bus: cue.diegetic ? "diegetic" : "narration",
-          duck: cue.diegetic ? [] : cue.duck as BusName[] | undefined,
-        });
-      },
-      // audio-first: the visual consequence lands on the last word — and a
-      // failed VO load still advances the story
-      after: (cue) => {
-        if (this.cueEngine !== cueEngine) return;
-        void this.runThen(cue);
-        if (!cue.then && !cueEngine.hasQueuedPlayback()) this.armBeatGuidance(cueEngine);
-      },
-      action: (cue) => {
-        this.hideBeatGuidance();
-        if (cue.lockControls) this.runner?.setControlsLocked(true);
-        if (manifest.next?.preloadAt === cue.id) this.preloadNext(manifest);
-      },
-    });
-    this.cueEngine = cueEngine;
-    this.updateTimer = window.setInterval(() => {
-      if (!this.paused) cueEngine.update(0.1);
-    }, 100);
+        },
+        // audio-first: the visual consequence lands on the last word — and a
+        // failed VO load still advances the story
+        after: async (cue) => {
+          if (this.cueEngine !== cueEngine) return;
+          await this.runThen(cue);
+          const staysInScene = !cue.then || !cue.then.startsWith("scene:") && cue.then !== "end";
+          if (staysInScene && this.cueEngine === cueEngine && !cueEngine.hasQueuedPlayback()) {
+            this.armBeatGuidance(cueEngine);
+          }
+        },
+        action: (cue) => {
+          this.hideBeatGuidance();
+          if (cue.lockControls) this.runner?.setControlsLocked(true);
+          if (manifest.next?.preloadAt === cue.id) this.preloadNext(manifest);
+        },
+      });
+      this.cueEngine = cueEngine;
+      this.updateTimer = window.setInterval(() => {
+        if (!this.paused) cueEngine.update(0.1);
+      }, 100);
 
-    if (manifest.audio.ambience?.length) void this.audio.playAmbience(manifest.audio.ambience);
-    // narration over black is the loading screen — start the scene now
-    cueEngine.handleEvent({ type: "scene-start" });
+      if (manifest.audio.ambience?.length) void this.audio.playAmbience(manifest.audio.ambience);
+      // narration over black is the loading screen — start the scene now
+      cueEngine.handleEvent({ type: "scene-start" });
 
-    const minHold = new Promise((r) => setTimeout(r, 2500));
-    await Promise.all([this.createRunner(manifest), minHold]);
-    // a scene with no preloadAt marker still preloads, just later
-    if (manifest.next && !manifest.next.preloadAt) this.preloadNext(manifest);
-    if (manifest.audio.barks?.length) this.startBarks(manifest.audio.barks);
+      const minHold = new Promise((r) => setTimeout(r, 2500));
+      await Promise.all([this.createRunner(manifest), minHold]);
+      // a scene with no preloadAt marker still preloads, just later
+      if (manifest.next && !manifest.next.preloadAt) this.preloadNext(manifest);
+      if (manifest.audio.barks?.length) this.startBarks(manifest.audio.barks);
 
-    this.cardEl.classList.remove("visible");
-    await this.fadeTo(0);
-    this.sceneReady = true;
-    this.armStallHint(manifest.renderer);
+      this.cardEl.classList.remove("visible");
+      await this.fadeTo(0);
+      this.sceneReady = true;
+      this.armStallHint(manifest.renderer);
+    } finally {
+      this.setReviewTransitioning(false);
+    }
+  }
+
+  private setReviewTransitioning(transitioning: boolean) {
+    if (!this.opts.reviewMode) return;
+    this.reviewTransitioning = transitioning;
+    for (const control of this.reviewControlsEl?.querySelectorAll<HTMLButtonElement | HTMLSelectElement>("button, select") ?? []) {
+      control.disabled = transitioning;
+    }
   }
 
   private preloadNext(manifest: SceneManifest) {
@@ -457,7 +498,7 @@ export class Director {
     this.hideBeatGuidance();
     const next = cueEngine.nextPendingCue();
     if (!next) return;
-    const message = next.guidance ?? this.defaultGuidance(next);
+    const message = next.guidance ?? defaultGuidanceForCue(next);
     if (!message) return;
     this.guidanceCancel = this.sceneTimers.schedule(() => {
       if (this.cueEngine !== cueEngine || this.paused) return;
@@ -465,19 +506,6 @@ export class Director {
       this.guidanceEl.classList.add("visible");
       this.guidanceEl.setAttribute("aria-hidden", "false");
     }, 3_000);
-  }
-
-  private defaultGuidance(cue: Cue): string | null {
-    const trigger = cue.trigger;
-    const place = trigger.zone?.replaceAll("-", " ");
-    switch (trigger.type) {
-      case "zone-enter": return place ? `Walk toward the ${place} to continue` : "Keep exploring to continue";
-      case "dwell": return place ? `Pause near the ${place} to continue` : "Pause and take in the scene";
-      case "action": return "Interact with the scene to continue";
-      case "model-event": return "Keep moving — the next moment is beginning";
-      case "timer": return "The next moment will continue shortly";
-      default: return null;
-    }
   }
 
   private hideBeatGuidance() {
