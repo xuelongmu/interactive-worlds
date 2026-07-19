@@ -1,12 +1,14 @@
-# The Revolution — Game Design Document
+# American Revolution — Game Design Document
 
-**An interactive documentary of the American Revolution, 1773–1783.**
+**An interactive documentary, 1773–1783.**
 The viewer walks frozen moments, rides living ones, and signs their name to
 history. Ten chapters, roughly 65 minutes, in a web browser.
 
 Companion docs: [architecture.md](architecture.md) (technical),
 [narration-scripts.md](narration-scripts.md) (script format + three finished
-scenes). This document is the creative and production source of truth.
+scenes), [decisions.md](decisions.md) (binding director decisions — agents
+follow these without re-asking). This document is the creative and
+production source of truth.
 
 ---
 
@@ -35,7 +37,9 @@ the scene should carry.
 4. **The earnest voice.** One unnamed documentary narrator. No first person,
    no direct address, no meta-commentary, nothing the record doesn't support.
    Facts, plainly stated, allowed to land.
-5. **The ink thread.** The player signs their real name in 1776 and finds it
+5. **The ink thread.** The player signs their real name in 1776 — as a 57th
+   signer, lower-right among the 56 genuine signatures; refusal is allowed
+   and unremarked — and finds it
    again, aged, under glass in 1783. Paper and ink are the connective motif
    of the whole piece.
 6. **Degrade, never break.** Every live system (world-model sessions) has a
@@ -108,6 +112,10 @@ screens — honest waits, never spinners.
 ---
 
 ## 3. The three registers (mechanics)
+
+**Embodiment follows register** (decisions.md): Participant and Actor scenes
+are embodied — hands visible in frames, prompts, and interactions; Witness
+scenes are a bodiless ghost — never hands, never shadow.
 
 ### Witness — walkable splats
 - Marble 1.1 Plus worlds rendered by Spark inside three.js; collider mesh
@@ -183,7 +191,12 @@ screens — honest waits, never spinners.
 
 ---
 
-## 6. Historical integrity
+## 6. Historical integrity & intensity
+
+**Violence ceiling** (decisions.md): consequences shown; violence itself
+elided or at distance; aftermath still and never lingered on; no gore
+close-ups; the camera never enjoys it. Applies to every prompt, frame, and
+cutscene edit.
 
 - **The record rule:** narration states only what sources support; where the
   record is genuinely unsettled (who fired first), the ambiguity *is* the
@@ -222,6 +235,8 @@ require no new engine code.
 **Cost posture:** all assets baked once (frames cents, worlds ~minutes of
 Marble credits, VO regenerated per-cue on hash change). The only per-viewer
 cost is world-model session minutes — bounded per chapter, with fallbacks.
+Spend and approval governance: see decisions.md (no artificial spend
+ceilings; a small director approval surface; everything else autonomous).
 
 ## 9. Roadmap
 
@@ -232,7 +247,9 @@ Tracked as GitHub milestones; every issue carries acceptance criteria.
   title card to scene hand-off. *Proves the grammar with one chapter.*
 - **M2 — Act One: Declaration + Delaware.** The signing (ink thread begins),
   the crossing with timed beats + fallback, Trenton stinger. *Proves all
-  three registers and the handoff trick.*
+  three registers and the handoff trick.* Act One must reach
+  shippable quality as an internal gate, but release is a **single launch
+  with all ten chapters** (decisions.md).
 - **M3 — Full script & worlds.** All ten scripts in cue format; all worlds
   generated, walked, pinned; Saratoga and Yorktown sand tables; Tea Party
   wake-up; Valley Forge; Treaty finale with the aged signature.

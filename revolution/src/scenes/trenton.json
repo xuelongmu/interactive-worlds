@@ -1,0 +1,38 @@
+{
+  "id": "trenton",
+  "title": "Trenton — December 26, 1776",
+  "renderer": "worldmodel",
+  "assets": {
+    "referenceImage": "/reference/trenton.jpg",
+    "prompt": "First-person view marching in a column of Continental Army soldiers entering a small colonial town at first light in a driving sleet storm, December 1776. Muskets with fixed bayonets, breath steaming, gun carriages on frozen rutted streets, clapboard and brick houses looming through the storm. Grim, cold, realistic, gray dawn light.",
+    "fallbackVideo": "/assets/video/trenton-assault.mp4"
+  },
+  "zones": [],
+  "cues": [
+    { "id": "TRE-010", "trigger": { "type": "scene-start" },
+      "subtitle": "Eight in the morning, December 26th. Trenton. The garrison is fifteen hundred Hessians — German professional soldiers, the best infantry money can buy. The storm that nearly killed the army on the road is now its cover. The sentries can see perhaps fifty yards." },
+    { "id": "TRE-020", "trigger": { "type": "action", "name": "control-granted" },
+      "diegeticVo": "/assets/audio/vo/TRE-020.sergeant.mp3",
+      "diegeticSubtitle": "Close up! Close on the man ahead — when the guns open, you run at the smoke!",
+      "subtitle": "Washington has split the army into two columns, closing on the town from north and river. The plan requires both to arrive together, in a storm, after a night without sleep. Somehow, they do." },
+    { "id": "TRE-031", "trigger": { "type": "model-event", "name": "guns-open" },
+      "subtitle": "Henry Knox's cannon — the guns the army dragged across the river all night — open fire straight down King and Queen Streets. The Hessians form up in the open, in the sleet, and the streets themselves become gun barrels." },
+    { "id": "TRE-032", "trigger": { "type": "model-event", "name": "charge" },
+      "subtitle": "The Hessian commander, Colonel Rall, had been warned for days that the Americans might come. The warnings went unread. Now his regiments are fighting in a storm at point-blank range, in a town that has already filled with American infantry." },
+    { "id": "TRE-040", "trigger": { "type": "model-event", "name": "surrender" },
+      "subtitle": "It lasted about ninety minutes. Twenty-two Hessians were killed — Colonel Rall among them — and nearly nine hundred captured. The Americans lost not one man in the fighting. The ragtag militia army had just destroyed a garrison of professionals." },
+    { "id": "TRE-050", "trigger": { "type": "timer", "seconds": 200 },
+      "subtitle": "A week later, most of the men whose enlistments expired stayed. Washington offered ten dollars and asked them, regiment by regiment, to step forward. After a silence, they did. The revolution would go on.",
+      "then": "scene:saratoga" }
+  ],
+  "audio": { "ambience": ["/assets/audio/amb/trenton-sleet.mp3"] },
+  "modelEvents": [
+    { "at": 40, "name": "guns-open",
+      "prompt": "Same colonial town street in driving sleet at dawn: American cannon at the head of the street fire, muzzle flashes lighting the storm, smoke rolling between the houses, soldiers charging forward past the guns. Realistic, gray dawn light, chaotic." },
+    { "at": 85, "name": "charge",
+      "prompt": "Same colonial town in sleet at dawn: running with charging Continental soldiers between houses, bayonets fixed, Hessian soldiers in blue coats and tall brass caps falling back across a town square in the smoke and storm. Realistic, gray dawn light, chaotic." },
+    { "at": 150, "name": "surrender",
+      "prompt": "Same colonial town square in easing sleet, morning: hundreds of Hessian soldiers in blue coats grounding their muskets and standing in ranks as prisoners, Continental soldiers surrounding the square, smoke drifting, the storm thinning. Realistic, quiet, gray morning light." }
+  ],
+  "next": { "scene": "saratoga", "preloadAt": "TRE-040" }
+}

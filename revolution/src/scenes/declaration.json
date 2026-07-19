@@ -11,17 +11,17 @@
   "zones": [],
   "cues": [
     { "id": "DEC-010", "trigger": { "type": "scene-start" },
-      "subtitle": "Philadelphia. The Pennsylvania State House, summer of 1776. The windows are shuttered. The debates inside are treason, and the city is full of informers." },
+      "subtitle": "Philadelphia. The Pennsylvania State House, summer of 1776. The windows are shuttered, creating secrecy in a city full of informers." },
     { "id": "DEC-011", "trigger": { "type": "action", "name": "approach-table" },
       "subtitle": "On July 2nd, Congress voted for independence. The formal signing came weeks later, the delegates coming to the table one at a time." },
     { "id": "DEC-030", "trigger": { "type": "action", "name": "quill-pickup" },
-      "subtitle": "The document closes with a pledge: their lives, their fortunes, and their sacred honor. It was not rhetoric. A signature below those words was a confession to treason, and the penalty for treason was death." },
+      "subtitle": "The document closes with a pledge: their lives, their fortunes, and their honor. A signature below those words was treason, and the penalty for treason was death." },
     { "id": "DEC-061", "trigger": { "type": "action", "name": "sign-complete" },
-      "subtitle": "Fifty-six men signed. The youngest was twenty-six. The oldest, Franklin, was seventy. Merchants, farmers, lawyers, a printer. None of them knew whether the document would be remembered as a founding — or produced as evidence." },
+      "subtitle": "Fifty-six men signed. The youngest was twenty-six. The oldest, Franklin, was seventy. Merchants, farmers, lawyers, a printer." },
     { "id": "DEC-070", "trigger": { "type": "action", "name": "quill-down" },
-      "subtitle": "The names were kept secret for six months. No signer was ever tried for treason, but many paid all the same — homes burned, fortunes lost, sons killed in the war they had voted for.",
+      "subtitle": "The names were kept secret for six months. No signer was ever tried in court, but many paid all the same — homes burned, fortunes lost, sons killed in the war they had voted for.",
       "then": "scene:delaware" }
   ],
   "audio": { "ambience": ["/assets/audio/amb/assembly-room.mp3"] },
-  "next": { "scene": "delaware" }
+  "next": { "scene": "delaware", "preloadAt": "DEC-030" }
 }

@@ -6,3 +6,8 @@ austerlitz/
 
 node_modules/
 dist/
+
+# local voice-audition scratch: comparison pages and sample takes used to cast
+# a voice. Disposable and media-heavy — regenerate rather than commit.
+auditions*/
+vo-preview.html

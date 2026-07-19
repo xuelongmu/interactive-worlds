@@ -1,73 +1,183 @@
-/** Narration script → ElevenLabs VO, one file per cue id.
+/** Narration script → ElevenLabs VO, one file per spoken line.
  *  Source of truth: docs/narration-scripts.md (cue blocks like
- *  `**LEX-010 — trigger**` followed by `> NARRATOR: line`).
+ *  `**LEX-010 — trigger**` followed by `> NARRATOR: line` and/or
+ *  `> MARINER (diegetic): line`), plus repeatable `**Event barks**` pools.
  *  Content-hashed: a one-line rewrite regenerates one file.
+ *
+ *  Output naming — the engine resolves narration at vo/<CUE-ID>.mp3, so
+ *  narrator files keep that exact path. Diegetic lines sit beside them:
+ *    LEX-010.mp3          narrator
+ *    DEL-020.mariner.mp3  diegetic line in the same cue
+ *    DEL-BARK-1.mp3       repeatable event bark
  *
  *  Usage: node pipeline/vo.mjs [--dry-run]
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { requireKey, projectRoot, loadCache, saveCache, hash } from "./lib.mjs";
+import { requireKey, readEnvValue, projectRoot, loadCache, saveCache, hash } from "./lib.mjs";
 
 const SCRIPT = resolve(projectRoot, "..", "docs", "narration-scripts.md");
 const OUT_DIR = resolve(projectRoot, "public", "assets", "audio", "vo");
 const CACHE_FILE = "pipeline/.vo-cache.json";
-const MODEL_ID = "eleven_multilingual_v2";
-const VOICE_SETTINGS = { stability: 0.5, similarity_boost: 0.8, style: 0.15 };
+const MODEL_ID = "eleven_v3";
+
+/** Cast. Each speaker in the script maps to a voice and a delivery.
+ *  `tag` is an eleven_v3 audio tag prepended at synthesis time — direction
+ *  lives here, not in the script, so the prose stays clean for subtitles.
+ *  v3 snaps `stability` to 0.0 / 0.5 / 1.0 (creative / natural / robust). */
+const CAST = {
+  NARRATOR: {
+    env: "ELEVENLABS_NARRATOR_VOICE_ID",
+    settings: { stability: 0.5, similarity_boost: 0.8, style: 0.15 },
+    tag: "",
+  },
+  MARINER: {
+    env: "ELEVENLABS_MARINER_VOICE_ID",
+    settings: { stability: 0.5, similarity_boost: 0.75, style: 0.6 },
+    tag: "[shouting over wind]",
+  },
+  BOSUN: {
+    env: "ELEVENLABS_BOSUN_VOICE_ID",
+    settings: { stability: 0.5, similarity_boost: 0.75, style: 0.6 },
+    tag: "[shouting across the deck]",
+  },
+  SERGEANT: {
+    env: "ELEVENLABS_SERGEANT_VOICE_ID",
+    settings: { stability: 0.5, similarity_boost: 0.75, style: 0.6 },
+    tag: "[barking an order, urgent]",
+  },
+};
 
 const dryRun = process.argv.includes("--dry-run");
 
-/** Parse `**CUE-ID — …**` blocks followed by `> NARRATOR: …` lines. */
-function parseCues(markdown) {
-  const cues = [];
-  const blockRe = /\*\*([A-Z]{3}-\d{3})[^\n]*\*\*\s*\n((?:>.*\n?)*)/g;
-  for (const match of markdown.matchAll(blockRe)) {
-    const [, id, quoted] = match;
-    const narratorLine = quoted
-      .split("\n")
-      .map((l) => l.replace(/^>\s?/, ""))
-      .join("\n")
-      .match(/NARRATOR:\s*([\s\S]*?)(?=\n[A-Z]+ ?\(|$)/);
-    if (!narratorLine) continue;
-    const text = narratorLine[1]
-      .replace(/\[[^\]]*\]/g, " … ") // stage directions -> pause
-      .replace(/\s+/g, " ")
-      .trim();
-    if (text) cues.push({ id, text });
-  }
-  return cues;
+/** Strip stage directions to a pause, collapse whitespace, drop bark quotes. */
+function clean(raw) {
+  return raw
+    .replace(/\[[^\]]*\]/g, " … ") // stage directions -> pause
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^"(.*)"$/, "$1"); // barks are quoted in the script
 }
 
-const cues = parseCues(readFileSync(SCRIPT, "utf8"));
-console.log(`parsed ${cues.length} narrator cues from docs/narration-scripts.md`);
+/** Walk the script line by line, tracking the enclosing cue (or bark pool). */
+function parseLines(markdown) {
+  const out = [];
+  let cueId = null;
+  let scenePrefix = null;
+  let barkPool = false;
+  let barkIndex = 0;
+  let current = null; // accumulates continuation lines
+
+  const flush = () => {
+    if (!current) return;
+    const text = clean(current.raw);
+    if (text) out.push({ ...current, text });
+    current = null;
+  };
+
+  // Normalise CRLF first: JS `.` does not match \r, so a trailing \r would
+  // stop the speaker pattern from anchoring.
+  for (const line of markdown.replace(/\r\n?/g, "\n").split("\n")) {
+    const cueHeader = line.match(/^\*\*([A-Z]{3})-(\d{3})[^\n]*\*\*/);
+    if (cueHeader) {
+      flush();
+      scenePrefix = cueHeader[1];
+      cueId = `${cueHeader[1]}-${cueHeader[2]}`;
+      barkPool = false;
+      continue;
+    }
+    if (/^\*\*Event barks/i.test(line)) {
+      flush();
+      barkPool = true;
+      continue;
+    }
+    if (!line.startsWith(">")) {
+      flush();
+      // A non-quoted, non-header line ends the current block's quoted run.
+      if (line.trim() && !line.startsWith("**")) barkPool = barkPool && false;
+      continue;
+    }
+
+    const body = line.replace(/^>\s?/, "");
+    const speakerMatch = body.match(/^([A-Z][A-Z ]*[A-Z]|[A-Z])\s*(?:\((?:diegetic)\))?\s*:\s*(.*)$/);
+    if (speakerMatch) {
+      flush();
+      const speaker = speakerMatch[1].trim();
+      if (!CAST[speaker]) {
+        console.warn(`⚠ unknown speaker "${speaker}" — no voice mapped, skipping`);
+        continue;
+      }
+      const id = barkPool
+        ? `${scenePrefix}-BARK-${++barkIndex}`
+        : speaker === "NARRATOR"
+          ? cueId
+          : `${cueId}.${speaker.toLowerCase()}`;
+      if (!id) continue;
+      current = { id, speaker, raw: speakerMatch[2] };
+    } else if (current) {
+      current.raw += ` ${body}`; // continuation of the previous speaker's line
+    }
+  }
+  flush();
+  return out;
+}
+
+const lines = parseLines(readFileSync(SCRIPT, "utf8"));
+const bySpeaker = lines.reduce((acc, l) => ({ ...acc, [l.speaker]: (acc[l.speaker] ?? 0) + 1 }), {});
+console.log(
+  `parsed ${lines.length} spoken lines from docs/narration-scripts.md ` +
+    `(${Object.entries(bySpeaker).map(([s, n]) => `${s} ${n}`).join(", ")})`
+);
 if (dryRun) {
-  for (const cue of cues) console.log(`  ${cue.id}: ${cue.text.slice(0, 70)}…`);
+  for (const l of lines) console.log(`  ${l.id.padEnd(20)} ${l.speaker.padEnd(9)} ${l.text.slice(0, 60)}…`);
   process.exit(0);
 }
 
 const key = requireKey("ELEVENLABS_API_KEY", "VO generation");
-const voiceId = requireKey("ELEVENLABS_NARRATOR_VOICE_ID", "VO generation (narrator voice)");
+
+// Resolve one voice per speaker actually present in the script, so an
+// unrelated missing voice never blocks a run.
+const voices = {};
+for (const speaker of Object.keys(bySpeaker)) {
+  const { env } = CAST[speaker];
+  const value = speaker === "NARRATOR" ? requireKey(env, "VO generation (narrator voice)") : readEnvValue(env);
+  if (!value) {
+    console.log(`⚠ ${env} is not set — skipping ${bySpeaker[speaker]} ${speaker} line(s).`);
+    continue;
+  }
+  voices[speaker] = value;
+}
+
 const cache = loadCache(CACHE_FILE);
 mkdirSync(OUT_DIR, { recursive: true });
 
 let generated = 0;
-for (const cue of cues) {
-  const signature = hash({ text: cue.text, voiceId, MODEL_ID, VOICE_SETTINGS });
-  if (cache[cue.id] === signature) continue;
-  console.log(`tts ${cue.id}…`);
+let skipped = 0;
+for (const line of lines) {
+  const voiceId = voices[line.speaker];
+  if (!voiceId) { skipped++; continue; }
+  const { settings, tag } = CAST[line.speaker];
+  const text = tag ? `${tag} ${line.text}` : line.text;
+
+  const signature = hash({ text, voiceId, MODEL_ID, settings });
+  if (cache[line.id] === signature) continue;
+  console.log(`tts ${line.id} (${line.speaker})…`);
   const res = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
     {
       method: "POST",
       headers: { "xi-api-key": key, "Content-Type": "application/json" },
-      body: JSON.stringify({ text: cue.text, model_id: MODEL_ID, voice_settings: VOICE_SETTINGS }),
+      body: JSON.stringify({ text, model_id: MODEL_ID, voice_settings: settings }),
     }
   );
-  if (!res.ok) throw new Error(`tts failed for ${cue.id}: ${res.status} ${await res.text()}`);
-  writeFileSync(resolve(OUT_DIR, `${cue.id}.mp3`), Buffer.from(await res.arrayBuffer()));
-  cache[cue.id] = signature;
-  // persist after every paid call so a mid-run failure never re-bills done cues
+  if (!res.ok) throw new Error(`tts failed for ${line.id}: ${res.status} ${await res.text()}`);
+  writeFileSync(resolve(OUT_DIR, `${line.id}.mp3`), Buffer.from(await res.arrayBuffer()));
+  cache[line.id] = signature;
+  // persist after every paid call so a mid-run failure never re-bills done lines
   saveCache(CACHE_FILE, cache);
   generated++;
 }
-console.log(`done — ${generated} generated, ${cues.length - generated} cached`);
+console.log(
+  `done — ${generated} generated, ${lines.length - generated - skipped} cached` +
+    (skipped ? `, ${skipped} skipped (no voice configured)` : "")
+);

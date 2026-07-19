@@ -18,10 +18,18 @@ export class CueEngine {
   private fired = new Set<string>();
   private queue: Cue[] = [];
   private playing = false;
+  private stopped = false;
   private clock = 0;
   private zoneEnteredAt = new Map<string, number>();
 
   constructor(private cues: Cue[], private hooks: CueEngineHooks) {}
+
+  /** Scene teardown: no further cues fire and the pending queue is dropped
+   *  (the line currently playing is allowed to finish). */
+  stop() {
+    this.stopped = true;
+    this.queue.length = 0;
+  }
 
   handleEvent(event: EngineEvent) {
     if (event.type === "zone-enter") this.zoneEnteredAt.set(event.zone, this.clock);
@@ -59,6 +67,7 @@ export class CueEngine {
   }
 
   private fire(cue: Cue) {
+    if (this.stopped) return;
     this.fired.add(cue.id); // cues are one-shot per scene run (script cues are all `once`)
     this.hooks.action?.(cue);
     this.queue.push(cue);
@@ -68,13 +77,16 @@ export class CueEngine {
   private async drain() {
     if (this.playing) return;
     this.playing = true;
-    while (this.queue.length > 0) {
+    while (!this.stopped && this.queue.length > 0) {
       const cue = this.queue.shift()!;
       try {
         await this.hooks.play(cue);
       } catch (error) {
         console.warn(`[cues] playback failed for ${cue.id}:`, error);
       }
+      // a stop() during playback wins — a dead scene must not launch the
+      // old cue's `then:` transition after teardown
+      if (this.stopped) break;
       this.hooks.after?.(cue);
     }
     this.playing = false;
