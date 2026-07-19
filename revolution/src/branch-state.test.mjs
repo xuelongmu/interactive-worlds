@@ -330,6 +330,15 @@ test("storage read failures and corrupt records take the atomic neutral path", (
 
 test("invalid JavaScript callers cannot store a choice for the wrong branch", () => {
   assert.throws(
+    () =>
+      selectBranchChoice(
+        createBranchState(),
+        "not-a-branch",
+        "trace-river-road",
+      ),
+    /Unknown branch id: not-a-branch/,
+  );
+  assert.throws(
     () => selectBranchChoice(createBranchState(), "delaware-duty", "break-chest"),
     /Unknown delaware-duty choice/,
   );

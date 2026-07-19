@@ -145,6 +145,10 @@ function isSaratogaAnalysisLens(value: unknown): value is SaratogaAnalysisLens {
   return SARATOGA_ANALYSIS_LENSES.some((lens) => lens === value);
 }
 
+function isBranchId(value: unknown): value is BranchId {
+  return BRANCH_IDS.some((branchId) => branchId === value);
+}
+
 function isBranchChoice<Id extends BranchId>(
   branchId: Id,
   value: unknown,
@@ -162,6 +166,9 @@ export function selectBranchChoice<Id extends BranchId>(
   branchId: Id,
   choice: BranchChoiceFor<Id>,
 ): BranchState {
+  if (!isBranchId(branchId)) {
+    throw new TypeError(`Unknown branch id: ${String(branchId)}`);
+  }
   if (!isBranchChoice(branchId, choice)) {
     throw new TypeError(
       `Unknown ${branchId} choice: ${String(choice)}`,
