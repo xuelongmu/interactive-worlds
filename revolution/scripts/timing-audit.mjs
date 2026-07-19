@@ -11,7 +11,7 @@ const CLOCK_CLASSIFICATIONS = new Map(Object.entries({
   "saratoga:SAR-021:orTimer": ["player-exploration", "sand-table placement is awaiting player input"],
   "teaparty:TEA-040:orTimer": ["player-exploration", "viewer approaches and boards the ship"],
   "teaparty:TEA-070:orTimer": ["active-reactor", "chest work remains an active model sequence"],
-  "teaparty:TEA-080:orTimer": ["active-reactor", "deck clearing remains an active model sequence"],
+  "teaparty:TEA-080:seconds": ["active-reactor", "completion-gated Parliament cue retains an absolute failsafe"],
   "treaty-paris:PAR-040:orTimer": ["player-exploration", "viewer walks through the unfinished room"],
   "trenton:TRE-050:seconds": ["active-reactor", "absolute scripted sequence clock after surrender"],
   "valley-forge:VAL-040:orTimer": ["player-exploration", "viewer walks from the huts to the parade ground"],
@@ -206,17 +206,12 @@ export function auditSceneTiming({ sceneDirectory, publicDirectory }) {
   }
 
   const teaParty = sceneFiles.find(({ manifest }) => manifest.id === "teaparty")?.manifest;
-  const teaChestsDone = teaParty?.modelEvents?.find((event) => event.name === "chests-done")?.at;
-  const teaDeckClear = teaParty?.modelEvents?.find((event) => event.name === "deck-clear")?.at;
+  const teaDeckClear = teaParty?.modelEvents?.find((event) => event.name === "deck-clear");
   const expectedTeaTailSeconds = (
     PERCEIVED_TIMING_POLICY.teaPartyCompletionTakeMs
     + PERCEIVED_TIMING_POLICY.eventBusFadeMs
   ) / 1_000;
-  if (teaDeckClear - teaChestsDone !== expectedTeaTailSeconds) {
-    structuralFailures.push(
-      `teaparty: deck-clear must follow chests-done by ${expectedTeaTailSeconds}s`,
-    );
-  }
+  if (teaDeckClear) structuralFailures.push("teaparty: deck-clear must not be independently clocked");
   const teaCompletionCue = teaParty?.cues?.find((cue) => cue.id === "TEA-070");
   const teaParliamentCue = teaParty?.cues?.find((cue) => cue.id === "TEA-080");
   if (teaCompletionCue && teaParliamentCue) {
@@ -224,6 +219,9 @@ export function auditSceneTiming({ sceneDirectory, publicDirectory }) {
     const fallbackSeconds = teaParliamentCue.trigger?.orAfterPrevious ?? Number.POSITIVE_INFINITY;
     if (completionVoiceSeconds + fallbackSeconds < expectedTeaTailSeconds) {
       structuralFailures.push("teaparty: Parliament fallback can cut off the completion take/fade tail");
+    }
+    if (teaParliamentCue.trigger?.type !== "timer" || teaParliamentCue.trigger?.seconds !== 210) {
+      structuralFailures.push("teaparty: completion-gated Parliament cue must retain its 210s absolute failsafe");
     }
   }
 

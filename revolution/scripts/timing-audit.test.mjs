@@ -56,7 +56,9 @@ test("Tea, Saratoga, Yorktown, and Lexington carry the requested timing fields",
   const cue = (scene, id) => manifests.get(scene).cues.find((item) => item.id === id);
   const event = (scene, name) => manifests.get(scene).modelEvents.find((item) => item.name === name);
 
-  assert.equal(event("teaparty", "deck-clear").at, 66.5);
+  assert.equal(event("teaparty", "deck-clear"), undefined);
+  assert.equal(cue("teaparty", "TEA-080").trigger.type, "timer");
+  assert.equal(cue("teaparty", "TEA-080").trigger.seconds, 210);
   assert.equal(cue("teaparty", "TEA-080").trigger.orAfterPrevious, 0.5);
   assert.equal(cue("saratoga", "SAR-070").trigger.orAfterPrevious, 10);
   assert.equal(cue("yorktown", "YOR-080").trigger.orAfterPrevious, 10);
@@ -67,7 +69,7 @@ test("absolute playable/model clocks are documented rather than shortened", () =
   const audit = result();
   assert.equal(audit.activityClocks.length, 14);
   assert.ok(audit.activityClocks.some(({ id, gapMs, activity }) =>
-    id === "teaparty:TEA-080:orTimer"
+    id === "teaparty:TEA-080:seconds"
       && gapMs === 210_000
       && activity.kind === "active-reactor"));
   assert.ok(audit.activityClocks.some(({ id, activity }) =>
