@@ -11,7 +11,8 @@
     "pipeline:vo": "node pipeline/vo.mjs",
     "pipeline:sfx": "node pipeline/sfx.mjs",
     "pipeline:worlds": "node pipeline/worlds.mjs",
-    "pipeline:models": "node pipeline/models.mjs"
+    "pipeline:models": "node pipeline/models.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@reactor-models/lingbot-world-2": "^0.3.3",
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@types/three": "^0.185.1",
     "typescript": "^7.0.2",
-    "vite": "^8.1.5"
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
   }
 }
