@@ -3,6 +3,8 @@ import type { EngineEvent, SceneManifest } from "../engine/types";
 import {
   SoundDesignController,
   claimAdapterAmbience,
+  createSoundDirectorHooks,
+  observeNarrationDucking,
   soundDesignPlan,
   validateSoundDesignPlan,
   type SoundAsset,
@@ -87,6 +89,54 @@ describe("sound design event adapter", () => {
 
     expect(playback.setNarrationActive.mock.calls).toEqual([[true], [false]]);
     expect(playback.setPaused.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it("consumes Director observer and pause seams without story redispatch", () => {
+    const playback = new FakePlayback();
+    const controller = new SoundDesignController(playback);
+    const hooks = createSoundDirectorHooks(controller);
+
+    hooks.onEngineEvent(sceneStart, "lexington");
+    hooks.onPauseState({ paused: true, canResumePointerInput: true });
+    hooks.onPauseState({ paused: false, canResumePointerInput: false });
+
+    expect(playback.play.mock.calls.map(([cue]) => cue.id)).toEqual(["LEX-AMB-001"]);
+    expect(playback.setPaused.mock.calls).toEqual([[false], [true], [false]]);
+  });
+
+  it("ducks for the subtitle lifetime and disconnects on teardown", () => {
+    const subtitle = { textContent: "" } as HTMLElement;
+    const container = {
+      querySelector: () => subtitle,
+    } as unknown as ParentNode;
+    const setNarrationActive = vi.fn();
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    let mutation: MutationCallback = () => undefined;
+
+    const teardown = observeNarrationDucking(
+      container,
+      { setNarrationActive },
+      (callback) => {
+        mutation = callback;
+        return { observe, disconnect };
+      }
+    );
+
+    expect(observe).toHaveBeenCalledWith(subtitle, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    expect(setNarrationActive).toHaveBeenLastCalledWith(false);
+
+    subtitle.textContent = "Spoken cue";
+    mutation([], {} as MutationObserver);
+    expect(setNarrationActive).toHaveBeenLastCalledWith(true);
+
+    teardown();
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(setNarrationActive).toHaveBeenLastCalledWith(false);
   });
 });
 

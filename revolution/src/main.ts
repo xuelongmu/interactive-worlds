@@ -4,6 +4,13 @@ import { loadState, resetStoryProgress } from "./engine/state";
 import { Director, type DirectorExitTarget } from "./engine/director";
 import { installSessionChallenge } from "./security/session-challenge";
 import {
+  BrowserSoundPlayback,
+  SoundDesignController,
+  claimAdapterAmbience,
+  createSoundDirectorHooks,
+  observeNarrationDucking,
+} from "./sound/sound-design";
+import {
   getResumeScene,
   chapterAccessibleName,
   getTitleAction,
@@ -14,23 +21,43 @@ import {
 } from "./shell";
 
 installSessionChallenge();
+claimAdapterAmbience(scenes);
 
 const app = document.getElementById("app")!;
 let director: Director | null = null;
+let soundDesign: SoundDesignController | null = null;
+let stopNarrationObservation: (() => void) | null = null;
 const reviewMode = import.meta.env.DEV && new URLSearchParams(window.location.search).get("review") === "1";
+
+async function disposeSoundDesign(): Promise<void> {
+  stopNarrationObservation?.();
+  stopNarrationObservation = null;
+  const current = soundDesign;
+  soundDesign = null;
+  await current?.dispose();
+}
 
 async function play(sceneId: string, newStory = false) {
   if (director) await director.dispose();
+  await disposeSoundDesign();
   if (newStory) resetStoryProgress();
-  director = new Director({
+  const nextSoundDesign = new SoundDesignController(new BrowserSoundPlayback());
+  const soundHooks = createSoundDirectorHooks(nextSoundDesign);
+  const nextDirector = new Director({
     container: app,
     reviewMode,
+    ...soundHooks,
     onExit: (target = "title") => {
       director = null;
+      void disposeSoundDesign();
       renderShell(target);
     },
   });
-  await director.start(sceneId);
+  director = nextDirector;
+  soundDesign = nextSoundDesign;
+  stopNarrationObservation = observeNarrationDucking(app, nextSoundDesign);
+  nextSoundDesign.ensure();
+  await nextDirector.start(sceneId);
 }
 
 function shellHeader(backTarget?: ShellView) {
