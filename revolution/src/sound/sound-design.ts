@@ -129,6 +129,7 @@ export class SoundDesignController {
   private currentSceneId: string | null = null;
   private playCounts = new Map<string, number>();
   private lastPlayedAt = new Map<string, number>();
+  private stoppedCueIds = new Set<string>();
   private readonly sceneById = new Map(soundDesignPlan.scenes.map((scene) => [scene.id, scene]));
   private readonly assetByFile = new Map(soundDesignPlan.assets.map((asset) => [asset.file, asset]));
 
@@ -147,6 +148,7 @@ export class SoundDesignController {
       this.currentSceneId = sceneId;
       this.playCounts.clear();
       this.lastPlayedAt.clear();
+      this.stoppedCueIds.clear();
     }
     if (sceneId !== this.currentSceneId) return;
 
@@ -154,7 +156,10 @@ export class SoundDesignController {
     if (!scene) return;
 
     for (const cue of scene.cues) {
-      if (stopMatches(cue.stop, event)) this.playback.stopCue(cue.id, cue.fadeOutMs);
+      if (stopMatches(cue.stop, event)) {
+        this.stoppedCueIds.add(cue.id);
+        this.playback.stopCue(cue.id, cue.fadeOutMs);
+      }
     }
 
     for (const cue of scene.cues) {
@@ -184,6 +189,7 @@ export class SoundDesignController {
     this.currentSceneId = null;
     this.playCounts.clear();
     this.lastPlayedAt.clear();
+    this.stoppedCueIds.clear();
     this.playback.stopAll();
   }
 
@@ -193,6 +199,7 @@ export class SoundDesignController {
   }
 
   private shouldPlay(cue: SoundCue): boolean {
+    if (this.stoppedCueIds.has(cue.id)) return false;
     const replay = cue.replay ?? { mode: "once" as const };
     const count = this.playCounts.get(cue.id) ?? 0;
     if (replay.mode === "once") return count === 0;

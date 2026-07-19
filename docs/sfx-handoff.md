@@ -45,10 +45,13 @@ and exports a JSON review record.
   adapter consumes that boundary without changing `src/engine/**`.
 - Issue #45 exclusively owns scene/narration timing. It received the Tea Party
   completion, Lexington isolated-shot/post-volley silence, Delaware escalation,
-  and Yorktown transition requirements keyed by stable sound cue ID.
+  and Yorktown transition requirements keyed by stable sound cue ID. Tea Party
+  sound uses the actual `chests-done` event for TEA-SFX-003, latches further
+  chest-work off at that event, and lets the six-second take end naturally.
+  There is no synthetic `deck-clear` event mapping; TEA-SIL-001 is the explicit
+  no-interaction-SFX contract for TEA-080, whose timing remains owned by #45.
 - Issue #3 owns Declaration gameplay/signature files. `DEC-SIL-001` is the
   precise separate mapping handoff: stop the manifest-owned Assembly Room bed
   on `action:sign-complete`, hold eight seconds, and resume at DEC-061.
 - Issue #7 receives `LEX-SFX-001` and locked `LEX-SFX-002` by exact manifest
   path/hash; it does not own scene timing fields.
-

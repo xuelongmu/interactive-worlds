@@ -61,17 +61,20 @@ describe("sound design event adapter", () => {
     expect(ids.filter((id) => id === "TEA-SFX-002")).toHaveLength(4);
   });
 
-  it("stops active cues before completion and preserves authored silence", () => {
+  it("latches interaction SFX off at completion without a synthetic deck-clear event", () => {
     const playback = new FakePlayback();
     const controller = new SoundDesignController(playback);
     controller.onEngineEvent(sceneStart, "teaparty");
     controller.onEngineEvent({ type: "model-event", name: "chest-work" }, "teaparty");
     controller.onEngineEvent({ type: "model-event", name: "chests-done" }, "teaparty");
-    controller.onEngineEvent({ type: "model-event", name: "deck-clear" }, "teaparty");
+    controller.onEngineEvent({ type: "model-event", name: "chest-work" }, "teaparty");
 
     expect(playback.stopCue).toHaveBeenCalledWith("TEA-SFX-002", 300);
-    expect(playback.stopCue).toHaveBeenCalledWith("TEA-SFX-003", 500);
-    expect(playback.stopBuses).toHaveBeenCalledWith(["diegetic", "sfx"], 500);
+    expect(playback.stopCue).not.toHaveBeenCalledWith("TEA-SFX-003", expect.any(Number));
+    expect(playback.play.mock.calls.map(([cue]) => cue.id)).toEqual([
+      "TEA-SFX-002",
+      "TEA-SFX-003",
+    ]);
   });
 
   it("forwards narration ducking and pause state to the playback buses", () => {
@@ -105,6 +108,22 @@ describe("sound design invariants", () => {
     expect(prompt).toContain("no gunshots");
     expect(prompt).toContain("no music");
     expect(prompt).toContain("no human voices");
+  });
+
+  it("keeps TEA-080 interaction-silent without a deck-clear model event", () => {
+    const tea = soundDesignPlan.scenes.find((scene) => scene.id === "teaparty")!;
+    const completion = tea.cues.find((cue) => cue.id === "TEA-SFX-003")!;
+    const silence = tea.cues.find((cue) => cue.id === "TEA-SIL-001")!;
+    const mappedEventNames = tea.cues.flatMap((cue) => [
+      cue.trigger.name,
+      cue.stop.type === "event" ? cue.stop.name : undefined,
+    ]).filter(Boolean);
+
+    expect(completion.trigger).toEqual({ type: "model-event", name: "chests-done" });
+    expect(completion.stop).toEqual({ type: "natural-end" });
+    expect(silence.trigger).toEqual({ type: "cue", cueId: "TEA-080" });
+    expect(silence.runtimeOwner).toBe("handoff");
+    expect(mappedEventNames).not.toContain("deck-clear");
   });
 
   it("claims adapter ambience in memory without editing unrelated manifest audio", () => {
