@@ -19,20 +19,15 @@ export function splitChapterHeading(sceneTitle: string): ChapterHeading {
   };
 }
 
+/** Chapter selection is intentionally unrestricted; progress is retained only
+ * for Continue and completion labels. */
 export function isChapterUnlocked(
-  index: number,
-  scenes: readonly Pick<SceneManifest, "id">[],
-  state: StoryState,
-  devOverride = false
+  _index: number,
+  _scenes: readonly Pick<SceneManifest, "id">[],
+  _state: StoryState,
+  _devOverride = false
 ): boolean {
-  if (devOverride || index === 0) return true;
-  const scene = scenes[index];
-  const previous = scenes[index - 1];
-  return !!scene && (
-    state.completedScenes.includes(scene.id) ||
-    state.currentSceneId === scene.id ||
-    (!!previous && state.completedScenes.includes(previous.id))
-  );
+  return true;
 }
 
 export function getResumeScene<T extends Pick<SceneManifest, "id">>(
