@@ -82,9 +82,11 @@ header, returns only the upstream `jwt` on success, marks every response
 `Cache-Control: no-store`, and uses generic errors so exception/upstream text
 cannot disclose server configuration.
 
-`revolution/.vercelignore` also excludes local environment files, offline
-pipeline code, generated media, tests, and build output from CLI source uploads.
-Do not remove the `.env` or generated-media exclusions to work around a deploy.
+`revolution/.vercelignore` also excludes local environment files, generated
+media, tests, build output, and the trailer workspace from source uploads. The
+committed pipeline metadata remains available because runtime sound design
+imports its published plan. Do not remove the `.env` or generated-media
+exclusions to work around a deploy.
 
 ## Large baked assets: object store plus CDN
 
