@@ -16,6 +16,8 @@
     { "id": "DEL-012", "trigger": { "type": "action", "name": "boarded" },
       "subtitle": "The password that night was \"Victory or death.\"" },
     { "id": "DEL-020", "trigger": { "type": "action", "name": "control-granted" },
+      "diegeticVo": "/assets/audio/vo/DEL-020.mariner.mp3",
+      "diegeticSubtitle": "Pole off the bow! Push the ice clear — don't fight the current!",
       "subtitle": "The boats are crewed by fishermen from Marblehead, Massachusetts — Glover's regiment. Before morning they will carry twenty-four hundred men, eighteen cannon, and the horses across a river running with ice." },
     { "id": "DEL-031", "trigger": { "type": "model-event", "name": "knox" },
       "subtitle": "The voice carrying over the water is Colonel Henry Knox, directing the crossing." },
@@ -27,7 +29,14 @@
       "subtitle": "Near dawn came word that the storm had soaked the muskets. Most of the army could not fire a shot. Washington's answer passed back down the column, man to man: use the bayonet. He was resolved to take Trenton.",
       "then": "scene:trenton" }
   ],
-  "audio": { "ambience": ["/assets/audio/amb/river-ice-storm.mp3"] },
+  "audio": {
+    "ambience": ["/assets/audio/amb/river-ice-storm.mp3"],
+    "barks": [
+      "/assets/audio/vo/DEL-BARK-1.mp3",
+      "/assets/audio/vo/DEL-BARK-2.mp3",
+      "/assets/audio/vo/DEL-BARK-3.mp3"
+    ]
+  },
   "modelEvents": [
     { "at": 45, "name": "knox" },
     { "at": 90, "name": "storm",

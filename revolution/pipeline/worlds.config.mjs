@@ -1,4 +1,4 @@
-/** Marble world prompts per scene. Curatorial by design: run, inspect in the
+﻿/** Marble world prompts per scene. Curatorial by design: run, inspect in the
  *  Marble viewer, re-roll or refine the prompt, and commit the world id you
  *  like into `worldId` so re-runs download instead of regenerate. */
 export const worlds = [
@@ -41,7 +41,7 @@ export const worlds = [
   },
   {
     scene: "griffins-wharf",
-    worldId: null,
+    worldId: "25eeccb6-301f-4efb-a332-623863f0d768",
     image: "public/reference/griffins-wharf.jpg",
     prompt:
       "A Boston wharf at night in December 1773, eye level. Wet cobbles and timber decking, " +
@@ -52,7 +52,7 @@ export const worlds = [
   },
   {
     scene: "surrender-field",
-    worldId: null,
+    worldId: "820bb270-9037-436a-b84f-a97650ab4cb5",
     image: "public/reference/surrender-field.jpg",
     prompt:
       "An open Virginia field in October 1781, early afternoon, eye level. A long dirt road " +
@@ -64,7 +64,7 @@ export const worlds = [
   },
   {
     scene: "treaty-paris",
-    worldId: null,
+    worldId: "2c5ba9e6-abb7-4df1-8843-7c3c521fec4b",
     image: "public/reference/treaty-paris.jpg",
     prompt:
       "The interior of an 18th century painter's studio in Paris, 1783, eye level. A monumental " +

@@ -89,6 +89,17 @@ export class AudioEngine {
     }
   }
 
+  /** Fire-and-forget playback (barks, stingers): no subtitle, no ducking. */
+  async playOneShot(url: string, bus: BusName = "diegetic") {
+    const buffer = await this.load(url);
+    if (!buffer) return;
+    const ctx = this.ensure();
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.buses.get(bus)!);
+    source.start();
+  }
+
   async playAmbience(urls: string[]) {
     const ctx = this.ensure();
     this.stopAmbience();

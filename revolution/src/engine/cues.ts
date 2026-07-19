@@ -84,6 +84,9 @@ export class CueEngine {
       } catch (error) {
         console.warn(`[cues] playback failed for ${cue.id}:`, error);
       }
+      // a stop() during playback wins — a dead scene must not launch the
+      // old cue's `then:` transition after teardown
+      if (this.stopped) break;
       this.hooks.after?.(cue);
     }
     this.playing = false;

@@ -232,6 +232,12 @@ export class SplatScene {
 
   get position() { return this.camera.position; }
 
+  /** True while any movement key is held — lets the director detect a key
+   *  kept pressed through a controls-locked stretch (no new keydown fires). */
+  hasMovementInput(): boolean {
+    return ["KeyW", "KeyA", "KeyS", "KeyD"].some((code) => this.keys.has(code));
+  }
+
   /** Snapshot the current view for world-model conditioning (the continuity
    *  trick: the frozen world "wakes up" in place). Render + read back in the
    *  same task — the drawing buffer isn't preserved across frames. */

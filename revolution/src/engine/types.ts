@@ -30,6 +30,10 @@ export interface Cue {
   subtitle?: string;
   /** diegetic line (spatialized, separate voice) rather than narrator */
   diegetic?: boolean;
+  /** a cast diegetic line that plays BEFORE this cue's narrator line —
+   *  vo.mjs emits these as `<CUE-ID>.<speaker>.mp3` (e.g. DEL-020.mariner) */
+  diegeticVo?: string;
+  diegeticSubtitle?: string;
   once?: boolean;
   /** bus names to duck while this cue plays */
   duck?: string[];
@@ -67,7 +71,12 @@ export interface SceneManifest {
   entry?: { yaw?: number };
   zones: ZoneDef[];
   cues: Cue[];
-  audio: { ambience?: string[] };
+  audio: {
+    ambience?: string[];
+    /** repeatable diegetic bark pool, played at random intervals (vo.mjs
+     *  emits `<SCENE>-BARK-N.mp3`) */
+    barks?: string[];
+  };
   /** scripted world-model beats: seconds into the scene -> model-event name + steering prompt */
   modelEvents?: { at: number; name: string; prompt?: string }[];
   next?: { scene: string; preloadAt?: string };

@@ -88,13 +88,22 @@ export class Director {
     this.cardEl.classList.add("visible");
 
     const cueEngine = new CueEngine(manifest.cues, {
-      play: (cue) =>
-        this.audio.playVoice({
+      play: async (cue) => {
+        // cast diegetic line first (the script order: shout, then narrator)
+        if (cue.diegeticVo) {
+          await this.audio.playVoice({
+            url: cue.diegeticVo,
+            subtitle: cue.diegeticSubtitle,
+            bus: "diegetic",
+          });
+        }
+        await this.audio.playVoice({
           url: cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`,
           subtitle: cue.subtitle,
           bus: cue.diegetic ? "diegetic" : "narration",
           duck: cue.duck as BusName[] | undefined,
-        }),
+        });
+      },
       // audio-first: the visual consequence lands on the last word — and a
       // failed VO load still advances the story
       after: (cue) => {
@@ -116,6 +125,7 @@ export class Director {
     await Promise.all([this.createRunner(manifest), minHold]);
     // a scene with no preloadAt marker still preloads, just later
     if (manifest.next && !manifest.next.preloadAt) this.preloadNext(manifest);
+    if (manifest.audio.barks?.length) this.startBarks(manifest.audio.barks);
 
     this.cardEl.classList.remove("visible");
     await this.fadeTo(0);
@@ -309,15 +319,42 @@ export class Director {
     this.cueEngine?.handleEvent({ type: "action", name: `cutscene-${id}-complete` });
   }
 
-  /** First movement after an unlock -> generic `resume-walk` action. */
+  /** Repeatable diegetic bark pool (mariner calls across the water):
+   *  a random bark every 18–35 s, no subtitle, no ducking — texture. */
+  private startBarks(urls: string[]) {
+    let timer = 0;
+    const schedule = () => {
+      timer = window.setTimeout(() => {
+        void this.audio.playOneShot(urls[Math.floor(Math.random() * urls.length)], "diegetic");
+        schedule();
+      }, 18_000 + Math.random() * 17_000);
+    };
+    schedule();
+    this.teardownFns.push(() => clearTimeout(timer));
+  }
+
+  /** First movement after an unlock -> generic `resume-walk` action.
+   *  Polls held keys too: a player who kept W pressed through the cutscene
+   *  resumes walking without a fresh keydown ever firing. */
   private armResumeWalk() {
-    const onKey = (e: KeyboardEvent) => {
-      if (!["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) return;
+    let pollTimer = 0;
+    const cleanup = () => {
       document.removeEventListener("keydown", onKey);
+      clearInterval(pollTimer);
+    };
+    const fire = () => {
+      cleanup();
       this.cueEngine?.handleEvent({ type: "action", name: "resume-walk" });
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) fire();
+    };
     document.addEventListener("keydown", onKey);
-    this.teardownFns.push(() => document.removeEventListener("keydown", onKey));
+    pollTimer = window.setInterval(() => {
+      const runner = this.runner;
+      if (runner instanceof SplatScene && !runner.controlsLocked && runner.hasMovementInput()) fire();
+    }, 250);
+    this.teardownFns.push(cleanup);
   }
 
   /** Continuity trick: the frozen canvas frame becomes the world model's

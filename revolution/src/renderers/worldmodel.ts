@@ -125,10 +125,17 @@ export class WorldModelSession {
 
   /** Hot-swap the prompt to steer the next chunk — the mechanism behind
    *  scripted beats (storm intensifies, landing). Also emits a model-event
-   *  so the cue engine can react. */
+   *  so the cue engine can react. The event fires even when the steer
+   *  command fails: the narration beat must land regardless (degrade,
+   *  never break) — beats are one-shot and several have no orTimer. */
   async steer(eventName: string, prompt: string) {
-    await this.model.setPrompt({ prompt });
-    this.opts.onEvent?.({ type: "model-event", name: eventName });
+    try {
+      await this.model.setPrompt({ prompt });
+    } catch (error) {
+      console.warn(`[worldmodel] steer "${eventName}" failed (cue still fires):`, error);
+    } finally {
+      this.opts.onEvent?.({ type: "model-event", name: eventName });
+    }
   }
 
   async setMovement(longitudinal: Longitudinal, lateral: Lateral) {

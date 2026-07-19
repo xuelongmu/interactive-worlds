@@ -12,6 +12,8 @@
     { "id": "TRE-010", "trigger": { "type": "scene-start" },
       "subtitle": "Eight in the morning, December 26th. Trenton. The garrison is fifteen hundred Hessians — German professional soldiers, the best infantry money can buy. The storm that nearly killed the army on the road is now its cover. The sentries can see perhaps fifty yards." },
     { "id": "TRE-020", "trigger": { "type": "action", "name": "control-granted" },
+      "diegeticVo": "/assets/audio/vo/TRE-020.sergeant.mp3",
+      "diegeticSubtitle": "Close up! Close on the man ahead — when the guns open, you run at the smoke!",
       "subtitle": "Washington has split the army into two columns, closing on the town from north and river. The plan requires both to arrive together, in a storm, after a night without sleep. Somehow, they do." },
     { "id": "TRE-031", "trigger": { "type": "model-event", "name": "guns-open" },
       "subtitle": "Henry Knox's cannon — the guns the army dragged across the river all night — open fire straight down King and Queen Streets. The Hessians form up in the open, in the sleet, and the streets themselves become gun barrels." },

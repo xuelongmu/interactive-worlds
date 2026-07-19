@@ -26,6 +26,8 @@
       "subtitle": "Around six-thirty, men began arriving at the wharf in loose disguise — blankets, soot, feathers, faces darkened. It was a statement: tonight we are not the King's subjects. They went aboard in silence.",
       "lockControls": true, "then": "wake:worldmodel" },
     { "id": "TEA-050", "trigger": { "type": "action", "name": "control-granted" },
+      "diegeticVo": "/assets/audio/vo/TEA-050.bosun.mp3",
+      "diegeticSubtitle": "Hoist the chests up from the hold. Break them open at the rail — the tea goes over the side.",
       "subtitle": "They worked in teams, one ship to a team, with block and tackle and hatchets. It took about three hours." },
     { "id": "TEA-060", "trigger": { "type": "model-event", "name": "chest-open" },
       "subtitle": "The tea was worth more than nine thousand pounds sterling — a fortune. It went into the harbor a chest at a time, and the crowd on the wharf watched it go, still nearly silent. The tide was out. By the end, tea lay heaped on the mudflats like hay." },
