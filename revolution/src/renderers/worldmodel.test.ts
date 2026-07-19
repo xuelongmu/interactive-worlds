@@ -77,9 +77,13 @@ describe("Reactor world-model selection", () => {
     );
   });
 
-  it("recognizes an HTTP 503 without matching unrelated numbers", () => {
+  it("recognizes capacity statuses without matching unrelated errors", () => {
     expect(isReactorCapacityErrorStatus("token mint failed: 503 capacity exhausted")).toBe(true);
+    expect(isReactorCapacityErrorStatus(
+      "Live connection failed: Live session limit reached. Try again in about 1 hour."
+    )).toBe(true);
     expect(isReactorCapacityErrorStatus("error 1503")).toBe(false);
+    expect(isReactorCapacityErrorStatus("Live connection failed: token mint failed (429)")).toBe(false);
   });
 });
 
@@ -621,6 +625,23 @@ describe("presentation and rollover gates", () => {
     expect(onStatus).toHaveBeenCalledOnce();
     expect(onStatus).toHaveBeenLastCalledWith(
       "Live connection failed: token mint failed: 503 capacity exhausted"
+    );
+  });
+
+  it("keeps broker session-limit guidance visible while fallback playback starts", () => {
+    const onStatus = vi.fn();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.opts = { onStatus };
+    player.stickyCapacityStatus = null;
+
+    player.reportStatus(
+      "Live connection failed: Live session limit reached. Try again in about 1 hour."
+    );
+    player.reportStatus("playing pre-rendered fallback");
+
+    expect(onStatus).toHaveBeenCalledOnce();
+    expect(onStatus).toHaveBeenLastCalledWith(
+      "Live connection failed: Live session limit reached. Try again in about 1 hour."
     );
   });
 

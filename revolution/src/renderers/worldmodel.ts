@@ -86,7 +86,10 @@ export interface WorldModelSessionOptions {
 }
 
 export function isReactorCapacityErrorStatus(status: string): boolean {
-  return /(?:^|\D)503(?:\D|$)/.test(status);
+  return (
+    /(?:^|\D)503(?:\D|$)/.test(status) ||
+    status.startsWith("Live connection failed: Live session limit reached.")
+  );
 }
 
 interface WorldModelSessionTimeouts {
