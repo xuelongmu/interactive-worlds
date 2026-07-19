@@ -9,6 +9,7 @@ test("explicit pause prevents ensure from resuming audio until explicit resume",
     destination = {};
     resumeCalls = 0;
     suspendCalls = 0;
+    closeCalls = 0;
     createGain() {
       return {
         connect() {},
@@ -17,6 +18,7 @@ test("explicit pause prevents ensure from resuming audio until explicit resume",
     }
     async suspend() { this.suspendCalls++; this.state = "suspended"; }
     async resume() { this.resumeCalls++; this.state = "running"; }
+    async close() { this.closeCalls++; this.state = "closed"; }
   }
 
   const previous = globalThis.AudioContext;
@@ -34,6 +36,11 @@ test("explicit pause prevents ensure from resuming audio until explicit resume",
     await audio.resume();
     assert.equal(context.resumeCalls, 1);
     assert.equal(context.state, "running");
+
+    await audio.dispose();
+    assert.equal(context.closeCalls, 1);
+    assert.equal(context.state, "closed");
+    assert.throws(() => audio.ensure(), /disposed/);
   } finally {
     globalThis.AudioContext = previous;
   }

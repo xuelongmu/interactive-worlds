@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getResumeScene,
+  chapterAccessibleName,
+  getTitleAction,
   hasChapterDevOverride,
   isChapterUnlocked,
   splitChapterHeading,
@@ -42,4 +44,30 @@ test("resume prefers an unfinished current chapter, then the first unfinished ch
     getResumeScene(scenes, state({ completedScenes: ["tea", "lex", "declaration"] }))?.id,
     "tea"
   );
+});
+
+test("replaying a completed chapter remains the resumable chapter", () => {
+  assert.equal(getResumeScene(
+    scenes,
+    state({ completedScenes: ["tea", "lex"], currentSceneId: "tea" })
+  )?.id, "tea");
+});
+
+test("chapter accessible name includes every visible date and state label", () => {
+  assert.equal(chapterAccessibleName(
+    2,
+    { title: "Lexington Green", date: "April 19, 1775" },
+    "Locked"
+  ), "Chapter 2, Lexington Green, April 19, 1775, Locked");
+});
+
+test("an in-progress replay wins over Begin Again even when every chapter was completed", () => {
+  assert.equal(getTitleAction(
+    scenes,
+    state({ completedScenes: ["tea", "lex", "declaration"], currentSceneId: "tea" })
+  ), "Continue");
+  assert.equal(getTitleAction(
+    scenes,
+    state({ completedScenes: ["tea", "lex", "declaration"] })
+  ), "Begin Again");
 });

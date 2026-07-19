@@ -1,5 +1,7 @@
 import { LingbotWorld2Model, type LingbotWorld2Message } from "@reactor-models/lingbot-world-2";
 import type { EngineEvent, SceneManifest } from "../engine/types";
+import { PausableTimeouts } from "../engine/timers";
+import { resolveWorldModelInput } from "../engine/worldmodel-input";
 
 export interface WorldModelOptions {
   video: HTMLVideoElement;
@@ -242,6 +244,7 @@ export class WorldModelScenePlayer {
   private unbindKeys: (() => void) | null = null;
   private disposed = false;
   private paused = false;
+  private controlTimers = new PausableTimeouts();
   private onBeforeUnload = () => void this.session?.disconnect();
 
   constructor(private opts: WorldModelPlayerOptions) {
@@ -362,7 +365,10 @@ export class WorldModelScenePlayer {
   /** Common entry beat: the viewer is aboard; control (live only) follows. */
   private onControlHandoff() {
     this.opts.onEvent({ type: "action", name: "boarded" });
-    this.after(3000, () => this.opts.onEvent({ type: "action", name: "control-granted" }));
+    this.controlTimers.schedule(
+      () => this.opts.onEvent({ type: "action", name: "control-granted" }),
+      3000
+    );
   }
 
   private withDeadline<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -379,19 +385,17 @@ export class WorldModelScenePlayer {
   private every(ms: number, fn: () => void) {
     this.timers.push(window.setInterval(fn, ms));
   }
-  private after(ms: number, fn: () => void) {
-    this.timers.push(window.setTimeout(fn, ms));
-  }
-
   setPaused(paused: boolean) {
     this.paused = paused;
     if (paused) {
+      this.controlTimers.pause();
       this.video.pause();
       if (this.session) {
         void this.session.setMovement("idle", "idle");
         void this.session.setLook("idle", "idle");
       }
     } else {
+      this.controlTimers.resume();
       void this.video.play().catch(() => undefined);
     }
   }
@@ -404,6 +408,7 @@ export class WorldModelScenePlayer {
     this.timers = [];
     this.unbindKeys?.();
     this.unbindKeys = null;
+    this.controlTimers.cancelAll();
     this.video.pause();
     this.video.remove();
     await this.session?.disconnect();
@@ -418,14 +423,7 @@ export function bindWorldModelKeys(
 ): () => void {
   const keys = new Set<string>();
   const apply = () => {
-    const longitudinal: Longitudinal =
-      keys.has("KeyW") ? "forward" : keys.has("KeyS") ? "back" : "idle";
-    const lateral: Lateral =
-      keys.has("KeyA") ? "strafe_left" : keys.has("KeyD") ? "strafe_right" : "idle";
-    const lookH: LookH =
-      keys.has("ArrowLeft") ? "left" : keys.has("ArrowRight") ? "right" : "idle";
-    const lookV: LookV =
-      keys.has("ArrowUp") ? "up" : keys.has("ArrowDown") ? "down" : "idle";
+    const { longitudinal, lateral, lookH, lookV } = resolveWorldModelInput(keys, isLocked());
     void session.setMovement(longitudinal, lateral);
     void session.setLook(lookH, lookV);
   };

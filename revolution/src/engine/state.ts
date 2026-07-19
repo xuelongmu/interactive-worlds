@@ -40,6 +40,7 @@ export function saveState(state: StoryState) {
 export function markSceneComplete(sceneId: string) {
   const state = loadState();
   if (!state.completedScenes.includes(sceneId)) state.completedScenes.push(sceneId);
+  if (state.currentSceneId === sceneId) state.currentSceneId = null;
   saveState(state);
 }
 
@@ -47,6 +48,10 @@ export function setCurrentScene(sceneId: string | null) {
   const state = loadState();
   state.currentSceneId = sceneId;
   saveState(state);
+}
+
+export function resetStoryProgress() {
+  saveState({ completedScenes: [], currentSceneId: null, signature: null });
 }
 
 export function saveSignature(strokes: SignatureStroke[]) {

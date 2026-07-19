@@ -4,6 +4,22 @@ export interface StallTimerScheduler {
   set(callback: () => void, delayMs: number): unknown;
   clear(handle: unknown): void;
 }
+
+export interface StallHintElement {
+  textContent: string | null;
+  classList: Pick<DOMTokenList, "toggle">;
+  setAttribute(name: string, value: string): void;
+}
+
+/** A hidden reminder is not a live region. It becomes live only when its
+ * text is revealed, preventing an announcement at scene start or on input. */
+export function renderStallHint(element: StallHintElement, message: string, visible: boolean) {
+  element.classList.toggle("visible", visible);
+  element.setAttribute("aria-live", visible ? "polite" : "off");
+  element.setAttribute("aria-hidden", visible ? "false" : "true");
+  element.textContent = visible ? message : "";
+}
+
 const browserScheduler: StallTimerScheduler = {
   set: (callback, delayMs) => window.setTimeout(callback, delayMs),
   clear: (handle) => clearTimeout(handle as number),

@@ -7,7 +7,17 @@ import { scenes, sceneById } from "../scenes";
 import { SplatScene } from "../renderers/splat";
 import { WorldModelScenePlayer } from "../renderers/worldmodel";
 import { splitChapterHeading } from "../shell";
-import { StallHintTimer } from "./stall";
+import { renderStallHint, StallHintTimer } from "./stall";
+import { PausableTimeouts } from "./timers";
+import {
+  InteractionGate,
+  configureLoadingSemantics,
+  restartPausedScene,
+  restoreFocus,
+  setBackgroundInert,
+  setPauseDialogView,
+  trapFocus,
+} from "./pause";
 
 /** What the director needs from any scene surface. */
 interface Runner {
@@ -41,8 +51,13 @@ export class Director {
   private sceneReady = false;
   private disposed = false;
   private activeCutscene: HTMLVideoElement | null = null;
+  private finishActiveCutscene: ((cancelled?: boolean) => void) | null = null;
+  private sceneTimers = new PausableTimeouts();
   private stallTimer: StallHintTimer;
   private stallCleanup: (() => void) | null = null;
+  private stallMessage = "";
+  private focusBeforePause: HTMLElement | null = null;
+  private sceneBackground: HTMLElement[] = [];
 
   private stage: HTMLElement;
   private canvasHost: HTMLElement;
@@ -70,7 +85,7 @@ export class Director {
           <p class="card-date"></p>
           <p class="card-status"></p>
         </div>
-        <p class="stall-hint" aria-live="polite"></p>
+        <p class="stall-hint" aria-live="off" aria-hidden="true"></p>
         <div class="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden>
           <section class="pause-panel">
             <div class="pause-menu">
@@ -85,7 +100,7 @@ export class Director {
             </div>
             <div class="pause-settings-view" hidden>
               <p class="card-kicker">Preferences</p>
-              <h2>Settings</h2>
+              <h2 id="pause-settings-title">Settings</h2>
               <div class="pause-settings-hook">
                 <p>Display, subtitle, motion, and input preferences will appear here.</p>
               </div>
@@ -103,8 +118,10 @@ export class Director {
     this.statusEl = this.stage.querySelector(".card-status")!;
     this.stallEl = this.stage.querySelector(".stall-hint")!;
     this.pauseEl = this.stage.querySelector(".pause-overlay")!;
+    configureLoadingSemantics(this.cardEl);
+    setPauseDialogView(this.pauseEl, "menu");
     this.stallTimer = new StallHintTimer((visible) => {
-      this.stallEl.classList.toggle("visible", visible);
+      renderStallHint(this.stallEl, this.stallMessage, visible);
     });
     this.audio.onSubtitle = (text) => { this.subtitleEl.textContent = text ?? ""; };
     document.addEventListener("keydown", this.onPauseKeyDown);
@@ -193,6 +210,10 @@ export class Director {
   private async teardownScene() {
     this.sceneReady = false;
     this.disarmStallHint();
+    this.sceneTimers.cancelAll();
+    this.finishActiveCutscene?.(true);
+    this.finishActiveCutscene = null;
+    this.activeCutscene = null;
     this.cueEngine?.stop();
     this.cueEngine = null;
     if (this.updateTimer !== null) { clearInterval(this.updateTimer); this.updateTimer = null; }
@@ -212,9 +233,14 @@ export class Director {
     document.removeEventListener("keydown", this.onPauseKeyDown);
     this.pauseEl.removeEventListener("click", this.onPauseAction);
     await this.teardownScene();
+    await this.audio.dispose();
   }
 
   private onPauseKeyDown = (event: KeyboardEvent) => {
+    if (event.code === "Tab" && this.paused) {
+      if (trapFocus(this.pauseEl, document.activeElement, event.shiftKey)) event.preventDefault();
+      return;
+    }
     if (event.code !== "Escape" || !this.sceneReady || !this.current) return;
     event.preventDefault();
     void this.setPaused(!this.paused);
@@ -237,7 +263,7 @@ export class Director {
         this.openPauseSettings();
         break;
       case "settings-back":
-        this.closePauseSettings();
+        this.closePauseSettings(true);
         break;
     }
   };
@@ -249,7 +275,14 @@ export class Director {
     this.runner?.setPaused(paused);
 
     if (paused) {
+      this.focusBeforePause = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+      this.sceneBackground = Array.from(this.stage.children)
+        .filter((element): element is HTMLElement => element instanceof HTMLElement && element !== this.pauseEl);
+      setBackgroundInert(this.sceneBackground, true);
       this.disarmStallHint();
+      this.sceneTimers.pause();
       this.activeCutscene?.pause();
       if (document.pointerLockElement) document.exitPointerLock();
       await this.audio.pause();
@@ -263,14 +296,20 @@ export class Director {
     // the next click, which the renderer already handles.
     if (this.current?.renderer === "splat") void this.canvasHost.requestPointerLock();
     await this.audio.resume();
+    this.sceneTimers.resume();
     if (this.activeCutscene?.paused) void this.activeCutscene.play().catch(() => undefined);
+    setBackgroundInert(this.sceneBackground, false);
+    this.sceneBackground = [];
     if (this.current) this.armStallHint(this.current.renderer);
+    restoreFocus(this.focusBeforePause);
+    this.focusBeforePause = null;
   }
 
   private openPauseSettings() {
     this.pauseEl.querySelector<HTMLElement>(".pause-menu")!.hidden = true;
     const view = this.pauseEl.querySelector<HTMLElement>(".pause-settings-view")!;
     view.hidden = false;
+    setPauseDialogView(this.pauseEl, "settings");
     const container = view.querySelector<HTMLElement>(".pause-settings-hook")!;
     window.dispatchEvent(new CustomEvent("revolution:settings-open", {
       detail: { container },
@@ -278,16 +317,35 @@ export class Director {
     view.querySelector<HTMLButtonElement>('[data-pause-action="settings-back"]')?.focus();
   }
 
-  private closePauseSettings() {
+  private closePauseSettings(focusMenu = false) {
     this.pauseEl.querySelector<HTMLElement>(".pause-menu")!.hidden = false;
     this.pauseEl.querySelector<HTMLElement>(".pause-settings-view")!.hidden = true;
+    setPauseDialogView(this.pauseEl, "menu");
+    if (focusMenu) {
+      this.pauseEl.querySelector<HTMLButtonElement>('[data-pause-action="resume"]')?.focus();
+    }
   }
 
   private async restartCurrent() {
     const id = this.current?.id;
     if (!id) return;
-    await this.setPaused(false);
-    void this.runScene(id);
+    await restartPausedScene({
+      resetPauseUi: () => {
+        this.pauseEl.hidden = true;
+        this.closePauseSettings();
+        this.focusBeforePause = null;
+      },
+      fadeOut: () => this.fadeTo(1),
+      teardown: () => this.teardownScene(),
+      releasePause: async () => {
+        this.paused = false;
+        setBackgroundInert(this.sceneBackground, false);
+        this.sceneBackground = [];
+        this.sceneTimers.resume();
+        await this.audio.resume();
+      },
+      startScene: () => this.runScene(id),
+    });
   }
 
   private async exitTo(target: DirectorExitTarget) {
@@ -297,6 +355,7 @@ export class Director {
       this.paused = false;
       this.pauseEl.hidden = true;
       this.closePauseSettings();
+      this.focusBeforePause = null;
     }
     await this.fadeTo(1);
     await this.dispose();
@@ -307,7 +366,7 @@ export class Director {
    * the reminder and restarts its twenty-second idle clock. */
   private armStallHint(renderer: SceneManifest["renderer"]) {
     this.disarmStallHint();
-    this.stallEl.textContent = renderer === "splat"
+    this.stallMessage = renderer === "splat"
       ? "WASD to walk · Move the mouse to look"
       : renderer === "worldmodel"
         ? "WASD to move · Arrow keys to look"
@@ -429,20 +488,32 @@ export class Director {
          Fire its beats by hand:</p>
       <div class="actions"></div>`;
     const actionsEl = host.querySelector(".actions")!;
+    const gate = new InteractionGate();
+    const buttons: HTMLButtonElement[] = [];
+    const syncButtons = () => {
+      for (const button of buttons) button.disabled = gate.locked;
+    };
     for (const name of actions) {
       const button = document.createElement("button");
       button.className = "secondary";
       button.textContent = name;
-      button.addEventListener("click", () =>
+      button.addEventListener("click", () => gate.dispatch(() =>
         this.cueEngine?.handleEvent({ type: "action", name })
-      );
+      ));
+      buttons.push(button);
       actionsEl.appendChild(button);
     }
     this.canvasHost.appendChild(host);
     this.runner = {
       dispose: () => host.remove(),
-      setControlsLocked: () => {},
-      setPaused: () => {},
+      setControlsLocked: (locked) => {
+        gate.setControlsLocked(locked);
+        syncButtons();
+      },
+      setPaused: (paused) => {
+        gate.setPaused(paused);
+        syncButtons();
+      },
     };
   }
 
@@ -487,8 +558,9 @@ export class Director {
   private async playCutscene(id: string) {
     const url = `/assets/video/${id}.mp4`;
     await this.fadeTo(1);
+    let completed = true;
     if (await assetExists(url)) {
-      await new Promise<void>((done) => {
+      completed = await new Promise<boolean>((done) => {
         const video = document.createElement("video");
         video.className = "cutscene-video";
         video.src = url;
@@ -496,13 +568,18 @@ export class Director {
         this.videoHost.appendChild(video);
         this.videoHost.classList.add("visible");
         this.activeCutscene = video;
-        const finish = () => {
+        let finished = false;
+        const finish = (cancelled = false) => {
+          if (finished) return;
+          finished = true;
           if (this.activeCutscene === video) this.activeCutscene = null;
+          if (this.finishActiveCutscene === finish) this.finishActiveCutscene = null;
           video.remove();
-          done();
+          done(!cancelled);
         };
-        video.addEventListener("ended", finish, { once: true });
-        video.addEventListener("error", finish, { once: true });
+        this.finishActiveCutscene = finish;
+        video.addEventListener("ended", () => finish(false), { once: true });
+        video.addEventListener("error", () => finish(false), { once: true });
         // start playback explicitly: if the gesture token has expired the
         // unmuted play() rejects — retry muted, and bail rather than hold
         // controls locked forever
@@ -512,11 +589,15 @@ export class Director {
         });
         this.fadeTo(0);
       });
+      if (!completed) return;
       await this.fadeTo(1);
       this.videoHost.classList.remove("visible");
     } else {
       // stand-in: hold black for the beat length (sound design carries it)
-      await new Promise((r) => setTimeout(r, 3000));
+      completed = await new Promise<boolean>((done) => {
+        this.sceneTimers.schedule(() => done(true), 3000, () => done(false));
+      });
+      if (!completed) return;
     }
     this.runner?.setControlsLocked(false);
     await this.fadeTo(0);
@@ -526,15 +607,13 @@ export class Director {
   /** Repeatable diegetic bark pool (mariner calls across the water):
    *  a random bark every 18–35 s, no subtitle, no ducking — texture. */
   private startBarks(urls: string[]) {
-    let timer = 0;
     const schedule = () => {
-      timer = window.setTimeout(() => {
+      this.sceneTimers.schedule(() => {
         void this.audio.playOneShot(urls[Math.floor(Math.random() * urls.length)], "diegetic");
         schedule();
       }, 18_000 + Math.random() * 17_000);
     };
     schedule();
-    this.teardownFns.push(() => clearTimeout(timer));
   }
 
   /** First movement after an unlock -> generic `resume-walk` action.
@@ -547,6 +626,7 @@ export class Director {
       clearInterval(pollTimer);
     };
     const fire = () => {
+      if (this.paused) return;
       cleanup();
       this.cueEngine?.handleEvent({ type: "action", name: "resume-walk" });
     };
@@ -555,6 +635,7 @@ export class Director {
     };
     document.addEventListener("keydown", onKey);
     pollTimer = window.setInterval(() => {
+      if (this.paused) return;
       const runner = this.runner;
       if (runner instanceof SplatScene && !runner.controlsLocked && runner.hasMovementInput()) fire();
     }, 250);
@@ -624,11 +705,11 @@ export class Director {
       ctx.stroke();
     }
 
-    const timer = window.setTimeout(
+    this.sceneTimers.schedule(
       () => this.cueEngine?.handleEvent({ type: "action", name: "signature-dwell" }),
       10_000
     );
-    this.teardownFns.push(() => { clearTimeout(timer); overlay.remove(); });
+    this.teardownFns.push(() => overlay.remove());
   }
 
   private async endStory() {

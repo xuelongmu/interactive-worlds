@@ -14,6 +14,7 @@ export class AudioEngine {
   private ambienceSources: AudioBufferSourceNode[] = [];
   private activeSources = new Set<AudioBufferSourceNode>();
   private paused = false;
+  private disposed = false;
   private playbackGeneration = 0;
   /** invalidates in-flight playAmbience loads when stopAmbience runs */
   private ambienceGeneration = 0;
@@ -22,6 +23,7 @@ export class AudioEngine {
 
   /** Must be called from a user gesture (autoplay policy). */
   ensure(): AudioContext {
+    if (this.disposed) throw new Error("audio engine is disposed");
     if (!this.ctx) {
       this.ctx = new AudioContext();
       for (const name of ["narration", "diegetic", "ambience", "music"] as BusName[]) {
@@ -77,11 +79,12 @@ export class AudioEngine {
     bus?: BusName;
     duck?: BusName[];
   }): Promise<void> {
+    const generation = this.playbackGeneration;
     const ctx = this.ensure();
     const bus = this.buses.get(opts.bus ?? "narration")!;
     const duckTargets = opts.duck ?? ["ambience", "music"];
     const buffer = await this.load(opts.url);
-    const generation = this.playbackGeneration;
+    if (this.disposed || generation !== this.playbackGeneration) return;
 
     this.onSubtitle(opts.subtitle ?? null);
     this.duck(duckTargets, true);
@@ -112,7 +115,7 @@ export class AudioEngine {
   /** Fire-and-forget playback (barks, stingers): no subtitle, no ducking. */
   async playOneShot(url: string, bus: BusName = "diegetic") {
     const buffer = await this.load(url);
-    if (!buffer) return;
+    if (!buffer || this.disposed) return;
     const ctx = this.ensure();
     const source = ctx.createBufferSource();
     source.buffer = buffer;
@@ -165,6 +168,18 @@ export class AudioEngine {
       for (const bus of this.buses.values()) bus.gain.setValueAtTime(1, this.ctx.currentTime);
     }
     this.onSubtitle(null);
+  }
+
+  async dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.stopAll();
+    const context = this.ctx;
+    this.ctx = null;
+    this.buses.clear();
+    this.bufferCache.clear();
+    this.paused = false;
+    if (context && context.state !== "closed") await context.close();
   }
 
   private async waitWhileUnpaused(durationMs: number, generation: number) {

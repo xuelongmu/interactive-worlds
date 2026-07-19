@@ -1,9 +1,11 @@
 import "./style.css";
 import { scenes } from "./scenes";
-import { loadState } from "./engine/state";
+import { loadState, resetStoryProgress } from "./engine/state";
 import { Director, type DirectorExitTarget } from "./engine/director";
 import {
   getResumeScene,
+  chapterAccessibleName,
+  getTitleAction,
   hasChapterDevOverride,
   isChapterUnlocked,
   splitChapterHeading,
@@ -13,8 +15,9 @@ import {
 const app = document.getElementById("app")!;
 let director: Director | null = null;
 
-async function play(sceneId: string) {
+async function play(sceneId: string, newStory = false) {
   if (director) await director.dispose();
+  if (newStory) resetStoryProgress();
   director = new Director({
     container: app,
     onExit: (target = "title") => {
@@ -38,8 +41,8 @@ function renderTitle() {
   const state = loadState();
   const resumeScene = getResumeScene(scenes, state) ?? scenes[0];
   const resumeHeading = splitChapterHeading(resumeScene.title);
-  const hasProgress = state.completedScenes.length > 0 || state.currentSceneId !== null;
-  const complete = scenes.every((scene) => state.completedScenes.includes(scene.id));
+  const titleAction = getTitleAction(scenes, state);
+  const complete = titleAction === "Begin Again";
 
   app.innerHTML = `
     <main class="shell-screen title-screen">
@@ -50,7 +53,7 @@ function renderTitle() {
         <p class="title-deck">Ten years of uprising, consequence, and ink.</p>
         <div class="title-actions">
           <button class="primary-action" id="begin">
-            ${complete ? "Begin Again" : hasProgress ? "Continue" : "Begin"}
+            ${titleAction}
             <span>${resumeHeading.title}</span>
           </button>
           <button class="text-button" data-view="chapters">Chapters</button>
@@ -60,7 +63,7 @@ function renderTitle() {
       <p class="title-footnote">Headphones recommended · Progress saves on this device</p>
     </main>`;
 
-  document.getElementById("begin")!.addEventListener("click", () => void play(resumeScene.id));
+  document.getElementById("begin")!.addEventListener("click", () => void play(resumeScene.id, complete));
   bindViewButtons();
 }
 
@@ -82,20 +85,21 @@ function renderChapters() {
           const heading = splitChapterHeading(scene.title);
           const unlocked = isChapterUnlocked(index, scenes, state, devOverride);
           const completed = state.completedScenes.includes(scene.id);
-          const current = state.currentSceneId === scene.id && !completed;
+          const current = state.currentSceneId === scene.id;
+          const stateLabel = current ? "Continue" : completed ? "Completed" : unlocked ? "Available" : "Locked";
           return `
             <li>
               <button
                 class="chapter-card plate-${(index % 4) + 1}"
                 data-scene="${scene.id}"
                 ${unlocked ? "" : "disabled"}
-                aria-label="Chapter ${index + 1}: ${heading.title}${unlocked ? "" : ", locked"}"
+                aria-label="${chapterAccessibleName(index + 1, heading, stateLabel)}"
               >
                 <span class="chapter-plate" aria-hidden="true"></span>
                 <span class="chapter-number">Chapter ${index + 1}</span>
                 <strong>${heading.title}</strong>
                 <span class="chapter-date">${heading.date}</span>
-                <span class="chapter-state">${completed ? "Completed" : current ? "Continue" : unlocked ? "Available" : "Locked"}</span>
+                <span class="chapter-state">${stateLabel}</span>
               </button>
             </li>`;
         }).join("")}

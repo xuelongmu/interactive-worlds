@@ -39,10 +39,34 @@ export function getResumeScene<T extends Pick<SceneManifest, "id">>(
   scenes: readonly T[],
   state: StoryState
 ): T | undefined {
-  const current = scenes.find(
-    (scene) => scene.id === state.currentSceneId && !state.completedScenes.includes(scene.id)
-  );
+  const current = scenes.find((scene) => scene.id === state.currentSceneId);
   return current ?? scenes.find((scene) => !state.completedScenes.includes(scene.id)) ?? scenes[0];
+}
+
+export function chapterAccessibleName(
+  chapterNumber: number,
+  heading: ChapterHeading,
+  stateLabel: string
+): string {
+  return [
+    `Chapter ${chapterNumber}`,
+    heading.title,
+    heading.date,
+    stateLabel,
+  ].filter(Boolean).join(", ");
+}
+
+export function getTitleAction(
+  scenes: readonly Pick<SceneManifest, "id">[],
+  state: StoryState
+): "Begin" | "Continue" | "Begin Again" {
+  if (state.currentSceneId && scenes.some((scene) => scene.id === state.currentSceneId)) {
+    return "Continue";
+  }
+  if (scenes.length > 0 && scenes.every((scene) => state.completedScenes.includes(scene.id))) {
+    return "Begin Again";
+  }
+  return state.completedScenes.length > 0 ? "Continue" : "Begin";
 }
 
 /** Deliberately explicit: development chapter access is never inferred from
