@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  controlAnnouncement,
   defaultControlHandoff,
   instructionHudMarkup,
   InstructionHudModel,
@@ -42,6 +43,10 @@ test("early controls hide only after movement and look are both demonstrated", (
   model.stall();
   assert.equal(model.snapshot().reason, "stalled");
   assert.equal(model.snapshot().live, "polite");
+  assert.equal(
+    controlAnnouncement(model.snapshot()),
+    "Controls reminder. W A S D — Move. Mouse — Look."
+  );
 });
 
 test("only a usable contextual action is rendered and it uses the actual binding", () => {
@@ -60,6 +65,7 @@ test("only a usable contextual action is rendered and it uses the actual binding
   });
   assert.deepEqual(model.snapshot().bindings, [{ binding: "E", label: "Open chest", usable: true }]);
   assert.equal(model.snapshot().reason, "action");
+  assert.equal(controlAnnouncement(model.snapshot()), "Action available. E — Open chest.");
 });
 
 test("renderer transitions reset demonstrated guidance and pause suppresses the layer", () => {
@@ -80,3 +86,19 @@ test("renderer transitions reset demonstrated guidance and pause suppresses the 
   assert.equal(model.snapshot().reason, "early");
 });
 
+test("paused or disabled input is not credited as demonstrated", () => {
+  const model = new InstructionHudModel();
+  const controls = defaultControlHandoff("delaware", "worldmodel");
+  model.transition(controls);
+  model.setPaused(true);
+  model.demonstrate("movement");
+  model.demonstrate("look");
+  model.setPaused(false);
+  assert.equal(model.snapshot().reason, "early");
+
+  model.transition({ ...controls, controlsEnabled: false });
+  model.demonstrate("movement");
+  model.demonstrate("look");
+  model.transition({ ...controls, controlsEnabled: true });
+  assert.equal(model.snapshot().reason, "early");
+});

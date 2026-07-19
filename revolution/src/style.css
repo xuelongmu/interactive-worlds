@@ -458,12 +458,26 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   background: #d7b65e;
   border-color: #f1d485;
 }
+.instruction-hud[data-reason="action"] .instruction-hud__binding > span::before {
+  content: "— ";
+}
 .instruction-hud__guidance {
   margin-top: 8px;
   color: #f1eadc;
   font: 13px/1.4 Georgia, "Times New Roman", serif;
 }
 .instruction-hud__guidance:empty { display: none; }
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
 .review-controls {
   position: absolute;
   top: 14px;

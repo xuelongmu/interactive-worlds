@@ -21,7 +21,7 @@ export interface ContextualActionBinding extends ControlBinding {
 export interface ControlHandoffDetail {
   sceneId: string;
   renderer: ControlRenderer;
-  transitionKey: string;
+  transitionKey: string | number;
   controlsEnabled: boolean;
   movement?: ControlBinding;
   look?: ControlBinding;
@@ -31,6 +31,7 @@ export interface ControlHandoffDetail {
 
 export interface PauseStateDetail {
   paused: boolean;
+  canResumePointerInput: boolean;
 }
 
 declare global {
@@ -98,6 +99,7 @@ export class InstructionHudModel {
   }
 
   demonstrate(kind: "movement" | "look") {
+    if (this.paused || !this.controls?.controlsEnabled) return;
     if (kind === "movement") this.movementDemonstrated = true;
     else this.lookDemonstrated = true;
     this.stalled = false;
@@ -109,6 +111,10 @@ export class InstructionHudModel {
 
   stall() {
     if (!this.paused && this.controls?.controlsEnabled) this.stalled = true;
+  }
+
+  canStall(): boolean {
+    return !this.paused && !!this.controls?.controlsEnabled && this.controls.renderer !== "cutscene";
   }
 
   snapshot(): InstructionHudSnapshot {
@@ -172,8 +178,21 @@ export function instructionHudMarkup(): string {
       data-accessibility-layer="instructions" data-visible="false">
       <p class="instruction-hud__eyebrow" aria-hidden="true">Controls</p>
       <div class="instruction-hud__bindings"></div>
-      <p class="instruction-hud__guidance" role="status" aria-live="off" aria-atomic="true"></p>
+      <p class="instruction-hud__guidance"></p>
+      <p class="instruction-hud__announcement visually-hidden" role="status"
+        aria-live="off" aria-atomic="true"></p>
     </aside>`;
+}
+
+export function controlAnnouncement(snapshot: InstructionHudSnapshot): string {
+  if (!snapshot.visible || snapshot.live === "off") return "";
+  if (snapshot.guidance) return `Instruction. ${snapshot.guidance}`;
+  const bindings = snapshot.bindings
+    .map((binding) => `${binding.binding} — ${binding.label}`)
+    .join(". ");
+  return bindings
+    ? `${snapshot.reason === "action" ? "Action available" : "Controls reminder"}. ${bindings}.`
+    : "";
 }
 
 function bindingMarkup(binding: ControlBinding): HTMLElement {
@@ -204,6 +223,7 @@ export function mountInstructionHud(
   const root = stage.querySelector<HTMLElement>(".instruction-hud")!;
   const bindings = root.querySelector<HTMLElement>(".instruction-hud__bindings")!;
   const guidance = root.querySelector<HTMLElement>(".instruction-hud__guidance")!;
+  const announcement = root.querySelector<HTMLElement>(".instruction-hud__announcement")!;
   const model = new InstructionHudModel();
   let stallHandle: unknown = null;
 
@@ -218,10 +238,12 @@ export function mountInstructionHud(
     root.setAttribute("aria-hidden", snapshot.visible ? "false" : "true");
     bindings.replaceChildren(...snapshot.bindings.map(bindingMarkup));
     guidance.textContent = snapshot.guidance;
-    guidance.setAttribute("aria-live", snapshot.live);
+    announcement.setAttribute("aria-live", snapshot.live);
+    announcement.textContent = controlAnnouncement(snapshot);
   };
   const rearmStall = () => {
     clearStall();
+    if (!model.canStall()) return;
     stallHandle = scheduler.set(() => {
       stallHandle = null;
       model.stall();
