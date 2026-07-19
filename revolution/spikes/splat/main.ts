@@ -28,6 +28,11 @@ type WorldMetadata = {
 
 const splatUrl = params.get("splat") ?? undefined;
 const colliderUrl = params.get("collider") ?? undefined;
+const metadataUrl = params.get("meta") ?? (
+  !splatUrl && manifest.assets.splat
+    ? manifest.assets.splat.replace(/\.spz$/, ".meta.json")
+    : undefined
+);
 const captureX = finiteParam("x");
 const captureZ = finiteParam("z");
 const captureYaw = finiteParam("yaw");
@@ -69,8 +74,7 @@ if (manifest.assets.collider && !(await assetExists(manifest.assets.collider))) 
 }
 
 let worldMetadata: WorldMetadata | null = null;
-if (!usingFallback && !splatUrl && manifest.assets.splat) {
-  const metadataUrl = manifest.assets.splat.replace(/\.spz$/, ".meta.json");
+if (!usingFallback && metadataUrl) {
   try {
     const response = await fetch(metadataUrl);
     if (response.ok) worldMetadata = await response.json() as WorldMetadata;
