@@ -3,7 +3,7 @@ import delaware from "../../src/scenes/delaware.json";
 import type { SceneManifest } from "../../src/engine/types";
 import { CueEngine } from "../../src/engine/cues";
 import { AudioEngine } from "../../src/engine/audio";
-import { WorldModelSession, bindWorldModelKeys } from "../../src/renderers/worldmodel";
+import { WorldModelSession, bindWorldModelKeys, ModelEventTimeline } from "../../src/renderers/worldmodel";
 
 /** SPIKE 1 — Participant register.
  *  Questions this spike answers:
@@ -42,6 +42,14 @@ app.innerHTML = `
           <button class="secondary" data-event="storm">Storm</button>
           <button class="secondary" data-event="landing">Landing</button>
         </div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Fallback capture (issue #6): run the timeline, drive a good take, save it</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="secondary" id="timeline" disabled>Start beat timeline</button>
+          <button class="secondary" id="record" disabled>Save recording (.mp4)</button>
+        </div>
+        <div id="timeline-status" style="font:11px Consolas,monospace;color:var(--dim);margin-top:6px"></div>
       </div>
       <div style="font-size:12px;color:var(--dim)">Controls: <b>W/S</b> forward/back · <b>A/D</b> strafe · <b>arrows</b> look</div>
       <div style="flex:1;min-height:120px">
@@ -165,6 +173,8 @@ connectBtn.addEventListener("click", async () => {
     bindWorldModelKeys(session);
     statusEl.textContent = "ready — drive with WASD/arrows";
     disconnectBtn.disabled = false;
+    timelineBtn.disabled = false;
+    recordBtn.disabled = false;
   } catch (error) {
     statusEl.textContent = `error: ${error}`;
     log(`✗ ${error}`);
@@ -177,12 +187,63 @@ disconnectBtn.addEventListener("click", async () => {
   disconnectBtn.disabled = true;
   await session?.disconnect();
   session = null;
+  if (timelineTimer !== null) { clearInterval(timelineTimer); timelineTimer = null; }
+  timelineBtn.textContent = "Start beat timeline";
+  timelineBtn.disabled = true;
+  recordBtn.disabled = true;
   statusEl.textContent = "disconnected";
   connectBtn.disabled = false;
   log("session ended");
 });
 // GPU sessions bill by the minute — never leave one running past the page.
 window.addEventListener("beforeunload", () => void session?.disconnect());
+
+// ---- fallback capture (issue #6) --------------------------------------
+// A recorded run becomes public/assets/video/delaware-crossing.mp4 — the
+// scene's degraded-mode video. Workflow: connect, start the timeline, drive
+// a good take through the landing, then save.
+const timelineBtn = document.getElementById("timeline") as HTMLButtonElement;
+const timelineStatusEl = document.getElementById("timeline-status")!;
+let timelineTimer: number | null = null;
+
+timelineBtn.addEventListener("click", () => {
+  if (timelineTimer !== null || !session) return;
+  const timeline = new ModelEventTimeline(manifest.modelEvents ?? [], {
+    steer: (name, prompt) => { void session?.steer(name, prompt); log(`beat ${name} (steer)`); },
+    emit: (name) => { cueEngine.handleEvent({ type: "model-event", name }); log(`beat ${name} (cue only)`); },
+  });
+  let clock = 0;
+  const startedAt = performance.now();
+  timelineTimer = window.setInterval(() => {
+    clock = (performance.now() - startedAt) / 1000;
+    timeline.update(clock);
+    timelineStatusEl.textContent = `timeline clock: ${clock.toFixed(0)}s (knox 45 · storm 90 · landing 180 · column 215)`;
+  }, 250);
+  timelineBtn.textContent = "Timeline running…";
+  timelineBtn.disabled = true;
+});
+
+const recordBtn = document.getElementById("record") as HTMLButtonElement;
+recordBtn.addEventListener("click", async () => {
+  if (!session) return;
+  recordBtn.disabled = true;
+  recordBtn.textContent = "Fetching recording…";
+  try {
+    const blob = await session.captureRecording();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "delaware-crossing.mp4";
+    a.click();
+    URL.revokeObjectURL(url);
+    log(`recording saved (${(blob.size / 1e6).toFixed(1)} MB) — move it to public/assets/video/`);
+  } catch (error) {
+    log(`✗ recording failed: ${error}`);
+  } finally {
+    recordBtn.disabled = false;
+    recordBtn.textContent = "Save recording (.mp4)";
+  }
+});
 
 // scripted beats: hot-swap prompt + emit model-event (manifest is source of truth)
 for (const button of document.querySelectorAll<HTMLButtonElement>("[data-event]")) {
