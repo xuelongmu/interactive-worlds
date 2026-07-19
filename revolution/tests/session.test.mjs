@@ -40,6 +40,7 @@ function sessionRequest({
   cookie,
   ip = ADDRESS,
   rawBody,
+  model,
 } = {}) {
   const headers = new Headers();
   if (ip) headers.set("x-vercel-forwarded-for", ip);
@@ -50,7 +51,9 @@ function sessionRequest({
     else if (token !== undefined) body = JSON.stringify({ challengeToken: token });
     if (body !== undefined) headers.set("content-type", "application/json");
   }
-  return new Request("https://play.example.test/api/session", { method, headers, body });
+  const url = new URL("https://play.example.test/api/session");
+  if (model !== undefined) url.searchParams.set("model", model);
+  return new Request(url, { method, headers, body });
 }
 
 function cookieHeader(clearance = CLEARANCE) {
@@ -181,6 +184,7 @@ function services({
   const clock = { now: START };
   const calls = { turnstile: 0, redis: 0, reactor: 0 };
   const siteverifyBodies = [];
+  const reactorBodies = [];
   const redis = new FakeRedis(clock);
   const originalEval = redis.eval.bind(redis);
   redis.eval = async (...args) => {
@@ -207,6 +211,7 @@ function services({
     calls.reactor += 1;
     assert.equal(String(url), "https://api.reactor.inc/tokens");
     assert.equal(new Headers(init?.headers).get("Reactor-API-Key"), env.REACTOR_API_KEY);
+    reactorBodies.push(JSON.parse(String(init?.body)));
     return Response.json({ jwt: "short-lived-jwt", ...reactor }, { status: reactorStatus });
   };
   const options = {
@@ -217,7 +222,7 @@ function services({
     randomUUID: () => "00000000-0000-4000-8000-000000000000",
     randomClearance: () => CLEARANCE,
   };
-  return { calls, clock, fetchImpl, options, redis, siteverifyBodies };
+  return { calls, clock, fetchImpl, options, reactorBodies, redis, siteverifyBodies };
 }
 
 async function exchange(mock, request = sessionRequest({ token: TOKEN })) {
@@ -230,6 +235,17 @@ test("rejects non-POST requests before any external call", async () => {
 
   assert.equal(response.status, 405);
   assert.equal(response.headers.get("allow"), "POST");
+  assert.deepEqual(mock.calls, { turnstile: 0, redis: 0, reactor: 0 });
+});
+
+test("rejects models outside the navigable allowlist before any external call", async () => {
+  const mock = services();
+  const response = await handleSessionRequest(
+    sessionRequest({ token: TOKEN, model: "reactor/sana-streaming" }),
+    mock.options
+  );
+
+  assert.equal(response.status, 400);
   assert.deepEqual(mock.calls, { turnstile: 0, redis: 0, reactor: 0 });
 });
 
@@ -323,6 +339,11 @@ test("successful initial verification sets a hardened opaque clearance cookie", 
   assert.match(cookie, /SameSite=Strict/);
   assert.deepEqual(mock.calls, { turnstile: 1, redis: 1, reactor: 1 });
   assert.equal(mock.siteverifyBodies[0].response, TOKEN);
+  assert.deepEqual(mock.reactorBodies[0], {
+    authorization_details: [
+      { type: "session", resources: { models: { match: ["reactor/lingbot-world-2"] } } },
+    ],
+  });
 
   const persisted = JSON.stringify(mock.redis.evalCalls);
   for (const raw of [
@@ -337,6 +358,18 @@ test("successful initial verification sets a hardened opaque clearance cookie", 
   }
   assert.equal(mock.redis.evalCalls[0].keys.length, 4);
   assert.equal(mock.redis.evalCalls[0].args.at(-1), DEFAULT_TTL);
+});
+
+test("mints a model-scoped fallback token for legacy LingBot", async () => {
+  const mock = services();
+  const response = await exchange(mock, sessionRequest({ token: TOKEN, model: "reactor/lingbot" }));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(mock.reactorBodies[0], {
+    authorization_details: [
+      { type: "session", resources: { models: { match: ["reactor/lingbot"] } } },
+    ],
+  });
 });
 
 test("local server tests may explicitly disable Secure, deployed environments may not", async () => {

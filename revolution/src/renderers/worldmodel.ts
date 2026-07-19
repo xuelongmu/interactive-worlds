@@ -1,4 +1,5 @@
 import { LingbotWorld2Model, type LingbotWorld2Message } from "@reactor-models/lingbot-world-2";
+import { LingbotModel } from "@reactor-models/lingbot";
 import { DEFAULT_BASE_URL } from "@reactor-team/js-sdk";
 import type { ControlHandoffDetail, EngineEvent, SceneManifest } from "../engine/types";
 import { PausableTimeouts } from "../engine/timers";
@@ -61,6 +62,8 @@ export interface WorldModelSessionOptions {
   onTelemetry?: (event: WorldModelTelemetryEvent) => void;
   /** Test seam; production always uses the challenge/admission broker. */
   mintJwt?: () => Promise<string>;
+  /** Defaults to the allowlisted URL/env selection, then LingBot World 2. */
+  modelName?: ReactorWorldModelName;
   timeouts?: Partial<WorldModelSessionTimeouts>;
 }
 
@@ -100,6 +103,78 @@ export type Longitudinal = "idle" | "forward" | "back";
 export type Lateral = "idle" | "strafe_left" | "strafe_right";
 export type LookH = "idle" | "left" | "right";
 export type LookV = "idle" | "up" | "down";
+
+export const REACTOR_WORLD_MODELS = {
+  "lingbot-world-2": "reactor/lingbot-world-2",
+  lingbot: "reactor/lingbot",
+} as const;
+
+export type ReactorWorldModelName = typeof REACTOR_WORLD_MODELS[keyof typeof REACTOR_WORLD_MODELS];
+
+const REACTOR_MODEL_ALIASES: Readonly<Record<string, ReactorWorldModelName>> = {
+  "lingbot-world-2": REACTOR_WORLD_MODELS["lingbot-world-2"],
+  "reactor/lingbot-world-2": REACTOR_WORLD_MODELS["lingbot-world-2"],
+  lingbot: REACTOR_WORLD_MODELS.lingbot,
+  "reactor/lingbot": REACTOR_WORLD_MODELS.lingbot,
+};
+
+/** Query string wins so a deployed build can be moved off an overloaded model immediately. */
+export function resolveReactorWorldModelName(
+  search = typeof window === "undefined" ? "" : window.location?.search ?? "",
+  configured = import.meta.env.VITE_REACTOR_MODEL ?? ""
+): ReactorWorldModelName {
+  const requested = new URLSearchParams(search).get("reactorModel")?.trim().toLowerCase();
+  const selected = requested || configured.trim().toLowerCase();
+  return REACTOR_MODEL_ALIASES[selected] ?? REACTOR_WORLD_MODELS["lingbot-world-2"];
+}
+
+export function resolveLegacyLingbotMovement(
+  longitudinal: Longitudinal,
+  lateral: Lateral
+): Longitudinal | Lateral {
+  return longitudinal !== "idle" ? longitudinal : lateral;
+}
+
+/** Legacy LingBot has one movement axis, so longitudinal input wins over strafe. */
+class CompatibleLingbotModel extends LingbotModel {
+  private longitudinal: Longitudinal = "idle";
+  private lateral: Lateral = "idle";
+  private movement: Longitudinal | Lateral = "idle";
+
+  async setMoveLongitudinal({ move_longitudinal = "idle" }: { move_longitudinal?: Longitudinal }) {
+    this.longitudinal = move_longitudinal;
+    await this.flushMovement();
+  }
+
+  async setMoveLateral({ move_lateral = "idle" }: { move_lateral?: Lateral }) {
+    this.lateral = move_lateral;
+    await this.flushMovement();
+  }
+
+  override setPrompt({ prompt = "" }: { prompt?: string }): Promise<void> {
+    const compatiblePrompt = prompt.slice(0, 1_000);
+    if (compatiblePrompt.length !== prompt.length) {
+      console.warn("[worldmodel] LingBot fallback prompt truncated to 1000 characters");
+    }
+    return super.setPrompt({ prompt: compatiblePrompt });
+  }
+
+  private async flushMovement(): Promise<void> {
+    const next = resolveLegacyLingbotMovement(this.longitudinal, this.lateral);
+    if (next === this.movement) return;
+    this.movement = next;
+    await this.setMovement({ movement: next });
+  }
+}
+
+export function createReactorWorldModel(modelName: ReactorWorldModelName): LingbotWorld2Model {
+  const model = modelName === REACTOR_WORLD_MODELS.lingbot
+    ? new CompatibleLingbotModel()
+    : new LingbotWorld2Model();
+  // Both official clients share the lifecycle, media, conditioning, and message
+  // surface consumed below; the adapter supplies World 2's two movement methods.
+  return model as unknown as LingbotWorld2Model;
+}
 
 export const ROLLOVER_OUTPUT_BUDGET_MS = 10_000;
 
@@ -163,6 +238,7 @@ interface PendingSignal {
  * conditioning, and generation start are deliberately separate operations. */
 export class WorldModelSession {
   private model: LingbotWorld2Model;
+  private modelName: ReactorWorldModelName;
   private hooks: WorldModelSessionOptions;
   private lifecyclePhase: WorldModelSessionPhase = "idle";
   private operation = 0;
@@ -196,18 +272,22 @@ export class WorldModelSession {
 
   constructor(
     options: WorldModelSessionOptions = {},
-    model: LingbotWorld2Model = new LingbotWorld2Model()
+    model?: LingbotWorld2Model
   ) {
     this.hooks = options;
-    this.model = model;
+    this.modelName = options.modelName ?? resolveReactorWorldModelName();
+    this.model = model ?? createReactorWorldModel(this.modelName);
   }
 
   get phase(): WorldModelSessionPhase {
     return this.lifecyclePhase;
   }
 
-  static async mintJwt(): Promise<string> {
-    const res = await fetch("/api/session", { method: "POST" });
+  static async mintJwt(
+    modelName: ReactorWorldModelName = resolveReactorWorldModelName()
+  ): Promise<string> {
+    const url = `/api/session?model=${encodeURIComponent(modelName)}`;
+    const res = await fetch(url, { method: "POST" });
     if (!res.ok) throw new Error(`token mint failed: ${res.status} ${await res.text()}`);
     const body = (await res.json()) as { jwt?: string };
     if (!body.jwt) throw new Error("token mint returned no jwt");
@@ -370,7 +450,7 @@ export class WorldModelSession {
       this.hooks.onStatus?.("minting token");
       const mintAt = performance.now();
       const jwt = await this.withTimeout(
-        (this.hooks.mintJwt ?? WorldModelSession.mintJwt)(),
+        (this.hooks.mintJwt ?? (() => WorldModelSession.mintJwt(this.modelName)))(),
         this.timeout("mint"),
         "token mint timeout"
       );
