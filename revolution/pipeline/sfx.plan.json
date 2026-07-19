@@ -230,16 +230,16 @@
           "gainDb": -6,
           "duckUnderNarrationDb": -6,
           "spatial": "At the final chest, then broad deck sweep.",
-          "stop": { "type": "event", "eventType": "model-event", "name": "deck-clear" },
+          "stop": { "type": "natural-end" },
           "caveat": "The deck sweeping is recorded; the precise last-chest sequence is staged."
         },
         {
           "id": "TEA-SIL-001",
           "kind": "authored-silence",
-          "trigger": { "type": "model-event", "name": "deck-clear" },
+          "trigger": { "type": "cue", "cueId": "TEA-080" },
           "asset": null,
           "bus": "sfx",
-          "runtimeOwner": "adapter",
+          "runtimeOwner": "handoff",
           "loop": false,
           "fadeInMs": 0,
           "fadeOutMs": 500,
@@ -247,8 +247,8 @@
           "duckUnderNarrationDb": 0,
           "spatial": "All interaction events stop; only the sparse wharf bed remains.",
           "stopBuses": ["diegetic", "sfx"],
-          "stop": { "type": "cue", "cueId": "TEA-080" },
-          "caveat": "This silence protects the return to Parliament narration; generate no filler."
+          "stop": { "type": "scene-exit" },
+          "caveat": "This silence protects Parliament narration. Chest-work is latched off at chests-done and the completion take ends naturally before TEA-080; generate no filler."
         }
       ]
     },
