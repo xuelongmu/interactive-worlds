@@ -11,5 +11,5 @@
     "resolveJsonModule": true,
     "useDefineForClassFields": true
   },
-  "include": ["src", "spikes"]
+  "include": ["src", "spikes", "api"]
 }

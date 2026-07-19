@@ -2,6 +2,7 @@ import "./style.css";
 import { scenes } from "./scenes";
 import { loadState, resetStoryProgress } from "./engine/state";
 import { Director, type DirectorExitTarget } from "./engine/director";
+import { installSessionChallenge } from "./security/session-challenge";
 import {
   getResumeScene,
   chapterAccessibleName,
@@ -11,6 +12,8 @@ import {
   splitChapterHeading,
   type ShellView,
 } from "./shell";
+
+installSessionChallenge();
 
 const app = document.getElementById("app")!;
 let director: Director | null = null;
