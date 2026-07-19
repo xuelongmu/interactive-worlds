@@ -5,6 +5,11 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { dirname, isAbsolute, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { projectRoot } from "./lib.mjs";
+import {
+  buildAudioStages,
+  reviewCheckpoints,
+  TRUSTED_VOLLEY_SHA256,
+} from "./lexington-volley-lib.mjs";
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
@@ -17,6 +22,7 @@ const relativeDisplay = (path) => path.startsWith(projectRoot) ? path.slice(proj
 const framePath = absolute(option("--frame", "snapshots/lexington-trigger-frame.jpg"));
 const sourcePath = absolute(option("--source", "public/assets/video/lexington-volley-source.mp4"));
 const outputPath = absolute(option("--output", "public/assets/video/lexington-volley.mp4"));
+const isolatedShotPath = absolute(option("--isolated-shot", "public/assets/audio/sfx/lexington-first-shot.mp3"));
 const volleyPath = resolve(projectRoot, "public/assets/audio/sfx/musket-volley.mp3");
 const ambiencePath = resolve(projectRoot, "public/assets/audio/amb/green-dawn.mp3");
 const configPath = resolve(projectRoot, "pipeline/lexington-volley.edit.json");
@@ -60,7 +66,8 @@ function printCheck(path, label) {
 const readiness = [
   printCheck(framePath, "trigger frame"),
   printCheck(sourcePath, "generated source video"),
-  printCheck(volleyPath, "volley / restrained screams / drum SFX"),
+  printCheck(isolatedShotPath, "LEX-SFX-001 isolated first shot"),
+  printCheck(volleyPath, "LEX-SFX-002 combined volley / restrained screams / drum"),
   printCheck(ambiencePath, "Lexington dawn ambience"),
 ];
 
@@ -93,7 +100,33 @@ if (frameVideo.width !== config.output.width || frameVideo.height !== config.out
 }
 
 const duration = Math.min(config.targetDurationSeconds, sourceDuration);
-const ambienceFadeStart = Math.max(0, duration - 3);
+const isolatedShotProbe = probe(isolatedShotPath);
+const isolatedShotAudio = isolatedShotProbe.streams.find((stream) => stream.codec_type === "audio");
+const isolatedShotDuration = Number(isolatedShotProbe.format.duration);
+if (!isolatedShotAudio) throw new Error("LEX-SFX-001 has no audio stream");
+if (!Number.isFinite(isolatedShotDuration) || isolatedShotDuration < 3.95 || isolatedShotDuration > 4.05) {
+  throw new Error(`LEX-SFX-001 must be 4.000 seconds (+/-0.050s); got ${isolatedShotProbe.format.duration}`);
+}
+
+const volleySha256 = sha256(volleyPath);
+if (volleySha256 !== TRUSTED_VOLLEY_SHA256) {
+  throw new Error(
+    `LEX-SFX-002 trusted hash mismatch: expected ${TRUSTED_VOLLEY_SHA256}, got ${volleySha256}`
+  );
+}
+const volleyProbe = probe(volleyPath);
+const volleyAudio = volleyProbe.streams.find((stream) => stream.codec_type === "audio");
+const volleyDuration = Number(volleyProbe.format.duration);
+if (!volleyAudio) throw new Error("LEX-SFX-002 has no audio stream");
+
+const audioStages = buildAudioStages({
+  cutsceneDurationSeconds: duration,
+  isolatedShotDurationSeconds: isolatedShotDuration,
+  volleyDurationSeconds: volleyDuration,
+  // Preserve the existing edit lead-in. The director/cue timeline is owned
+  // elsewhere; the volley now derives from the isolated asset's probed end.
+  leadInMs: config.audio.volleyDelayMs,
+});
 const { width, height, fps } = config.output;
 const { exactFrameSeconds, blendToGeneratedSeconds } = config.matchCut;
 const videoFilter = [
@@ -102,9 +135,10 @@ const videoFilter = [
   `[still][motion]xfade=transition=fade:duration=${blendToGeneratedSeconds}:offset=${exactFrameSeconds},trim=duration=${duration},fps=${fps},format=yuv420p[v]`,
 ];
 const audioFilter = [
-  `[2:a]adelay=${config.audio.volleyDelayMs}:all=1,volume=${config.audio.volleyGain},apad,atrim=duration=${duration}[volley]`,
-  `[3:a]volume=${config.audio.ambienceGain},atrim=duration=${duration},afade=t=out:st=${ambienceFadeStart}:d=3[bed]`,
-  `[bed][volley]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95,atrim=duration=${duration}[a]`,
+  `[2:a]adelay=${audioStages.isolatedShot.startMs}:all=1,volume=${config.audio.volleyGain},apad,atrim=duration=${duration}[isolated]`,
+  `[3:a]adelay=${audioStages.volley.startMs}:all=1,volume=${config.audio.volleyGain},apad,atrim=duration=${duration}[volley]`,
+  `[4:a]volume=${config.audio.ambienceGain},atrim=duration=${audioStages.volley.endMs / 1_000},afade=t=out:st=${Math.max(0, audioStages.volley.endMs / 1_000 - 0.25)}:d=0.25[bed]`,
+  `[bed][isolated][volley]amix=inputs=3:duration=longest:normalize=0,alimiter=limit=0.95,atrim=duration=${duration}[a]`,
 ];
 
 mkdirSync(dirname(outputPath), { recursive: true });
@@ -112,6 +146,7 @@ command("ffmpeg", [
   "-y",
   "-loop", "1", "-framerate", String(fps), "-i", framePath,
   "-i", sourcePath,
+  "-i", isolatedShotPath,
   "-i", volleyPath,
   "-stream_loop", "-1", "-i", ambiencePath,
   "-filter_complex", [...videoFilter, ...audioFilter].join(";"),
@@ -126,32 +161,81 @@ command("ffmpeg", [
   outputPath,
 ]);
 
-const reviewPath = outputPath.replace(/\.mp4$/i, ".review.json");
-const review = {
-  schema: 1,
+const checkpoints = reviewCheckpoints(audioStages, duration);
+const contactSheetPath = outputPath.replace(/\.mp4$/i, ".review.jpg");
+const checkpointFrames = checkpoints.map(({ atMs }) => Math.round(atMs / 1_000 * fps));
+const selectFrames = checkpointFrames.map((frame) => `eq(n\\,${frame})`).join("+");
+command("ffmpeg", [
+  "-y", "-i", outputPath,
+  "-vf", `select=${selectFrames},scale=416:240,tile=${checkpoints.length}x1`,
+  "-frames:v", "1", "-q:v", "2", "-an", contactSheetPath,
+]);
+
+const handoffPath = outputPath.replace(/\.mp4$/i, ".handoff.json");
+const handoff = {
+  schema: 2,
+  issue: "https://github.com/xuelongmu/interactive-worlds/issues/7",
   candidate: relativeDisplay(outputPath).replaceAll("\\", "/"),
+  source: relativeDisplay(sourcePath).replaceAll("\\", "/"),
   directorStatus: "async veto pending",
   durationSeconds: duration,
   inputs: {
     triggerFrame: { path: relativeDisplay(framePath).replaceAll("\\", "/"), sha256: sha256(framePath) },
-    generatedSource: { path: relativeDisplay(sourcePath).replaceAll("\\", "/"), sha256: sha256(sourcePath) },
-    volleySfx: { path: relativeDisplay(volleyPath).replaceAll("\\", "/"), sha256: sha256(volleyPath) },
+    generatedSource: {
+      path: relativeDisplay(sourcePath).replaceAll("\\", "/"),
+      sha256: sha256(sourcePath),
+      probe: sourceProbe,
+    },
+    isolatedShotSfx: {
+      cue: "LEX-SFX-001",
+      path: relativeDisplay(isolatedShotPath).replaceAll("\\", "/"),
+      sha256: sha256(isolatedShotPath),
+      probe: isolatedShotProbe,
+      provenance: "Issue #43 ElevenLabs sound-generation handoff; ear approval tracked there.",
+    },
+    volleySfx: {
+      cue: "LEX-SFX-002",
+      path: relativeDisplay(volleyPath).replaceAll("\\", "/"),
+      sha256: volleySha256,
+      probe: volleyProbe,
+      provenance: "Issue #43 immutable generated baseline; technical audit passed, ear approval pending there.",
+    },
     ambience: { path: relativeDisplay(ambiencePath).replaceAll("\\", "/"), sha256: sha256(ambiencePath) },
     editConfig: { path: "pipeline/lexington-volley.edit.json", sha256: sha256(configPath) },
   },
-  output: { sha256: sha256(outputPath), probe: probe(outputPath) },
+  audioStages,
+  output: {
+    sha256: sha256(outputPath),
+    bytes: statSync(outputPath).size,
+    probe: probe(outputPath),
+  },
+  visualReview: {
+    status: "pending director async-veto review",
+    contactSheet: {
+      path: relativeDisplay(contactSheetPath).replaceAll("\\", "/"),
+      sha256: sha256(contactSheetPath),
+      checkpoints,
+    },
+  },
   prompt: config.conditioningPrompt,
   prerequisites: config.prerequisites,
   audioProvenance: config.audio.provenance,
+  editNotes: [
+    "LEX-SFX-001 completes before LEX-SFX-002 begins; stage boundaries derive from probed asset durations.",
+    "All sources end with LEX-SFX-002; at least four seconds of authored silence remain before the cutscene ends.",
+    "The existing edit lead-in is preserved; no director cue timing or runtime SFX mapping was changed.",
+  ],
   assertions: [
     "Raw generated-video audio was discarded.",
     "No narration or music source is present in the edit graph.",
+    "The isolated first shot and combined volley occupy separate, non-overlapping stages.",
+    "The aftermath stage contains no authored audio source.",
     "The exact captured trigger frame opens the cut before blending into generated motion.",
-    "Production use still requires the issue #4 visible trigger-line authoring pass.",
     "Director by-eye review and async veto remain pending.",
   ],
 };
-writeFileSync(reviewPath, `${JSON.stringify(review, null, 2)}\n`);
+writeFileSync(handoffPath, `${JSON.stringify(handoff, null, 2)}\n`);
 
-console.log(`wrote    ${relativeDisplay(outputPath)} (${statSync(outputPath).size} bytes, sha256 ${review.output.sha256})`);
-console.log(`wrote    ${relativeDisplay(reviewPath)}`);
+console.log(`wrote    ${relativeDisplay(outputPath)} (${statSync(outputPath).size} bytes, sha256 ${handoff.output.sha256})`);
+console.log(`wrote    ${relativeDisplay(contactSheetPath)} (${checkpoints.length} review checkpoints)`);
+console.log(`wrote    ${relativeDisplay(handoffPath)}`);
