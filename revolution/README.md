@@ -1,6 +1,7 @@
-# The Revolution — interactive story
+# American Revolution — interactive story
 
 Browser-based interactive documentary of the American Revolution.
+Director decisions binding on all work: [../docs/decisions.md](../docs/decisions.md).
 Three render registers: **Witness** (World Labs splats via Spark),
 **Participant** (Reactor / Lingbot World 2), **Actor** (three.js + Tripo),
 with ElevenLabs narration/sound. See [../docs/architecture.md](../docs/architecture.md)
