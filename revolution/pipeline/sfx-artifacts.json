@@ -2,8 +2,15 @@
   "version": 1,
   "generatedWith": "ElevenLabs text-to-sound-effects POST /v1/sound-generation",
   "technicalAuditDate": "2026-07-19",
-  "reviewStatus": "technical-pass; ear-review-pending in pipeline/sfx-audition.html",
+  "reviewStatus": "director-authorized provisional integration; no ear review recorded; post-merge playtest pending",
+  "integrationAuthorization": {
+    "status": "provisional",
+    "authorizedBy": "director",
+    "earReviewPerformed": false,
+    "postMergePlaytest": "pending"
+  },
   "canonicalRoot": "revolution/public/assets/audio",
+  "sharedCanonicalRoot": "C:/Dev/interactive-worlds/revolution/public/assets/audio",
   "baselineExternalRoot": "C:/Dev/interactive-worlds/revolution/public/assets/audio",
   "deltaExternalRoot": "C:/Users/xuelong/.ao/data/worktrees/interactive-worlds/interactive-worlds-19/revolution/.artifacts/issue-43/audio",
   "artifacts": [
