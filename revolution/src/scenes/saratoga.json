@@ -24,7 +24,7 @@
       "lockControls": true, "then": "wake:worldmodel" },
     { "id": "SAR-060", "trigger": { "type": "model-event", "name": "redoubt-taken" },
       "subtitle": "He leads the assault that takes the key redoubt in the British line, and goes down with a musket ball through the leg that made him a hero." },
-    { "id": "SAR-070", "trigger": { "type": "model-event", "name": "charge-end", "orAfterPrevious": 25 },
+    { "id": "SAR-070", "trigger": { "type": "model-event", "name": "charge-end", "orAfterPrevious": 10 },
       "subtitle": "Ten days later, surrounded and starving, Burgoyne surrendered his entire army — nearly six thousand men. When the news reached Paris, France declared for the revolution: money, an army, and a fleet. Saratoga inspired a much-needed ally.",
       "then": "scene:valley-forge" }
   ],

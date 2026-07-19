@@ -34,7 +34,7 @@
       "guidance": "Continue across the green toward the trigger line.",
       "subtitle": "Then — a single shot. No one knows who fired it. No one ever will.",
       "lockControls": true, "then": "cutscene:volley" },
-    { "id": "LEX-080", "trigger": { "type": "action", "name": "cutscene-volley-complete" },
+    { "id": "LEX-080", "trigger": { "type": "action", "name": "cutscene-volley-complete", "afterEventSeconds": 4 },
       "subtitle": "The British fired two volleys and charged. It was over in minutes. Eight militiamen killed, ten wounded. Jonathan Harrington, shot on the green, crawled to his own doorstep and died there." },
     { "id": "LEX-090", "trigger": { "type": "action", "name": "resume-walk", "orTimer": 180, "orAfterPrevious": 8 },
       "guidance": "Walk forward through the aftermath.",

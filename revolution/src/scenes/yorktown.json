@@ -34,7 +34,7 @@
     { "id": "YOR-070", "trigger": { "type": "zone-enter", "zone": "field-walk" },
       "guidance": "Walk out onto the surrender field.",
       "subtitle": "Cornwallis did not come. He sent his sword out with a deputy, who tried to surrender it to the French commander first. Rochambeau pointed across the road, to Washington. Washington directed him to his own deputy. The forms mattered, that day." },
-    { "id": "YOR-080", "trigger": { "type": "zone-enter", "zone": "field-end", "orTimer": 210, "orAfterPrevious": 12 },
+    { "id": "YOR-080", "trigger": { "type": "zone-enter", "zone": "field-end", "orTimer": 210, "orAfterPrevious": 10 },
       "guidance": "Continue across the field toward the waiting lines.",
       "subtitle": "The war did not end at Yorktown; the fighting sputtered on for two more years. But when the news reached London, the government fell, and Britain began negotiating the peace.",
       "then": "scene:treaty-paris" }
