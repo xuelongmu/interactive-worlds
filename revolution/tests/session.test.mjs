@@ -376,6 +376,10 @@ test("later POSTs reuse clearance with no Siteverify and still consume client ad
   assert.equal(clearanceFrom(second), clearance);
   assert.equal(third.status, 429);
   assert.equal(third.headers.get("retry-after"), "600");
+  assert.deepEqual(await third.json(), {
+    error: "session capacity reached",
+    code: "session_capacity_reached",
+  });
   assert.deepEqual(mock.calls, { turnstile: 1, redis: 3, reactor: 2 });
 });
 
@@ -389,6 +393,11 @@ test("clearance reuse still consumes the global daily admission limit", async ()
   );
 
   assert.equal(second.status, 429);
+  assert.deepEqual(await second.json(), {
+    error: "session capacity reached",
+    code: "session_capacity_reached",
+  });
+  assert.match(second.headers.get("retry-after") ?? "", /^\d+$/);
   assert.equal(mock.calls.turnstile, 1);
   assert.equal(mock.calls.reactor, 1);
 });

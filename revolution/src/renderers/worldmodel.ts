@@ -26,6 +26,23 @@ export function formatWorldModelError(error: unknown): string {
   return (safe || "unknown connection error").slice(0, 240);
 }
 
+export function formatSessionRetryAfter(value: string | null): string | null {
+  if (!value || !/^\d+$/.test(value)) return null;
+  const seconds = Number(value);
+  if (!Number.isSafeInteger(seconds) || seconds <= 0) return null;
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  if (seconds < 3_600) {
+    const minutes = Math.ceil(seconds / 60);
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  if (seconds < 86_400) {
+    const hours = Math.ceil(seconds / 3_600);
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+  const days = Math.max(1, Math.round(seconds / 86_400));
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
 export type WorldModelTelemetryName =
   | "token-mint"
   | "connect-to-runtime-ready"
@@ -208,7 +225,17 @@ export class WorldModelSession {
 
   static async mintJwt(): Promise<string> {
     const res = await fetch("/api/session", { method: "POST" });
-    if (!res.ok) throw new Error(`token mint failed: ${res.status} ${await res.text()}`);
+    if (!res.ok) {
+      if (res.status === 429) {
+        const retryAfter = formatSessionRetryAfter(res.headers.get("retry-after"));
+        throw new Error(
+          retryAfter
+            ? `Live session limit reached. Try again in about ${retryAfter}.`
+            : "Live session limit reached. Please try again later."
+        );
+      }
+      throw new Error(`token mint failed (${res.status})`);
+    }
     const body = (await res.json()) as { jwt?: string };
     if (!body.jwt) throw new Error("token mint returned no jwt");
     return body.jwt;

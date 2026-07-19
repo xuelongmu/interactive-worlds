@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LingbotWorld2Message, LingbotWorld2Model } from "@reactor-models/lingbot-world-2";
 import {
   canDispatchWorldModelAction,
+  formatSessionRetryAfter,
   formatWorldModelError,
   frameHasVisibleContent,
   isGroundedWorldModelEvent,
@@ -136,6 +137,25 @@ describe("WorldModelSession lifecycle", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("shows a clear retry message when session admission is full", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(
+      { error: "session capacity reached", code: "session_capacity_reached" },
+      { status: 429, headers: { "retry-after": "3600" } }
+    )));
+
+    await expect(WorldModelSession.mintJwt()).rejects.toThrow(
+      "Live session limit reached. Try again in about 1 hour."
+    );
+  });
+
+  it("formats client-window and daily-limit retry durations", () => {
+    expect(formatSessionRetryAfter("45")).toBe("45 seconds");
+    expect(formatSessionRetryAfter("600")).toBe("10 minutes");
+    expect(formatSessionRetryAfter("7200")).toBe("2 hours");
+    expect(formatSessionRetryAfter("86460")).toBe("1 day");
+    expect(formatSessionRetryAfter("invalid")).toBeNull();
   });
 
   it("prepares transport and conditions without starting generation", async () => {
