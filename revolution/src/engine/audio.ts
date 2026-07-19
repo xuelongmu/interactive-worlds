@@ -95,7 +95,8 @@ export class AudioEngine {
     const generation = this.ambienceGeneration;
     for (const url of urls) {
       const buffer = await this.load(url);
-      // a stopAmbience during the async load must win — never start after it
+      // a stopAmbience during the async load must win — never start the
+      // previous scene's loop over the new chapter
       if (generation !== this.ambienceGeneration) return;
       if (!buffer) continue;
       const source = ctx.createBufferSource();

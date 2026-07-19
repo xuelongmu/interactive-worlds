@@ -43,6 +43,10 @@ app.innerHTML = `
           <button class="secondary" data-event="landing">Landing</button>
         </div>
       </div>
+      <div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Fallback capture (issue #6): beats run on schedule from generation start — drive a good take through the landing, then save</div>
+        <button class="secondary" id="record" disabled>Save recording (.mp4)</button>
+      </div>
       <div style="font-size:12px;color:var(--dim)">Controls: <b>W/S</b> forward/back · <b>A/D</b> strafe · <b>arrows</b> look</div>
       <div style="flex:1;min-height:120px">
         <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Event log</div>
@@ -155,12 +159,8 @@ async function fireBeat(name: string) {
     cueEngine.handleEvent({ type: "model-event", name });
     log(`model-event → ${name} (cue only)`);
   }
-  if (name === "landing") {
-    // the crossing's final beat: column forms on the shore -> DEL-041
-    beatTimers.push(window.setTimeout(
-      () => cueEngine.handleEvent({ type: "action", name: "column-formed" }), 12_000
-    ));
-  }
+  // no landing special-case: column-formed is a manifest beat (at 215s) and
+  // rides the same timeline as the rest
 }
 
 function startBeatTimeline() {
@@ -248,6 +248,7 @@ connectBtn.addEventListener("click", async () => {
     if (manifest.audio.ambience) void audio.playAmbience(manifest.audio.ambience);
     statusEl.textContent = "ready — drive with WASD/arrows";
     disconnectBtn.disabled = false;
+    recordBtn.disabled = false;
   } catch (error) {
     log(`✗ ${error}`);
     await teardown();
@@ -260,12 +261,39 @@ const disconnectBtn = document.getElementById("disconnect") as HTMLButtonElement
 disconnectBtn.addEventListener("click", async () => {
   disconnectBtn.disabled = true;
   await teardown();
+  recordBtn.disabled = true;
   statusEl.textContent = "disconnected";
   connectBtn.disabled = false;
   log("session ended");
 });
 // GPU sessions bill by the minute — never leave one running past the page.
 window.addEventListener("beforeunload", () => void teardown());
+
+// ---- fallback capture (issue #6) --------------------------------------
+// A recorded run becomes public/assets/video/delaware-crossing.mp4 — the
+// scene's degraded-mode video. The beat timeline runs automatically from
+// generation start; drive a good take through the landing, then save.
+const recordBtn = document.getElementById("record") as HTMLButtonElement;
+recordBtn.addEventListener("click", async () => {
+  if (!session) return;
+  recordBtn.disabled = true;
+  recordBtn.textContent = "Fetching recording…";
+  try {
+    const blob = await session.captureRecording();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "delaware-crossing.mp4";
+    a.click();
+    URL.revokeObjectURL(url);
+    log(`recording saved (${(blob.size / 1e6).toFixed(1)} MB) — move it to public/assets/video/`);
+  } catch (error) {
+    log(`✗ recording failed: ${error}`);
+  } finally {
+    recordBtn.disabled = false;
+    recordBtn.textContent = "Save recording (.mp4)";
+  }
+});
 
 // manual beat overrides for review (same at-most-once path as the timeline)
 for (const button of document.querySelectorAll<HTMLButtonElement>("[data-event]")) {

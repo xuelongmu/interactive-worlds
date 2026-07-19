@@ -53,6 +53,68 @@ export const frames = [
       "frozen rutted paths, bare black trees, a few small campfires, stacked muskets, gray " +
       "overcast sky fading to blue dusk. Desolate and quiet, no people visible. " + STYLE,
   },
+  // --- Reactor conditioning frames (native 1664×960) for the new Participant beats ---
+  {
+    file: "teaparty-deck.jpg", width: 1664, height: 960,
+    prompt:
+      "First-person view standing on the deck of an 18th century merchant ship at night, " +
+      "December 1773, moored at a Boston wharf. Men loosely disguised with blankets, soot and " +
+      "feathers hoist heavy wooden tea chests from an open hold with block and tackle; one chest " +
+      "split open at the rail. Lantern light, cold breath, a huge silent crowd on the dark wharf " +
+      "beyond, masts and rigging overhead. Very low light, heavy grain. " + STYLE,
+  },
+  {
+    file: "trenton.jpg", width: 1664, height: 960,
+    prompt:
+      "First-person view marching in a column of Continental Army soldiers entering a small " +
+      "colonial town at first light in a driving sleet storm, December 1776. Muskets with fixed " +
+      "bayonets, breath steaming, a gun carriage ahead on the frozen rutted street, clapboard and " +
+      "brick houses looming through the sleet. Gray dawn light, visibility fifty yards. " + STYLE,
+  },
+  {
+    file: "saratoga-charge.jpg", width: 1664, height: 960,
+    prompt:
+      "First-person view from horseback at a gallop across an autumn battlefield in upstate " +
+      "New York, 1777, the horse's mane and ears at the bottom of frame, charging Continental " +
+      "soldiers alongside, musket smoke drifting across stubble fields, a log-and-earth " +
+      "fortification ahead, wooded hills in fall color. Late golden afternoon light. " + STYLE,
+  },
+  {
+    file: "yorktown-redoubt.jpg", width: 1664, height: 960,
+    prompt:
+      "First-person view advancing at a crouch through darkness toward an earthen redoubt " +
+      "topped with sharpened wooden stakes, at night, October 1781. Continental soldiers " +
+      "alongside carry muskets with fixed bayonets, distant siege cannon flashes light the low " +
+      "clouds and silhouette the parapet. Nearly black, tense. " + STYLE,
+  },
+  // --- Marble image prompts (wide establishing shots) for the new splat worlds ---
+  {
+    file: "griffins-wharf.jpg", width: 2048, height: 1152,
+    prompt:
+      "Wide eye-level view along a Boston wharf at night, December 1773. Wet cobbles and " +
+      "timber decking, coiled rope and barrels, three moored 18th century merchant ships with " +
+      "furled sails against a cold night sky, lantern light in rigging, a dense crowd of " +
+      "colonists standing still and silent along the wharf edge, brick warehouses behind. " +
+      "Very low light, moonlight on black harbor water. " + STYLE,
+  },
+  {
+    file: "surrender-field.jpg", width: 2048, height: 1152,
+    prompt:
+      "Wide eye-level view of an open Virginia field in October 1781, early afternoon. A long " +
+      "dirt road runs away from the viewer between two facing lines of soldiers standing at " +
+      "attention — white-coated French troops on one side, worn Continental troops on the " +
+      "other — and between the lines British soldiers frozen mid-stride laying muskets onto a " +
+      "growing pile. Autumn grass, split-rail fences, distant earthworks and smoke haze. " + STYLE,
+  },
+  {
+    file: "treaty-paris.jpg", width: 2048, height: 1152,
+    prompt:
+      "Interior of an 18th century painter's studio in Paris, 1783, eye level. Dominating the " +
+      "room, a monumental canvas on an easel: the left half richly painted with five American " +
+      "diplomats in dark coats around a treaty table, the right half of the canvas completely " +
+      "blank primed linen with faint chalk underdrawing. Tall north window light, scattered " +
+      "pigments and brushes, a tall clock, parquet floor. " + STYLE,
+  },
 ];
 
 const key = requireKey("FAL_KEY", "frame generation");

@@ -1,0 +1,29 @@
+{
+  "id": "treaty-paris",
+  "title": "The Treaty of Paris — September 3, 1783",
+  "renderer": "splat",
+  "assets": {
+    "splat": "/assets/worlds/treaty-paris.spz"
+  },
+  "locomotion": { "eyeHeight": 1.65, "speed": 0.9 },
+  "zones": [
+    { "id": "commissioners", "shape": "box", "pos": [-6, 1.5, -8], "size": [10, 3, 8] },
+    { "id": "unfinished-half", "shape": "box", "pos": [8, 1.5, -8], "size": [10, 3, 8] },
+    { "id": "signature-frame", "shape": "box", "pos": [0, 1.5, -18], "size": [6, 3, 4] }
+  ],
+  "cues": [
+    { "id": "PAR-010", "trigger": { "type": "scene-start" },
+      "subtitle": "Paris. September 3rd, 1783. Two years after Yorktown, the diplomats finish what the armies started. Great Britain acknowledges the United States to be free, sovereign, and independent. Those are the treaty's own words." },
+    { "id": "PAR-020", "trigger": { "type": "zone-enter", "zone": "commissioners" },
+      "subtitle": "The painter Benjamin West set out to record the moment: John Jay, John Adams, Benjamin Franklin, the American commissioners, composed and finished. The British commissioners refused to sit. The canvas remained half-painted, the right side empty." },
+    { "id": "PAR-030", "trigger": { "type": "zone-enter", "zone": "unfinished-half" },
+      "subtitle": "Half the canvas is a new country, rendered in detail. The other half is blank, and so is much of what comes next: a border at the Mississippi, an army going home unpaid, a constitution not yet written." },
+    { "id": "PAR-040", "trigger": { "type": "zone-enter", "zone": "signature-frame", "orTimer": 300 },
+      "subtitle": "In the summer of 1776, fifty-six people signed their names below that promise, not knowing how the story would end.",
+      "lockControls": true, "then": "signature:aged" },
+    { "id": "PAR-050", "trigger": { "type": "action", "name": "signature-dwell" },
+      "subtitle": "One of the signatures is yours. The revolution ended in 1783. The movement it started continues to this day.",
+      "then": "end" }
+  ],
+  "audio": { "ambience": ["/assets/audio/amb/paris-studio.mp3"] }
+}
