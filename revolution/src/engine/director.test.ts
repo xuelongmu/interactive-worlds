@@ -201,6 +201,24 @@ describe("Director live-session prewarming", () => {
     expect(second.disconnect).toHaveBeenCalledWith({ reason: "test-cleanup", dispose: true });
   });
 
+  it("serializes concurrent replacements without leaking the superseded session", async () => {
+    const first = fakeSession();
+    const second = fakeSession();
+    const sessions = [first, second];
+    const controller = new WorldModelPrewarmController({
+      createSession: () => sessions.shift()!,
+    });
+
+    const firstReady = controller.prewarm({ scene: worldScene("first"), strategy: "transport" });
+    const secondReady = controller.prewarm({ scene: worldScene("second"), strategy: "transport" });
+
+    expect(await firstReady).toBe(false);
+    expect(await secondReady).toBe(true);
+    expect(first.disconnect).toHaveBeenCalledWith({ reason: "replaced", dispose: true });
+    expect(second.prepareTransport).toHaveBeenCalledOnce();
+    expect(controller.pendingKey).toBe("second:transport");
+  });
+
   it("preserves only a pending session that matches the next route", async () => {
     const session = fakeSession();
     const controller = new WorldModelPrewarmController({ createSession: () => session });

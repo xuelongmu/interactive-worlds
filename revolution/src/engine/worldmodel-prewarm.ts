@@ -63,22 +63,41 @@ export class WorldModelPrewarmController {
   async prewarm(request: WorldModelPrewarmRequest): Promise<boolean> {
     const key = this.key(request.scene.id, request.strategy);
     if (this.pending?.key === key) return this.pending.ready;
-    await this.cancel("replaced");
-
+    const previous = this.pending;
     const session = this.createSession();
     const startedAt = this.now();
-    const pending = {} as PendingPrewarm;
-    pending.key = key;
-    pending.sceneId = request.scene.id;
-    pending.strategy = request.strategy;
-    pending.session = session;
-    pending.startedAt = startedAt;
-    pending.expiry = setTimeout(() => {
-      if (this.pending === pending) void this.cancel("ttl-expired");
-    }, request.ttlMs ?? this.defaultTtlMs);
-    pending.ready = this.prepare(pending, request);
+    const pending: PendingPrewarm = {
+      key,
+      sceneId: request.scene.id,
+      strategy: request.strategy,
+      session,
+      startedAt,
+      ready: Promise.resolve(false),
+      expiry: setTimeout(() => {
+        if (this.pending === pending) void this.cancel("ttl-expired");
+      }, request.ttlMs ?? this.defaultTtlMs),
+    };
     this.pending = pending;
+    pending.ready = this.replaceAndPrepare(previous, pending, request);
     return pending.ready;
+  }
+
+  private async replaceAndPrepare(
+    previous: PendingPrewarm | null,
+    pending: PendingPrewarm,
+    request: WorldModelPrewarmRequest
+  ): Promise<boolean> {
+    if (previous) {
+      clearTimeout(previous.expiry);
+      this.telemetry({ name: "prepared-session-cancelled", reason: "replaced" });
+      await previous.session.disconnect({ reason: "replaced", dispose: true });
+    }
+    if (this.pending !== pending) {
+      clearTimeout(pending.expiry);
+      await pending.session.disconnect({ reason: "superseded", dispose: true });
+      return false;
+    }
+    return this.prepare(pending, request);
   }
 
   /** Returns the matching prepared session, or null when preparation failed,
