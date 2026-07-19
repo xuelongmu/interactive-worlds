@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --test --experimental-strip-types src/*.test.mjs src/engine/*.test.mjs src/timing/*.test.mjs scripts/*.test.mjs pipeline/casting-round-two.test.mjs pipeline/vo.test.mjs pipeline/visual-sources.test.mjs pipeline/world-cache.test.mjs && vitest run src/engine/audio.test.ts src/engine/cues.test.ts src/engine/director.test.ts src/renderers/worldmodel.test.ts src/scenes/diegetic-vo.test.ts",
+    "test": "node --test --experimental-strip-types src/*.test.mjs src/engine/*.test.mjs src/timing/*.test.mjs scripts/*.test.mjs pipeline/casting-round-two.test.mjs pipeline/vo.test.mjs pipeline/sfx.test.mjs pipeline/visual-sources.test.mjs pipeline/world-cache.test.mjs && vitest run src/engine/audio.test.ts src/engine/cues.test.ts src/engine/director.test.ts src/renderers/worldmodel.test.ts src/scenes/diegetic-vo.test.ts src/sound/sound-design.test.ts",
     "build": "vite build",
     "preview": "vite preview",
     "test:server": "node --test tests/session.test.mjs",

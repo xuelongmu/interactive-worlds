@@ -1,73 +1,283 @@
-/** Ambience beds + event SFX via ElevenLabs sound generation.
- *  Usage: node pipeline/sfx.mjs
+/**
+ * Audited ElevenLabs text-to-sound-effects pipeline.
+ *
+ * Safe modes:
+ *   node pipeline/sfx.mjs --audit [--only <cue-or-file>]
+ *   node pipeline/sfx.mjs --dry-run [--only <cue-or-file>]
+ *
+ * Paid mode is deliberately targeted:
+ *   node pipeline/sfx.mjs --generate --only <cue-or-file> [--only ...]
+ *     [--asset-root <dir>] [--cache-file <file>]
  */
-import { mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { requireKey, projectRoot, loadCache, saveCache, hash } from "./lib.mjs";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { hash, projectRoot, readEnvValue } from "./lib.mjs";
 
-const CACHE_FILE = "pipeline/.sfx-cache.json";
+const MODULE_PATH = fileURLToPath(import.meta.url);
+const PLAN_FILE = resolve(dirname(MODULE_PATH), "sfx.plan.json");
+const DEFAULT_CACHE_FILE = resolve(projectRoot, "pipeline", ".sfx-cache.json");
+const DEFAULT_ASSET_ROOT = resolve(projectRoot, "public", "assets", "audio");
 
-const sounds = [
-  { file: "amb/green-dawn.mp3", seconds: 22,
-    prompt: "Quiet New England village green at dawn: birdsong, light wind through spring grass, a dog barking far away, a distant military drum. No music, no voices." },
-  { file: "amb/assembly-room.mp3", seconds: 22,
-    prompt: "Quiet 18th century interior room tone: muffled street sounds through shuttered windows, occasional flies buzzing, a wooden chair creak, a single quill scratching on paper. No music, no voices." },
-  { file: "amb/river-ice-storm.mp3", seconds: 22,
-    prompt: "Night river crossing in a winter storm: wind and driving sleet, chunks of ice grinding and knocking against a wooden hull, oars creaking in oarlocks, water lapping. No music, no voices." },
-  { file: "sfx/musket-volley.mp3", seconds: 8,
-    prompt: "A ragged volley of 18th century flintlock muskets: one sharp shot first, then dozens firing raggedly, echo across an open field, distant screams and a drum. No music." },
-  // --- Scene 1: Tea Party ---
-  { file: "amb/wharf-night.mp3", seconds: 22,
-    prompt: "A harbor wharf at night in winter: halyards tapping against wooden masts, water lapping on pilings, the low rustle of a large crowd standing nearly silent, one distant church bell. Sparse and quiet. No music, no clear voices." },
-  { file: "sfx/tea-chest.mp3", seconds: 6,
-    prompt: "A hatchet splitting open a large wooden tea chest: two sharp axe blows into wood, splintering planks, then a long pour of dry loose tea leaves rushing out and splashing into harbor water below. No music, no voices." },
-  // --- Scene 5: Trenton ---
-  { file: "amb/trenton-sleet.mp3", seconds: 22,
-    prompt: "A town street in a driving sleet storm at dawn: hard sleet rattling on ice and wood, gusting wind funneled between houses, boots and iron-shod wheels crunching on frozen ruts. Cold and harsh. No music, no voices." },
-  { file: "sfx/cannon-street.mp3", seconds: 8,
-    prompt: "18th century field cannon firing down a narrow town street: two deep concussive cannon blasts in close succession, echo slapping off house fronts, debris and ice falling after. No music, no voices." },
-  // --- Scene 6: Saratoga ---
-  { file: "amb/command-tent.mp3", seconds: 22,
-    prompt: "Inside a military command tent, 18th century: canvas snapping softly in wind, an oil lantern sputtering, papers shifting, distant axes chopping wood and a faraway drum. Calm and focused. No music, no voices." },
-  { file: "sfx/cavalry-charge.mp3", seconds: 10,
-    prompt: "A cavalry horse at full gallop through a battle: pounding hooves on turf, hard breathing, musket fire crackling in waves left and right, men shouting far off, one bugle note. No music." },
-  // --- Scene 7: Valley Forge ---
-  { file: "amb/valley-forge-wind.mp3", seconds: 22,
-    prompt: "A snowed-in military camp at dusk: steady bitter wind over open snow, a loose wooden door knocking, one distant axe, quiet persistent coughing from inside log huts all around. Bleak and empty. No music, no clear voices." },
-  // --- Scene 8: Yorktown ---
-  { file: "amb/siege-camp.mp3", seconds: 22,
-    prompt: "A siege encampment at night in light rain: rain on canvas tents, distant heavy siege cannon firing every few seconds with long rolling echoes, picks and shovels working soil, low wind. No music, no voices." },
-  { file: "sfx/surrender-drum.mp3", seconds: 10,
-    prompt: "A single military snare drum beating a slow parley signal, alone, echoing over an open field, wind underneath, boots of a marching column faint in the distance. No music, no voices." },
-  // --- Scene 9: Treaty of Paris ---
-  { file: "amb/paris-studio.mp3", seconds: 22,
-    prompt: "An 18th century painter's studio: a tall clock ticking, a small coal fire settling, a brush working on stretched canvas, carriage wheels passing outside on cobblestones now and then. Warm, still, interior. No music, no voices." },
-];
+export const USAGE = `Usage:
+  node pipeline/sfx.mjs --audit [--only <cue-or-file>]
+  node pipeline/sfx.mjs --dry-run [--only <cue-or-file>]
+  node pipeline/sfx.mjs --generate --only <cue-or-file> [--only ...]
+    [--asset-root <dir>] [--cache-file <file>]
 
-const key = requireKey("ELEVENLABS_API_KEY", "SFX generation");
-const cache = loadCache(CACHE_FILE);
-let generated = 0;
+--audit and --dry-run never read credentials or make network requests.
+--generate is paid and requires at least one explicit --only target.`;
 
-for (const sound of sounds) {
-  const signature = hash(sound);
-  if (cache[sound.file] === signature) continue;
-  console.log(`sfx ${sound.file}…`);
-  const res = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
-    method: "POST",
-    headers: { "xi-api-key": key, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      text: sound.prompt,
-      duration_seconds: sound.seconds,
-      prompt_influence: 0.4,
-    }),
-  });
-  if (!res.ok) throw new Error(`sfx failed for ${sound.file}: ${res.status} ${await res.text()}`);
-  const outPath = resolve(projectRoot, "public", "assets", "audio", sound.file);
-  mkdirSync(resolve(outPath, ".."), { recursive: true });
-  writeFileSync(outPath, Buffer.from(await res.arrayBuffer()));
-  cache[sound.file] = signature;
-  // persist after every paid call so a mid-run failure never re-bills done sounds
-  saveCache(CACHE_FILE, cache);
-  generated++;
+export function loadSoundPlan(path = PLAN_FILE) {
+  return JSON.parse(readFileSync(path, "utf8"));
 }
-console.log(`done — ${generated} generated, ${sounds.length - generated} cached`);
+
+/** Preserve the legacy trusted-cache signature exactly. */
+export function assetSignature(asset) {
+  return hash({ file: asset.file, seconds: asset.seconds, prompt: asset.prompt });
+}
+
+function resolveProjectPath(path) {
+  return isAbsolute(path) ? path : resolve(projectRoot, path);
+}
+
+export function parseCliArgs(argv) {
+  const parsed = {
+    mode: null,
+    only: [],
+    assetRoot: DEFAULT_ASSET_ROOT,
+    cacheFile: DEFAULT_CACHE_FILE,
+    help: false,
+  };
+  const modes = new Set(["--audit", "--dry-run", "--generate"]);
+
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+    if (modes.has(arg)) {
+      if (parsed.mode) throw new Error(`choose exactly one mode; received ${parsed.mode} and ${arg}`);
+      parsed.mode = arg.slice(2);
+      continue;
+    }
+    if (arg === "--only") {
+      const value = argv[++index];
+      if (!value || value.startsWith("--")) throw new Error("--only requires a cue id, asset id, or file");
+      parsed.only.push(value);
+      continue;
+    }
+    if (arg === "--asset-root") {
+      const value = argv[++index];
+      if (!value || value.startsWith("--")) throw new Error("--asset-root requires a directory");
+      parsed.assetRoot = resolveProjectPath(value);
+      continue;
+    }
+    if (arg === "--cache-file") {
+      const value = argv[++index];
+      if (!value || value.startsWith("--")) throw new Error("--cache-file requires a file");
+      parsed.cacheFile = resolveProjectPath(value);
+      continue;
+    }
+    if (arg === "--help" || arg === "-h") {
+      parsed.help = true;
+      continue;
+    }
+    throw new Error(`unknown argument: ${arg}`);
+  }
+
+  if (parsed.help) return parsed;
+  if (!parsed.mode) throw new Error("one of --audit, --dry-run, or --generate is required");
+  if (parsed.mode === "generate" && parsed.only.length === 0) {
+    throw new Error("--generate requires at least one --only target");
+  }
+  parsed.only = [...new Set(parsed.only)];
+  return parsed;
+}
+
+export function validatePlan(plan) {
+  if (plan.provider?.endpoint !== "https://api.elevenlabs.io/v1/sound-generation") {
+    throw new Error("SFX provider must remain ElevenLabs POST /v1/sound-generation");
+  }
+  const files = new Set();
+  const cueIds = new Set();
+  for (const asset of plan.assets ?? []) {
+    if (files.has(asset.file)) throw new Error(`duplicate asset file: ${asset.file}`);
+    files.add(asset.file);
+    const prompt = asset.prompt.toLowerCase();
+    if (!prompt.includes("no music")) throw new Error(`prompt must exclude music: ${asset.file}`);
+    if (!asset.lockedBaseline && !prompt.includes("no human voices")) {
+      throw new Error(`delta prompt must exclude human voices: ${asset.file}`);
+    }
+  }
+  for (const scene of plan.scenes ?? []) {
+    for (const cue of scene.cues ?? []) {
+      if (cueIds.has(cue.id)) throw new Error(`duplicate cue id: ${cue.id}`);
+      cueIds.add(cue.id);
+      if (cue.asset && !files.has(cue.asset)) throw new Error(`unknown cue asset: ${cue.asset}`);
+      if (cue.kind === "authored-silence" && cue.asset) {
+        throw new Error(`authored silence cannot generate media: ${cue.id}`);
+      }
+    }
+  }
+  return plan;
+}
+
+function cueIdsByAsset(plan) {
+  const result = new Map(plan.assets.map((asset) => [asset.file, []]));
+  for (const scene of plan.scenes) {
+    for (const cue of scene.cues) {
+      if (cue.asset) result.get(cue.asset)?.push(cue.id);
+    }
+  }
+  return result;
+}
+
+export function selectAssets(plan, only) {
+  if (only.length === 0) return plan.assets;
+  const cueIds = cueIdsByAsset(plan);
+  const selected = [];
+  for (const target of only) {
+    const matches = plan.assets.filter((asset) =>
+      asset.id === target || asset.file === target || cueIds.get(asset.file)?.includes(target)
+    );
+    if (matches.length === 0) throw new Error(`unknown --only target: ${target}`);
+    for (const asset of matches) if (!selected.includes(asset)) selected.push(asset);
+  }
+  return selected;
+}
+
+export function loadCacheAt(path) {
+  return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
+}
+
+export function saveCacheAt(path, cache) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(cache, null, 2)}\n`);
+}
+
+function sha256(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+export function inspectAsset(asset, cache, assetRoot) {
+  const path = resolve(assetRoot, asset.file);
+  const signature = assetSignature(asset);
+  const outputExists = existsSync(path);
+  const cacheMatches = cache[asset.file] === signature;
+  return {
+    asset,
+    path,
+    signature,
+    outputExists,
+    cacheMatches,
+    status: outputExists && cacheMatches
+      ? "cached"
+      : outputExists
+        ? "changed"
+        : cacheMatches
+          ? "missing-output"
+          : "missing",
+    ...(outputExists ? { bytes: statSync(path).size, sha256: sha256(path) } : {}),
+  };
+}
+
+function printInspection(entry, log) {
+  const details = entry.outputExists ? ` ${entry.bytes} bytes sha256=${entry.sha256}` : "";
+  log(`${entry.status.padEnd(14)} ${entry.asset.file}${details}`);
+}
+
+export async function executeSfx(argv, dependencies = {}) {
+  // Argument and target validation must finish before credential access.
+  const options = parseCliArgs(argv);
+  if (options.help) return { options, plan: null, inspections: [] };
+  const plan = validatePlan(dependencies.plan ?? loadSoundPlan());
+  const selected = selectAssets(plan, options.only);
+  const cache = dependencies.loadCache?.(options.cacheFile) ?? loadCacheAt(options.cacheFile);
+  const inspections = selected.map((asset) => inspectAsset(asset, cache, options.assetRoot));
+  const log = dependencies.log ?? console.log;
+
+  if (options.mode === "audit") {
+    inspections.forEach((entry) => printInspection(entry, log));
+    return { options, plan, inspections, generated: 0 };
+  }
+
+  const pending = inspections.filter((entry) => entry.status !== "cached");
+  if (options.mode === "dry-run") {
+    inspections.forEach((entry) => {
+      printInspection(entry, log);
+      if (entry.status !== "cached") log(`would-generate ${entry.asset.file}`);
+    });
+    return { options, plan, inspections, generated: 0 };
+  }
+
+  for (const entry of pending) {
+    if (entry.asset.lockedBaseline) {
+      throw new Error(`locked baseline is not regenerable: ${entry.asset.file}`);
+    }
+  }
+  if (pending.length === 0) {
+    inspections.forEach((entry) => printInspection(entry, log));
+    log(`done - 0 generated, ${inspections.length} cached`);
+    return { options, plan, inspections, generated: 0 };
+  }
+
+  const getCredential = dependencies.getCredential ?? (() => readEnvValue("ELEVENLABS_API_KEY"));
+  const key = getCredential();
+  if (!key) throw new Error("ELEVENLABS_API_KEY is required for explicit --generate mode");
+  const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+  const writeOutput = dependencies.writeOutput ?? ((path, bytes) => {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, bytes);
+  });
+  const persistCache = dependencies.saveCache ?? saveCacheAt;
+  let generated = 0;
+
+  for (const entry of inspections) {
+    if (entry.status === "cached") {
+      printInspection(entry, log);
+      continue;
+    }
+    log(`generate       ${entry.asset.file}`);
+    const response = await fetchImpl(plan.provider.endpoint, {
+      method: "POST",
+      headers: { "xi-api-key": key, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: entry.asset.prompt,
+        duration_seconds: entry.asset.seconds,
+        prompt_influence: plan.provider.promptInfluence,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`SFX request failed for ${entry.asset.file}: ${response.status} ${await response.text()}`);
+    }
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.byteLength === 0) throw new Error(`SFX request returned an empty file: ${entry.asset.file}`);
+    writeOutput(entry.path, bytes);
+    cache[entry.asset.file] = entry.signature;
+    // The paid call is recoverable before the next request begins.
+    persistCache(options.cacheFile, cache);
+    generated++;
+  }
+
+  log(`done - ${generated} generated, ${inspections.length - generated} cached`);
+  return { options, plan, inspections, generated };
+}
+
+async function main() {
+  try {
+    const result = await executeSfx(process.argv.slice(2));
+    if (result.options.help) console.log(USAGE);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    console.error(USAGE);
+    process.exitCode = 1;
+  }
+}
+
+if (resolve(process.argv[1] ?? "") === MODULE_PATH) await main();
+

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>American Revolution · Sound-design audition</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; background: #11100e; color: #eee8dc; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { position: sticky; top: 0; z-index: 2; display: flex; gap: 1rem; align-items: center; justify-content: space-between; padding: 1rem 1.5rem; background: rgba(17,16,14,.96); border-bottom: 1px solid #514b40; }
+    h1 { margin: 0; font: 600 1.15rem Georgia, serif; }
+    header p { margin: .2rem 0 0; color: #b8af9f; font-size: .82rem; }
+    button { cursor: pointer; border: 1px solid #746b5d; border-radius: .35rem; padding: .55rem .75rem; color: inherit; background: #29251f; }
+    button:hover, button:focus-visible { border-color: #d7c8aa; outline: none; }
+    button[aria-pressed="true"] { background: #6f5b36; border-color: #e8d5ad; }
+    main { max-width: 1120px; margin: 0 auto; padding: 1.25rem; }
+    section { margin: 0 0 2rem; }
+    h2 { margin: 0 0 .25rem; font: 500 1.55rem Georgia, serif; }
+    .policy { margin: 0 0 .75rem; color: #b8af9f; }
+    .cue { display: grid; grid-template-columns: minmax(160px, .8fr) minmax(300px, 2fr); gap: 1rem; margin: .6rem 0; padding: 1rem; border: 1px solid #443f36; border-radius: .5rem; background: #1b1916; }
+    .cue.delta { border-left: 4px solid #bc9149; }
+    .cue.silence { border-left: 4px solid #727b85; }
+    .identity strong { display: block; font: 600 1rem ui-monospace, monospace; }
+    .badge { display: inline-block; margin: .45rem .25rem 0 0; padding: .15rem .38rem; border: 1px solid #5c554a; border-radius: 1rem; color: #cfc5b3; font-size: .7rem; text-transform: uppercase; }
+    .controls { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .75rem; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: .25rem .7rem; margin: 0; font-size: .82rem; }
+    dt { color: #9f9688; }
+    dd { margin: 0; overflow-wrap: anywhere; }
+    details { margin-top: .75rem; color: #d1c8b9; }
+    details p { margin: .4rem 0; line-height: 1.45; }
+    .review { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: .45rem; margin-top: .8rem; }
+    .review label { color: #c8bfaf; font-size: .8rem; }
+    textarea { grid-column: 1 / -1; min-height: 4.2rem; resize: vertical; border: 1px solid #514b40; border-radius: .3rem; padding: .55rem; color: inherit; background: #12110f; }
+    .status-approved { color: #9fd49c; }
+    .status-rejected { color: #ee9a8f; }
+    .error { padding: 1rem; border: 1px solid #9f5349; background: #351d1a; }
+    @media (max-width: 740px) { .cue { grid-template-columns: 1fr; } header { align-items: flex-start; } .review { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Sound-design audition</h1>
+      <p>Scene-grouped cues · notes save in this browser only</p>
+    </div>
+    <div class="controls">
+      <button id="stop-all" type="button">Stop all</button>
+      <button id="export" type="button">Export notes</button>
+    </div>
+  </header>
+  <main id="app"><p>Loading cue plan…</p></main>
+  <script type="module">
+    const STORAGE_KEY = "american-revolution:sfx-audition:v1";
+    const baselineRoot = "../public/assets/audio/";
+    const deltaRoot = "../.artifacts/issue-43/audio/";
+    const app = document.querySelector("#app");
+    let playing = null;
+    let notes = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+
+    const escapeHtml = (value) => String(value).replace(/[&<>\"]/g, (char) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"
+    })[char]);
+    const eventLabel = (trigger) => [trigger.type, trigger.name || trigger.zone || trigger.cueId].filter(Boolean).join(":");
+    const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+    const assetPath = (asset) => `${asset.lockedBaseline ? baselineRoot : deltaRoot}${asset.file}`;
+
+    function stopAll() {
+      if (playing) {
+        playing.audio.pause();
+        playing.audio.currentTime = 0;
+        playing.button.textContent = "Play";
+        playing.button.setAttribute("aria-pressed", "false");
+        playing = null;
+      }
+    }
+
+    function renderCue(cue, assets) {
+      const asset = cue.asset ? assets.get(cue.asset) : null;
+      const state = notes[cue.id] || {};
+      const statusClass = state.status ? `status-${state.status}` : "";
+      const duration = asset ? `${asset.seconds}s` : "authored hold";
+      const source = asset ? assetPath(asset) : "No file — generation prohibited";
+      return `<article class="cue ${asset && !asset.lockedBaseline ? "delta" : ""} ${cue.kind === "authored-silence" ? "silence" : ""}" data-cue="${escapeHtml(cue.id)}">
+        <div class="identity">
+          <strong>${escapeHtml(cue.id)}</strong>
+          <span class="badge">${escapeHtml(cue.kind)}</span>
+          <span class="badge">${escapeHtml(cue.bus)}</span>
+          ${asset && !asset.lockedBaseline ? '<span class="badge">new delta</span>' : ""}
+          <div class="controls">
+            ${asset ? '<button type="button" data-action="play" aria-pressed="false">Play</button>' : '<button type="button" disabled>Authored silence</button>'}
+            <button type="button" data-action="approve" aria-pressed="${state.status === "approved"}">Approve</button>
+            <button type="button" data-action="reject" aria-pressed="${state.status === "rejected"}">Reject</button>
+          </div>
+          <p data-status class="${statusClass}">${state.status ? `Status: ${escapeHtml(state.status)}` : "Status: unreviewed"}</p>
+        </div>
+        <div>
+          <dl>
+            <dt>Trigger</dt><dd>${escapeHtml(eventLabel(cue.trigger))}</dd>
+            <dt>File</dt><dd>${escapeHtml(source)}</dd>
+            <dt>Duration</dt><dd>${escapeHtml(duration)} · ${cue.loop ? "loop" : "one-shot"}</dd>
+            <dt>Fades</dt><dd>${cue.fadeInMs}ms in / ${cue.fadeOutMs}ms out</dd>
+            <dt>Gain / duck</dt><dd>${cue.gainDb}dB · ${cue.duckUnderNarrationDb}dB under narration</dd>
+            <dt>Spatial</dt><dd>${escapeHtml(cue.spatial)}</dd>
+            <dt>Stop</dt><dd>${escapeHtml(JSON.stringify(cue.stop))}</dd>
+          </dl>
+          <details>
+            <summary>Prompt and historical/reference caveat</summary>
+            <p><strong>Prompt:</strong> ${escapeHtml(asset?.prompt || "Generation prohibited. Do not fill authored silence.")}</p>
+            <p><strong>Caveat:</strong> ${escapeHtml(cue.caveat)}</p>
+          </details>
+          <div class="review">
+            <label><input type="checkbox" data-field="noVoice" ${state.noVoice ? "checked" : ""}> No voice/speech leakage heard</label>
+            <label><input type="checkbox" data-field="noMusic" ${state.noMusic ? "checked" : ""}> No music/score leakage heard</label>
+            ${cue.id === "YOR-SFX-001" ? `<label><input type="checkbox" data-field="noMusket" ${state.noMusket ? "checked" : ""}> No musket/gunshot heard</label>` : ""}
+            <textarea data-field="note" placeholder="Approval/rejection notes; name audible defects and preferred action.">${escapeHtml(state.note || "")}</textarea>
+          </div>
+        </div>
+      </article>`;
+    }
+
+    function bind(plan) {
+      const assets = new Map(plan.assets.map((asset) => [asset.file, asset]));
+      app.innerHTML = plan.scenes.map((scene) => `<section>
+        <h2>${escapeHtml(scene.label)}</h2>
+        <p class="policy">${escapeHtml(scene.musicPolicy)}</p>
+        ${scene.cues.map((cue) => renderCue(cue, assets)).join("")}
+      </section>`).join("");
+
+      for (const card of app.querySelectorAll("[data-cue]")) {
+        const cueId = card.dataset.cue;
+        const cue = plan.scenes.flatMap((scene) => scene.cues).find((item) => item.id === cueId);
+        const asset = cue.asset ? assets.get(cue.asset) : null;
+        card.querySelector('[data-action="play"]')?.addEventListener("click", (event) => {
+          const button = event.currentTarget;
+          if (playing?.button === button) return stopAll();
+          stopAll();
+          const audio = new Audio(assetPath(asset));
+          audio.addEventListener("ended", stopAll, { once: true });
+          void audio.play().then(() => {
+            playing = { audio, button };
+            button.textContent = "Stop";
+            button.setAttribute("aria-pressed", "true");
+          }).catch((error) => {
+            notes[cueId] = { ...(notes[cueId] || {}), status: "rejected", note: `Playback failed: ${error.message}` };
+            save();
+            card.querySelector("[data-status]").textContent = "Status: rejected — playback failed";
+          });
+        });
+        for (const action of ["approve", "reject"]) {
+          card.querySelector(`[data-action="${action}"]`).addEventListener("click", () => {
+            notes[cueId] = { ...(notes[cueId] || {}), status: action === "approve" ? "approved" : "rejected" };
+            save();
+            card.querySelector("[data-status]").className = `status-${notes[cueId].status}`;
+            card.querySelector("[data-status]").textContent = `Status: ${notes[cueId].status}`;
+            card.querySelector('[data-action="approve"]').setAttribute("aria-pressed", String(action === "approve"));
+            card.querySelector('[data-action="reject"]').setAttribute("aria-pressed", String(action === "reject"));
+          });
+        }
+        for (const field of card.querySelectorAll("[data-field]")) {
+          field.addEventListener("input", () => {
+            notes[cueId] = { ...(notes[cueId] || {}), [field.dataset.field]: field.type === "checkbox" ? field.checked : field.value };
+            save();
+          });
+        }
+      }
+    }
+
+    document.querySelector("#stop-all").addEventListener("click", stopAll);
+    document.querySelector("#export").addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), notes }, null, 2)], { type: "application/json" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "sfx-audition-notes.json";
+      link.click();
+      URL.revokeObjectURL(link.href);
+    });
+
+    fetch("./sfx.plan.json")
+      .then((response) => { if (!response.ok) throw new Error(`${response.status}`); return response.json(); })
+      .then(bind)
+      .catch((error) => { app.innerHTML = `<p class="error">Could not load sfx.plan.json: ${escapeHtml(error.message)}. Serve the revolution directory over HTTP rather than opening this file directly.</p>`; });
+  </script>
+</body>
+</html>

@@ -1,0 +1,676 @@
+{
+  "version": 1,
+  "provider": {
+    "name": "ElevenLabs text-to-sound-effects",
+    "endpoint": "https://api.elevenlabs.io/v1/sound-generation",
+    "promptInfluence": 0.4
+  },
+  "policy": {
+    "narrationDuckDb": -6,
+    "musicIssue": 18,
+    "spokenAudioOwner": "VO",
+    "generatedBuses": ["ambience", "diegetic", "sfx"]
+  },
+  "assets": [
+    {
+      "id": "GREEN-DAWN",
+      "file": "amb/green-dawn.mp3",
+      "seconds": 22,
+      "lockedBaseline": true,
+      "prompt": "Quiet New England village green at dawn: birdsong, light wind through spring grass, a dog barking far away, a distant military drum. No music, no voices."
+    },
+    {
+      "id": "ASSEMBLY-ROOM",
+      "file": "amb/assembly-room.mp3",
+      "seconds": 22,
+      "lockedBaseline": true,
+      "prompt": "Quiet 18th century interior room tone: muffled street sounds through shuttered windows, occasional flies buzzing, a wooden chair creak, a single quill scratching on paper. No music, no voices."
+    },
+    {
+      "id": "RIVER-ICE-STORM",
+      "file": "amb/river-ice-storm.mp3",
+      "seconds": 22,
+      "lockedBaseline": true,
+      "prompt": "Night river crossing in a winter storm: wind and driving sleet, chunks of ice grinding and knocking against a wooden hull, oars creaking in oarlocks, water lapping. No music, no voices."
+    },
+    {
+      "id": "MUSKET-VOLLEY",
+      "file": "sfx/musket-volley.mp3",
+      "seconds": 8,
+      "lockedBaseline": true,
+      "prompt": "A ragged volley of 18th century flintlock muskets: one sharp shot first, then dozens firing raggedly, echo across an open field, distant screams and a drum. No music."
+    },
+    {
+      "id": "WHARF-NIGHT",
+      "file": "amb/wharf-night.mp3",
+      "seconds": 22,
+      "lockedBaseline": true,
+      "prompt": "A harbor wharf at night in winter: halyards tapping against wooden masts, water lapping on pilings, the low rustle of a large crowd standing nearly silent, one distant church bell. Sparse and quiet. No music, no clear voices."
+    },
+    {
+      "id": "TEA-CHEST",
+      "file": "sfx/tea-chest.mp3",
+      "seconds": 6,
+      "lockedBaseline": true,
+      "prompt": "A hatchet splitting open a large wooden tea chest: two sharp axe blows into wood, splintering planks, then a long pour of dry loose tea leaves rushing out and splashing into harbor water below. No music, no voices."
+    },
+    {
+      "id": "TRENTON-SLEET",
+      "file": "amb/trenton-sleet.mp3",
+      "seconds": 22,
+      "lockedBaseline": true,
+      "prompt": "A town street in a driving sleet storm at dawn: hard sleet rattling on ice and wood, gusting wind funneled between houses, boots and iron-shod wheels crunching on frozen ruts. Cold and harsh. No music, no voices."
+    },
+    {
+      "id": "CANNON-STREET",
+      "file": "sfx/cannon-street.mp3",
+      "seconds": 8,
+      "lockedBaseline": true,
+      "prompt": "18th century field cannon firing down a narrow town street: two deep concussive cannon blasts in close succession, echo slapping off house fronts, debris and ice falling after. No music, no voices."
+    },
+    {
+      "id": "COMMAND-TENT",
+      "file": "amb/command-tent.mp3",
+      "seconds": 22,
+      "lockedBaseline": true,
+      "prompt": "Inside a military command tent, 18th century: canvas snapping softly in wind, an oil lantern sputtering, papers shifting, distant axes chopping wood and a faraway drum. Calm and focused. No music, no voices."
+    },
+    {
+      "id": "CAVALRY-CHARGE",
+      "file": "sfx/cavalry-charge.mp3",
+      "seconds": 10,
+      "lockedBaseline": true,
+      "prompt": "A cavalry horse at full gallop through a battle: pounding hooves on turf, hard breathing, musket fire crackling in waves left and right, men shouting far off, one bugle note. No music."
+    },
+    {
+      "id": "VALLEY-FORGE-WIND",
+      "file": "amb/valley-forge-wind.mp3",
+      "seconds": 22,
+      "lockedBaseline": true,
+      "prompt": "A snowed-in military camp at dusk: steady bitter wind over open snow, a loose wooden door knocking, one distant axe, quiet persistent coughing from inside log huts all around. Bleak and empty. No music, no clear voices."
+    },
+    {
+      "id": "SIEGE-CAMP",
+      "file": "amb/siege-camp.mp3",
+      "seconds": 22,
+      "lockedBaseline": true,
+      "prompt": "A siege encampment at night in light rain: rain on canvas tents, distant heavy siege cannon firing every few seconds with long rolling echoes, picks and shovels working soil, low wind. No music, no voices."
+    },
+    {
+      "id": "SURRENDER-DRUM",
+      "file": "sfx/surrender-drum.mp3",
+      "seconds": 10,
+      "lockedBaseline": true,
+      "prompt": "A single military snare drum beating a slow parley signal, alone, echoing over an open field, wind underneath, boots of a marching column faint in the distance. No music, no voices."
+    },
+    {
+      "id": "PARIS-STUDIO",
+      "file": "amb/paris-studio.mp3",
+      "seconds": 22,
+      "lockedBaseline": true,
+      "prompt": "An 18th century painter's studio: a tall clock ticking, a small coal fire settling, a brush working on stretched canvas, carriage wheels passing outside on cobblestones now and then. Warm, still, interior. No music, no voices."
+    },
+    {
+      "id": "TEA-CHEST-WORK",
+      "file": "sfx/tea-chest-work.mp3",
+      "seconds": 10,
+      "lockedBaseline": false,
+      "prompt": "Repeated work opening tea chests on an 18th century merchant ship at night: rope tackle strains, a heavy wooden chest scrapes across deck planks, several measured hatchet blows split wood, loose dry tea pours over the rail into water. Sparse individual actions with quiet gaps, not a crowd spectacle. No music, no speech, no human voices."
+    },
+    {
+      "id": "TEA-DECK-CLEAR",
+      "file": "sfx/tea-deck-clear.mp3",
+      "seconds": 6,
+      "lockedBaseline": false,
+      "prompt": "The last tea chest work ending on an 18th century ship deck: a final short pour of loose tea into harbor water, broken wood set down, then a stiff broom sweeps tea leaves and splinters across wet deck planks. The activity resolves into quiet water and rigging. No music, no speech, no human voices."
+    },
+    {
+      "id": "LEXINGTON-FIRST-SHOT",
+      "file": "sfx/lexington-first-shot.mp3",
+      "seconds": 4,
+      "lockedBaseline": false,
+      "prompt": "One isolated 18th century flintlock musket shot across an open New England village green at dawn, followed only by its natural echo and a brief return to still air. Exactly one shot: no volley, no second gun, no screams, no drum, no music, no speech, no human voices."
+    },
+    {
+      "id": "DELAWARE-HORSES",
+      "file": "sfx/delaware-horses.mp3",
+      "seconds": 8,
+      "lockedBaseline": false,
+      "prompt": "Two draft horses standing inside a broad wooden Durham boat at night: hooves shift and stamp carefully on wet timber, leather harness creaks, the wooden hull flexes softly. Sparse, close, restrained animal and equipment sounds. No music, no speech, no human voices."
+    },
+    {
+      "id": "DELAWARE-ICE-HULL",
+      "file": "sfx/delaware-ice-hull.mp3",
+      "seconds": 8,
+      "lockedBaseline": false,
+      "prompt": "A heavy sheet of river ice grinds along and strikes the side of a large 18th century wooden Durham boat at night: scraping ice, two hard hull knocks, timber creaking, an oarlock shuddering, black water sloshing. No music, no speech, no human voices."
+    },
+    {
+      "id": "DELAWARE-STORM-SURGE",
+      "file": "amb/delaware-storm-surge.mp3",
+      "seconds": 14,
+      "lockedBaseline": false,
+      "prompt": "A nor'easter intensifying over a wide winter river at night: wind rises steadily, hard sleet drives across open water, choppy waves slap a wooden boat, loose ice grinds nearby. Strong but with space in the midrange for documentary narration. No thunder, no music, no speech, no human voices."
+    },
+    {
+      "id": "REDOUBT-BAYONET-ASSAULT",
+      "file": "sfx/redoubt-bayonet-assault.mp3",
+      "seconds": 10,
+      "lockedBaseline": false,
+      "prompt": "A restrained night assault on an 18th century earthen redoubt in light rain: hurried boots in mud, soldiers climbing timber obstacles, wood splintering, metal bayonets striking wood and equipment, then the activity subsides. Distant and non-graphic. No muskets, no gunshots, no explosions, no music, no speech, no human voices."
+    }
+  ],
+  "scenes": [
+    {
+      "id": "teaparty",
+      "label": "The Tea Party",
+      "musicPolicy": "No music during the wharf, interaction, or Parliament handoff.",
+      "cues": [
+        {
+          "id": "TEA-AMB-001",
+          "kind": "ambience",
+          "trigger": { "type": "scene-start" },
+          "asset": "amb/wharf-night.mp3",
+          "bus": "ambience",
+          "runtimeOwner": "manifest",
+          "loop": true,
+          "fadeInMs": 1500,
+          "fadeOutMs": 1000,
+          "gainDb": -10,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Non-spatial stereo bed; rigging and bell remain distant.",
+          "stop": { "type": "scene-exit" },
+          "caveat": "The crowd must remain indistinct; no invented chants or legible speech."
+        },
+        {
+          "id": "TEA-SFX-001",
+          "kind": "diegetic-event",
+          "trigger": { "type": "model-event", "name": "chest-open" },
+          "asset": "sfx/tea-chest.mp3",
+          "bus": "diegetic",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "replay": { "mode": "once" },
+          "fadeInMs": 0,
+          "fadeOutMs": 250,
+          "gainDb": -4,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Close at the worked chest and rail.",
+          "stop": { "type": "natural-end" },
+          "caveat": "Tea was split and poured; do not imply theft or injury."
+        },
+        {
+          "id": "TEA-SFX-002",
+          "kind": "diegetic-event",
+          "trigger": { "type": "model-event", "name": "chest-work" },
+          "asset": "sfx/tea-chest-work.mp3",
+          "bus": "diegetic",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "replay": { "mode": "repeatable", "cooldownMs": 3000, "maxPlays": 4 },
+          "fadeInMs": 0,
+          "fadeOutMs": 300,
+          "gainDb": -7,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Near-field work shifts among chests; never a wall of impacts.",
+          "stop": { "type": "event", "eventType": "model-event", "name": "chests-done" },
+          "caveat": "Repeated work is supported generally, but exact tool rhythm is interpretive."
+        },
+        {
+          "id": "TEA-SFX-003",
+          "kind": "transition",
+          "trigger": { "type": "model-event", "name": "chests-done" },
+          "asset": "sfx/tea-deck-clear.mp3",
+          "bus": "sfx",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "replay": { "mode": "once" },
+          "fadeInMs": 0,
+          "fadeOutMs": 500,
+          "gainDb": -6,
+          "duckUnderNarrationDb": -6,
+          "spatial": "At the final chest, then broad deck sweep.",
+          "stop": { "type": "event", "eventType": "model-event", "name": "deck-clear" },
+          "caveat": "The deck sweeping is recorded; the precise last-chest sequence is staged."
+        },
+        {
+          "id": "TEA-SIL-001",
+          "kind": "authored-silence",
+          "trigger": { "type": "model-event", "name": "deck-clear" },
+          "asset": null,
+          "bus": "sfx",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "fadeInMs": 0,
+          "fadeOutMs": 500,
+          "gainDb": -120,
+          "duckUnderNarrationDb": 0,
+          "spatial": "All interaction events stop; only the sparse wharf bed remains.",
+          "stopBuses": ["diegetic", "sfx"],
+          "stop": { "type": "cue", "cueId": "TEA-080" },
+          "caveat": "This silence protects the return to Parliament narration; generate no filler."
+        }
+      ]
+    },
+    {
+      "id": "lexington",
+      "label": "Lexington Green",
+      "musicPolicy": "The isolated shot, volley, and aftermath are unscored.",
+      "cues": [
+        {
+          "id": "LEX-AMB-001",
+          "kind": "ambience",
+          "trigger": { "type": "scene-start" },
+          "asset": "amb/green-dawn.mp3",
+          "bus": "ambience",
+          "runtimeOwner": "adapter",
+          "loop": true,
+          "fadeInMs": 1200,
+          "fadeOutMs": 500,
+          "gainDb": -9,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Open stereo field; drum remains far beyond the green.",
+          "stop": { "type": "event", "eventType": "action", "name": "first-shot" },
+          "caveat": "No battle activity before the disputed first shot."
+        },
+        {
+          "id": "LEX-SFX-001",
+          "kind": "diegetic-event",
+          "trigger": { "type": "action", "name": "first-shot" },
+          "asset": "sfx/lexington-first-shot.mp3",
+          "bus": "sfx",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "replay": { "mode": "once" },
+          "fadeInMs": 0,
+          "fadeOutMs": 0,
+          "gainDb": -2,
+          "duckUnderNarrationDb": 0,
+          "spatial": "Distant and deliberately unlocalized across the green.",
+          "stop": { "type": "natural-end" },
+          "caveat": "The source and position of the first shot are unknown; never localize a shooter."
+        },
+        {
+          "id": "LEX-SFX-002",
+          "kind": "transition",
+          "trigger": { "type": "action", "name": "volley-cutscene-audio" },
+          "asset": "sfx/musket-volley.mp3",
+          "bus": "sfx",
+          "runtimeOwner": "cutscene",
+          "loop": false,
+          "fadeInMs": 0,
+          "fadeOutMs": 1000,
+          "gainDb": -3,
+          "duckUnderNarrationDb": 0,
+          "spatial": "Baked into the volley edit; field-width, not close gore.",
+          "stop": { "type": "event", "eventType": "action", "name": "cutscene-volley-complete" },
+          "caveat": "Combined baseline file is only the volley sequence, never the isolated first shot."
+        },
+        {
+          "id": "LEX-SIL-001",
+          "kind": "authored-silence",
+          "trigger": { "type": "action", "name": "cutscene-volley-complete" },
+          "asset": null,
+          "bus": "sfx",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "fadeInMs": 0,
+          "fadeOutMs": 0,
+          "gainDb": -120,
+          "duckUnderNarrationDb": 0,
+          "spatial": "Full-field stillness before aftermath narration.",
+          "stopBuses": ["ambience", "diegetic", "sfx"],
+          "stop": { "type": "cue", "cueId": "LEX-080" },
+          "caveat": "Four-second hold is a timing requirement for #45; generate no aftermath filler."
+        }
+      ]
+    },
+    {
+      "id": "declaration",
+      "label": "The Declaration",
+      "musicPolicy": "No music under narration or during the signature hold.",
+      "cues": [
+        {
+          "id": "DEC-AMB-001",
+          "kind": "ambience",
+          "trigger": { "type": "scene-start" },
+          "asset": "amb/assembly-room.mp3",
+          "bus": "ambience",
+          "runtimeOwner": "manifest",
+          "loop": true,
+          "fadeInMs": 1200,
+          "fadeOutMs": 1000,
+          "gainDb": -12,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Quiet room bed; quill remains across the room, not at the viewer's hand.",
+          "stop": { "type": "event", "eventType": "action", "name": "sign-complete" },
+          "caveat": "The exact room texture is interpretive; no legible street speech."
+        },
+        {
+          "id": "DEC-SIL-001",
+          "kind": "authored-silence",
+          "trigger": { "type": "action", "name": "sign-complete" },
+          "asset": null,
+          "bus": "ambience",
+          "runtimeOwner": "handoff",
+          "loop": false,
+          "fadeInMs": 0,
+          "fadeOutMs": 500,
+          "gainDb": -120,
+          "duckUnderNarrationDb": 0,
+          "spatial": "Room tone falls away while ink dries.",
+          "stopBuses": ["ambience", "diegetic", "sfx"],
+          "stop": { "type": "cue", "cueId": "DEC-061" },
+          "caveat": "Issue #3 owns Declaration files; this separate mapping is the exact integration handoff."
+        }
+      ]
+    },
+    {
+      "id": "delaware",
+      "label": "Crossing the Delaware",
+      "musicPolicy": "No music; storm layers must leave narration intelligible.",
+      "cues": [
+        {
+          "id": "DEL-AMB-001",
+          "kind": "ambience",
+          "trigger": { "type": "scene-start" },
+          "asset": "amb/river-ice-storm.mp3",
+          "bus": "ambience",
+          "runtimeOwner": "manifest",
+          "loop": true,
+          "fadeInMs": 1500,
+          "fadeOutMs": 1000,
+          "gainDb": -10,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Wide river bed; hull and oarlocks near, wind broad.",
+          "stop": { "type": "scene-exit" },
+          "caveat": "Leutze's later image is not an audio reference; keep the crossing dark and workmanlike."
+        },
+        {
+          "id": "DEL-SFX-001",
+          "kind": "diegetic-event",
+          "trigger": { "type": "action", "name": "boarded" },
+          "asset": "sfx/delaware-horses.mp3",
+          "bus": "diegetic",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "replay": { "mode": "once" },
+          "fadeInMs": 200,
+          "fadeOutMs": 400,
+          "gainDb": -12,
+          "duckUnderNarrationDb": -6,
+          "spatial": "From a neighboring cargo boat, never beside the viewer's ear.",
+          "stop": { "type": "natural-end" },
+          "caveat": "Horses and artillery crossed in separate boats; do not place them in every boat."
+        },
+        {
+          "id": "DEL-SFX-002",
+          "kind": "diegetic-event",
+          "trigger": { "type": "model-event", "name": "ice-strike" },
+          "asset": "sfx/delaware-ice-hull.mp3",
+          "bus": "diegetic",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "replay": { "mode": "repeatable", "cooldownMs": 8000, "maxPlays": 3 },
+          "fadeInMs": 0,
+          "fadeOutMs": 300,
+          "gainDb": -8,
+          "duckUnderNarrationDb": -6,
+          "spatial": "At the hull side, alternating left/right is optional in final mix.",
+          "stop": { "type": "event", "eventType": "model-event", "name": "landing" },
+          "caveat": "Ice contact is documented generally; exact impacts are staged for interaction feedback."
+        },
+        {
+          "id": "DEL-AMB-002",
+          "kind": "transition",
+          "trigger": { "type": "model-event", "name": "storm" },
+          "asset": "amb/delaware-storm-surge.mp3",
+          "bus": "ambience",
+          "runtimeOwner": "adapter",
+          "loop": true,
+          "fadeInMs": 2500,
+          "fadeOutMs": 1500,
+          "gainDb": -14,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Wide layer above the base river bed; keep center midrange open.",
+          "stop": { "type": "event", "eventType": "model-event", "name": "landing" },
+          "caveat": "Weather accounts support rain, sleet, and snow; no thunder is asserted."
+        }
+      ]
+    },
+    {
+      "id": "trenton",
+      "label": "Trenton",
+      "musicPolicy": "No music until the separately owned final cue; battle remains unscored.",
+      "cues": [
+        {
+          "id": "TRE-AMB-001",
+          "kind": "ambience",
+          "trigger": { "type": "scene-start" },
+          "asset": "amb/trenton-sleet.mp3",
+          "bus": "ambience",
+          "runtimeOwner": "manifest",
+          "loop": true,
+          "fadeInMs": 1000,
+          "fadeOutMs": 1000,
+          "gainDb": -9,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Street-width wind with close boots and wheels.",
+          "stop": { "type": "scene-exit" },
+          "caveat": "Keep formations indistinct; ambience must not invent shouted commands."
+        },
+        {
+          "id": "TRE-SFX-001",
+          "kind": "diegetic-event",
+          "trigger": { "type": "model-event", "name": "guns-open" },
+          "asset": "sfx/cannon-street.mp3",
+          "bus": "sfx",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "replay": { "mode": "once" },
+          "fadeInMs": 0,
+          "fadeOutMs": 500,
+          "gainDb": -5,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Ahead in the street, reflections from building fronts.",
+          "stop": { "type": "event", "eventType": "model-event", "name": "surrender" },
+          "caveat": "Two representative reports, not a literal count of Knox's battery."
+        },
+        {
+          "id": "TRE-SIL-001",
+          "kind": "authored-silence",
+          "trigger": { "type": "model-event", "name": "surrender" },
+          "asset": null,
+          "bus": "sfx",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "fadeInMs": 0,
+          "fadeOutMs": 750,
+          "gainDb": -120,
+          "duckUnderNarrationDb": 0,
+          "spatial": "Cannon and event sounds end; sleet bed remains.",
+          "stopBuses": ["diegetic", "sfx"],
+          "stop": { "type": "scene-exit" },
+          "caveat": "Do not add victory cheers."
+        }
+      ]
+    },
+    {
+      "id": "saratoga",
+      "label": "Saratoga",
+      "musicPolicy": "No score during the charge burst.",
+      "cues": [
+        {
+          "id": "SAR-AMB-001",
+          "kind": "ambience",
+          "trigger": { "type": "scene-start" },
+          "asset": "amb/command-tent.mp3",
+          "bus": "ambience",
+          "runtimeOwner": "manifest",
+          "loop": true,
+          "fadeInMs": 1200,
+          "fadeOutMs": 750,
+          "gainDb": -11,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Enclosed canvas room, work sounds far outside.",
+          "stop": { "type": "event", "eventType": "action", "name": "control-granted" },
+          "caveat": "Far drum is texture, not a specific documented signal."
+        },
+        {
+          "id": "SAR-SFX-001",
+          "kind": "transition",
+          "trigger": { "type": "action", "name": "control-granted" },
+          "asset": "sfx/cavalry-charge.mp3",
+          "bus": "sfx",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "replay": { "mode": "once" },
+          "fadeInMs": 250,
+          "fadeOutMs": 750,
+          "gainDb": -7,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Viewer-centered hoof movement; battle remains around, not inside the head.",
+          "stop": { "type": "event", "eventType": "model-event", "name": "charge-end" },
+          "caveat": "Bugle and shout texture are interpretive and must remain indistinct."
+        }
+      ]
+    },
+    {
+      "id": "valley-forge",
+      "label": "Valley Forge",
+      "musicPolicy": "No music anywhere in the scene.",
+      "cues": [
+        {
+          "id": "VAL-AMB-001",
+          "kind": "ambience",
+          "trigger": { "type": "scene-start" },
+          "asset": "amb/valley-forge-wind.mp3",
+          "bus": "ambience",
+          "runtimeOwner": "manifest",
+          "loop": true,
+          "fadeInMs": 1800,
+          "fadeOutMs": 1500,
+          "gainDb": -13,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Broad wind; door, axe, and coughs remain separated and distant.",
+          "stop": { "type": "scene-exit" },
+          "caveat": "Coughs are non-verbal texture, not cast dialogue; drill cadence remains VO-owned."
+        },
+        {
+          "id": "VAL-SIL-001",
+          "kind": "authored-silence",
+          "trigger": { "type": "cue", "cueId": "VAL-060" },
+          "asset": null,
+          "bus": "sfx",
+          "runtimeOwner": "manifest",
+          "loop": false,
+          "fadeInMs": 0,
+          "fadeOutMs": 0,
+          "gainDb": -120,
+          "duckUnderNarrationDb": 0,
+          "spatial": "No added event or transition sound; wind alone holds the dusk.",
+          "stopBuses": ["diegetic", "sfx"],
+          "stop": { "type": "scene-exit" },
+          "caveat": "Purposeful restraint; generate no emotional sweetener."
+        }
+      ]
+    },
+    {
+      "id": "yorktown",
+      "label": "Yorktown",
+      "musicPolicy": "No score in siege or assault; source tune remains issue #18. No musket reports in Redoubt 10.",
+      "cues": [
+        {
+          "id": "YOR-AMB-001",
+          "kind": "ambience",
+          "trigger": { "type": "scene-start" },
+          "asset": "amb/siege-camp.mp3",
+          "bus": "ambience",
+          "runtimeOwner": "manifest",
+          "loop": true,
+          "fadeInMs": 1200,
+          "fadeOutMs": 1000,
+          "gainDb": -11,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Rain and trench work close; siege cannon very distant.",
+          "stop": { "type": "scene-exit" },
+          "caveat": "Cannon belongs to siege context, not the unloaded-musket assault foreground."
+        },
+        {
+          "id": "YOR-SFX-001",
+          "kind": "diegetic-event",
+          "trigger": { "type": "action", "name": "control-granted" },
+          "asset": "sfx/redoubt-bayonet-assault.mp3",
+          "bus": "diegetic",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "replay": { "mode": "once" },
+          "fadeInMs": 250,
+          "fadeOutMs": 800,
+          "gainDb": -7,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Close movement and obstacles; impacts remain restrained and non-graphic.",
+          "stop": { "type": "event", "eventType": "model-event", "name": "redoubt-taken" },
+          "caveat": "Strict invariant: unloaded muskets, no gunshots or explosions in this file."
+        },
+        {
+          "id": "YOR-SFX-002",
+          "kind": "transition",
+          "trigger": { "type": "model-event", "name": "assault-end" },
+          "asset": "sfx/surrender-drum.mp3",
+          "bus": "sfx",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "replay": { "mode": "once" },
+          "fadeInMs": 500,
+          "fadeOutMs": 1000,
+          "gainDb": -9,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Begins at the parapet, then recedes toward the surrender field.",
+          "stop": { "type": "event", "eventType": "zone-enter", "zone": "field-walk" },
+          "caveat": "A parley drum is supported; exact rhythm and marching distance are interpretive."
+        }
+      ]
+    },
+    {
+      "id": "treaty-paris",
+      "label": "Treaty of Paris",
+      "musicPolicy": "No music in the three factual void dwells or the signature payoff.",
+      "cues": [
+        {
+          "id": "PAR-AMB-001",
+          "kind": "ambience",
+          "trigger": { "type": "scene-start" },
+          "asset": "amb/paris-studio.mp3",
+          "bus": "ambience",
+          "runtimeOwner": "adapter",
+          "loop": true,
+          "fadeInMs": 1500,
+          "fadeOutMs": 1200,
+          "gainDb": -12,
+          "duckUnderNarrationDb": -6,
+          "spatial": "Interior stereo bed; carriage remains beyond the wall.",
+          "stop": { "type": "event", "eventType": "zone-enter", "zone": "signature-frame" },
+          "caveat": "The studio is reconstructed; clock, fire, brush, and carriage imply place, not a documented recording."
+        },
+        {
+          "id": "PAR-SIL-001",
+          "kind": "authored-silence",
+          "trigger": { "type": "zone-enter", "zone": "signature-frame" },
+          "asset": null,
+          "bus": "ambience",
+          "runtimeOwner": "adapter",
+          "loop": false,
+          "fadeInMs": 0,
+          "fadeOutMs": 1200,
+          "gainDb": -120,
+          "duckUnderNarrationDb": 0,
+          "spatial": "Near silence before and throughout the aged-signature hold.",
+          "stopBuses": ["ambience", "diegetic", "sfx"],
+          "stop": { "type": "scene-exit" },
+          "caveat": "No generated payoff sound; the signature remains wordless."
+        }
+      ]
+    }
+  ]
+}
