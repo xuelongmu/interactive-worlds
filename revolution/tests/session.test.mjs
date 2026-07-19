@@ -238,7 +238,7 @@ test("rejects non-POST requests before any external call", async () => {
   assert.deepEqual(mock.calls, { turnstile: 0, redis: 0, reactor: 0 });
 });
 
-test("rejects models outside the navigable allowlist before any external call", async () => {
+test("rejects models outside the supported model allowlist before any external call", async () => {
   const mock = services();
   const response = await handleSessionRequest(
     sessionRequest({ token: TOKEN, model: "reactor/sana-streaming" }),
@@ -368,6 +368,18 @@ test("mints a model-scoped fallback token for legacy LingBot", async () => {
   assert.deepEqual(mock.reactorBodies[0], {
     authorization_details: [
       { type: "session", resources: { models: { match: ["reactor/lingbot"] } } },
+    ],
+  });
+});
+
+test("mints a model-scoped cinematic fallback token for Helios", async () => {
+  const mock = services();
+  const response = await exchange(mock, sessionRequest({ token: TOKEN, model: "reactor/helios" }));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(mock.reactorBodies[0], {
+    authorization_details: [
+      { type: "session", resources: { models: { match: ["reactor/helios"] } } },
     ],
   });
 });
