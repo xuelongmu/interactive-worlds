@@ -5,6 +5,7 @@ import {
   formatWorldModelError,
   frameHasVisibleContent,
   isGroundedWorldModelEvent,
+  isReactorCapacityErrorStatus,
   isWorldModelActionKey,
   ModelEventTimeline,
   REACTOR_WORLD_MODELS,
@@ -52,6 +53,11 @@ describe("Reactor world-model selection", () => {
       "/api/session?model=reactor%2Flingbot",
       { method: "POST" }
     );
+  });
+
+  it("recognizes an HTTP 503 without matching unrelated numbers", () => {
+    expect(isReactorCapacityErrorStatus("token mint failed: 503 capacity exhausted")).toBe(true);
+    expect(isReactorCapacityErrorStatus("error 1503")).toBe(false);
   });
 });
 
@@ -550,6 +556,21 @@ describe("presentation and rollover gates", () => {
 
     expect(onStatus).toHaveBeenLastCalledWith(
       "Live connection failed: WebRTC handshake failed"
+    );
+  });
+
+  it("keeps a 503 capacity error visible while routine fallback statuses arrive", () => {
+    const onStatus = vi.fn();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.opts = { onStatus };
+    player.stickyCapacityStatus = null;
+
+    player.reportStatus("Live connection failed: token mint failed: 503 capacity exhausted");
+    player.reportStatus("playing pre-rendered fallback");
+
+    expect(onStatus).toHaveBeenCalledOnce();
+    expect(onStatus).toHaveBeenLastCalledWith(
+      "Live connection failed: token mint failed: 503 capacity exhausted"
     );
   });
 

@@ -67,6 +67,10 @@ export interface WorldModelSessionOptions {
   timeouts?: Partial<WorldModelSessionTimeouts>;
 }
 
+export function isReactorCapacityErrorStatus(status: string): boolean {
+  return /(?:^|\D)503(?:\D|$)/.test(status);
+}
+
 interface WorldModelSessionTimeouts {
   mint: number;
   connect: number;
@@ -983,6 +987,7 @@ export class WorldModelScenePlayer {
   private healthSamplePending = false;
   private blackFrameSamples = 0;
   private runtimeFallbackStarted = false;
+  private stickyCapacityStatus: string | null = null;
   private rolloverDeadline: number | null = null;
   private controlTimers = new PausableTimeouts();
   private presentation = new WorldModelPresentationGate((mode) => this.onPresented(mode));
@@ -1045,7 +1050,7 @@ export class WorldModelScenePlayer {
       console.warn("[worldmodel] live session unavailable, falling back:", error);
       this.telemetry({ name: "fallback", reason });
       if (this.disposed) return;
-      this.opts.onStatus?.(visibleError);
+      this.reportStatus(visibleError);
       this.cancelVideoFrames();
       this.unbindKeys?.();
       this.unbindKeys = null;
@@ -1135,7 +1140,7 @@ export class WorldModelScenePlayer {
     session.attach({
       video: this.video,
       onEvent: this.opts.onEvent,
-      onStatus: this.opts.onStatus,
+      onStatus: (status) => this.reportStatus(status),
       onUnexpectedDisconnect: (status) => {
         if (this.presented && this.mode === "live") {
           void this.fallBackFromLive(`Reactor session ${status}`);
@@ -1206,7 +1211,7 @@ export class WorldModelScenePlayer {
     preserveLiveClock = false,
     unavailableStatus?: string
   ): Promise<void> {
-    const { manifest, onStatus } = this.opts;
+    const { manifest } = this.opts;
     this.video.srcObject = null;
     this.video.style.visibility = "hidden";
     if (this.hasPoster) this.poster.style.display = "block";
@@ -1217,7 +1222,7 @@ export class WorldModelScenePlayer {
       playable = !!head?.ok && !(head.headers.get("content-type") ?? "").includes("text/html");
     }
     if (playable && url) {
-      onStatus?.("playing pre-rendered fallback");
+      this.reportStatus("playing pre-rendered fallback");
       this.video.src = url;
       this.video.loop = false;
       const resumeAt = preserveLiveClock ? this.clock : 0;
@@ -1231,7 +1236,7 @@ export class WorldModelScenePlayer {
       this.revealLiveVideo();
       this.video.addEventListener("timeupdate", this.onFallbackTimeUpdate);
     } else {
-      onStatus?.(unavailableStatus ?? "no fallback video - running beats on a wall clock");
+      this.reportStatus(unavailableStatus ?? "no fallback video - running beats on a wall clock");
       this.fallbackUsesWallClock = true;
       if (preserveLiveClock) this.startWallClock();
     }
@@ -1421,7 +1426,7 @@ export class WorldModelScenePlayer {
     this.telemetry({ name: "fallback", reason, durationMs });
     this.emitLiveControls(false);
     const visibleError = `Live connection lost: ${formatWorldModelError(reason)}`;
-    this.opts.onStatus?.(visibleError);
+    this.reportStatus(visibleError);
     this.cancelVideoFrames();
     this.unbindKeys?.();
     this.unbindKeys = null;
@@ -1436,6 +1441,13 @@ export class WorldModelScenePlayer {
   private cancelVideoFrames(): void {
     for (const callback of this.videoFrameCallbacks) this.video.cancelVideoFrameCallback(callback);
     this.videoFrameCallbacks.clear();
+  }
+
+  /** Capacity errors remain actionable while fallback setup emits routine status. */
+  private reportStatus(status: string): void {
+    if (this.stickyCapacityStatus && !isReactorCapacityErrorStatus(status)) return;
+    if (isReactorCapacityErrorStatus(status)) this.stickyCapacityStatus = status;
+    this.opts.onStatus?.(status);
   }
 
   private waitForPlayableFrame(): Promise<void> {
