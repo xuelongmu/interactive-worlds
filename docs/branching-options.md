@@ -1,63 +1,104 @@
-# Light branching: bounded first-pass options
+# Historically convergent branching contract
 
-Issue #46 adds responsiveness without making an established event mutable. This
-proposal is intentionally limited to existing scene concepts, cue text, audio,
-ambience, and declared live/fallback media. No option needs new paid media.
-Branch instructions are control-HUD content, never narration subtitles, and the
-HUD must display the action that is actually bound (for example,
-`E — Clear ice`).
+Issue #46 lets the experience remember how the viewer participated without
+making an established event mutable. Branches may change player role,
+interaction order, camera attention, or a later control-HUD acknowledgement.
+History, narration, outcomes, cue timing, and chapter reconvergence remain
+fixed. Every path reuses the same committed media.
 
-## Historically convergent options
+Branch instructions and acknowledgements are control-HUD content, never
+narration subtitles. The HUD displays the action that is actually bound,
+including its availability, such as `E — Sweep the deck`.
 
-| Option | Choice and convergence | Later acknowledgement | Existing-media and access plan |
+## Director-selected v2 cadence
+
+| Branch | Choice and convergence | Later acknowledgement |
+|---|---|---|
+| **Tea Party deck duty** (`tea-party-deck-duty`) | Choose `break-chest` (`E — Break a chest`) or `sweep-deck` (`E — Sweep the deck`). The selection changes which shared deck task receives attention first. Both tasks retain the same narration, audio, timing, and outcome, and the paths rejoin at the common deck-clear beat. | Lexington receives the non-narrative context “At Griffin's Wharf, you chose the hatchet.” or “… chose the broom.” It does not add or replace a narration cue and exposes no branch action of its own. |
+| **Delaware duty** (`delaware-duty`) | Choose `pole` (`E — Pole from the bow`) or `clear-ice` (`E — Clear ice from the hull`). The selection changes the first task and camera attention only. Both paths use the same crossing, encounter the storm, land, and rejoin no later than the existing common landing sequence. | Trenton names the stored duty and orders the first contextual task: `pole` uses `E — Close the column`; `clear-ice` uses `E — Clear the gun path`. Both then use the common `E — Advance` action before the unchanged guns-open beat. |
+| **Saratoga analysis lens** (`saratoga-analysis-lens`) | Choose `trace-river-road` (`E — Trace the river road`) or `inspect-supply-line` (`E — Inspect the supply line`). The selection changes table attention and interaction order only. Both paths inspect the same analysis, complete the same phases, and rejoin before the charge. | Valley Forge recalls the lens in non-narrative context. The river-road path says “At Saratoga, you traced the river road.” and offers `E — Listen for the drill cadence`; the supply path says “At Saratoga, you inspected the supply line.” and offers `E — Inspect the supply breakdown`. Both return to the same slow walk and exit. |
+
+A new Trenton perspective choice is explicitly deferred. Trenton remains short
+and hosts only the Delaware callback; the v2 schema has no Trenton-perspective
+branch id or value. Counterfactual or generative branching is also outside this
+contract.
+
+The choices above are descriptive of what the viewer did, never of what
+happened historically. The record has no preferred path: every branch begins
+at `null`, and replaying its chapter can immutably replace that selection. This
+keeps the creative defaults reversible if the director revises them through the
+separate review surface.
+
+## Versioned state and deterministic migration
+
+The dedicated storage key remains `revolution-branch-state`. Version 2 has a
+canonical, chronological encoded order:
+
+```json
+{
+  "version": 2,
+  "choices": {
+    "tea-party-deck-duty": null,
+    "delaware-duty": "pole",
+    "saratoga-analysis-lens": null
+  }
+}
+```
+
+- A valid version 1 record containing `delaware-duty: "pole"`,
+  `delaware-duty: "clear-ice"`, or `null` migrates deterministically to version
+  2. Its Delaware value is preserved and both new branches are neutral. The
+  next save emits the canonical version 2 form.
+- A missing record, malformed JSON, unknown version, missing current field, or
+  invalid branch value decodes atomically to the all-neutral state. A valid
+  value elsewhere in a corrupt record is not selectively salvaged.
+- Ordinary chapter transitions, reload/resume, and chapter selection preserve
+  all choices in a new immutable state object.
+- Chapter selection does not manufacture choices. Replaying a choice chapter
+  presents its two actions again, and a new selection replaces only that
+  branch without mutating the prior record.
+- Full story restart is the only entry mode that returns all-neutral state.
+  The durable reset removes the dedicated storage key as well.
+
+## Presentation handoff
+
+`src/branch-state.ts` is the single source of branch meaning. Consumers call
+`getBranchPresentation(state, context, usable)` and pass its output through
+without inferring branch context or timing. `usable` defaults to `true`; when it
+is `false`, the exact action remains present with `usable: false`. A neutral
+callback or `out-of-range` returns `action: null` and `acknowledgement: null`.
+
+| Context | Selection condition | `action` | `acknowledgement` |
 |---|---|---|---|
-| **1. Delaware duty (selected default)** | At `DEL-020`, choose `pole` (`E — Pole from the bow`) or `clear-ice` (`E — Clear ice from the hull`). The existing mariner line names both jobs. The choice changes the first task and camera attention only; both paths use the same boat, encounter the storm, land, and rejoin no later than `DEL-032`. | At Trenton, the first contextual task is ordered by the stored duty: `pole` starts with `E — Close the column`; `clear-ice` starts with `E — Clear the gun path`. The HUD explicitly prefaces it with “At the crossing, you chose …”. Both then receive the common `E — Advance` action before the existing guns-open beat. | Reuse all existing Delaware/Trenton narration, diegetic VO, subtitles, ambience, live scenes, and fallbacks. Do not add branch narration or audio. In fallback/reduced-motion mode, the same choice and acknowledgement remain keyboard-operable over the video. Focus, selected state, and the acknowledgement are exposed to assistive technology; prompts do not enter the narration subtitle region. |
-| **2. Tea Party deck duty** | After control is granted, choose `E — Break a chest` or `E — Sweep the deck`. The first task changes, but each path encounters both existing visual beats and rejoins at `deck-clear`; Parliament's response and Lexington are unchanged. | On entering Lexington, a non-narrative context card states “At Griffin's Wharf, you chose the hatchet” or “… chose the broom” before the common movement prompt. | Reuse the existing BOSUN line, Tea Party narration/subtitles, `wharf-night` ambience, `tea-chest` SFX, and shared live/fallback scene. Captions identify the SFX; the two controls have distinct accessible names and selection state. No new VO or SFX. |
-| **3. Trenton perspective** | Before the guns-open beat, choose `E — Stay with the column` or `E — Move toward the guns`. This changes route/perspective only. Both paths witness the existing surrender beat and rejoin before Saratoga. | Saratoga's first sand-table task acknowledges the perspective: the column path places an infantry unit first; the guns path traces the artillery/supply approach first. The same phases and surrender follow. | Reuse Trenton/Saratoga narration and subtitles, their ambience, existing cannon SFX, sand-table assets, and live/fallback media. A reduced-motion path makes the same choice in the control HUD and announces the selected perspective without spatial-only instructions. |
-| **4. Saratoga analysis lens** | At the sand table, choose `E — Trace the river road` or `E — Inspect the supply line`. This changes optional context and interaction order; both paths complete the same Freeman's Farm and Bemis Heights phases and rejoin before the charge. | At Valley Forge, the stored lens determines whether the first optional context prompt points to the supply breakdown or the drill cadence. It explicitly says which Saratoga lens is being recalled, then returns to the same slow walk and exit. | Reuse Saratoga/Valley Forge narration and subtitles, `command-tent`/`valley-forge-wind` ambience, the same sand table, and existing fallback behavior. Table targets and the later context prompt need keyboard focus, text alternatives, and non-spatial wording. No new audio. |
+| `tea-party-break-chest-choice` | Any | `E — Break a chest` | `null` |
+| `tea-party-sweep-deck-choice` | Any | `E — Sweep the deck` | `null` |
+| `lexington-deck-duty-acknowledgement` | `break-chest` / `sweep-deck` | `null` | Griffin's Wharf hatchet / broom text above |
+| `delaware-pole-choice` | Any | `E — Pole from the bow` | `null` |
+| `delaware-clear-ice-choice` | Any | `E — Clear ice from the hull` | `null` |
+| `trenton-duty-callback` | `pole` / `clear-ice` | `E — Close the column` / `E — Clear the gun path` | Crossing duty text above |
+| `trenton-common` | Any | `E — Advance` | `null` |
+| `saratoga-river-road-choice` | Any | `E — Trace the river road` | `null` |
+| `saratoga-supply-line-choice` | Any | `E — Inspect the supply line` | `null` |
+| `valley-forge-analysis-acknowledgement` | `trace-river-road` / `inspect-supply-line` | `E — Listen for the drill cadence` / `E — Inspect the supply breakdown` | Saratoga lens text above |
+| `out-of-range` or a neutral callback | None | `null` | `null` |
 
-## Smallest reversible default
+`BranchPresentationState.action` is exactly
+`{ binding: "E"; label: BranchActionLabel; usable: boolean } | null`.
+`acknowledgement` is a typed non-narrative string or `null`. The legacy
+`selectedDuty` field remains temporarily available for Delaware compatibility;
+new HUD work consumes only `action` and `acknowledgement`.
 
-Option 1 is the default because one existing diegetic line already legitimizes
-both duties, both branches share all media and scripted historical beats, and
-the callback can be an interaction-order change rather than a new factual cue.
-The stored choice is descriptive of what the viewer did, never of what happened
-historically.
+The interaction label, disabled state, acknowledgement, focus, and selected
+state must remain available to assistive technology. Live and
+fallback/reduced-motion paths use the same contract. Existing subtitles,
+captioning, narration ducking, ambience, and event audio remain common to both
+choices; this contract adds no VO, SFX, or other generated media.
 
-The contract uses branch id `delaware-duty` with values `pole` and `clear-ice`.
-The absence of a choice is a supported neutral state. A viewer can replace the
-choice whenever the Delaware interaction is offered again, so the default is
-reversible until the next selection is stored. The callback must visibly name
-the earlier selection; silently changing a prompt is not enough.
+## Ownership boundary
 
-## Persistence and navigation semantics
-
-- A valid choice is stored in a versioned, dedicated local record and survives
-  ordinary chapter transitions, reload, resume, and chapter selection.
-- Full story restart clears branch state. It does not retain a previous duty.
-- Chapter selection preserves branch state. Replaying Delaware presents the
-  choice again and a new selection replaces the old one.
-- Selecting a later chapter with no stored choice uses the neutral common path
-  and shows no fabricated acknowledgement.
-- Invalid, corrupt, or unknown-version persisted data decodes to the neutral
-  state. State transitions are immutable and deterministic.
-
-## Isolated-PR boundary and integration handoffs
-
-This first PR owns only the typed state/codec/storage contract and deterministic
-tests outside `src/engine/**`. It deliberately does not edit the director,
-engine story state, scene manifests/cues or timing, HUD presentation,
-Declaration content, sound mappings/assets, or shared world configuration.
-
-There are four conflict-free follow-up seams:
-
-1. The #44 HUD owner can render the two actual-bound Delaware actions, the
-   selected state, the explicit Trenton acknowledgement, and equivalent
-   keyboard/screen-reader behavior from the module's typed presentation state;
-   the HUD does not infer branch meaning or place it in subtitles.
-2. The #45 manifest/timing owner can add branch action identifiers and the two
-   convergent interaction orders without changing cue timing or outcomes.
-3. The #37 director owner can call the standalone persistence contract on
-   selection, restart, resume, transition, and chapter-select entry.
-4. After those owners land, a small integration PR can connect the three seams
-   and test both live and fallback paths without adding media.
+This contract owns only the typed branch record, codec/storage/navigation
+semantics, presentation data, documentation, and deterministic focused tests.
+It deliberately does not edit the engine, director, HUD/shell, scene manifests,
+cue timing, Declaration, media/audio/VO, generators, or shared world and sound
+configuration. Runtime owners consume these exported types and defaults rather
+than duplicating branch-state logic.
