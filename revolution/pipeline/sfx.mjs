@@ -40,7 +40,8 @@ for (const sound of sounds) {
   mkdirSync(resolve(outPath, ".."), { recursive: true });
   writeFileSync(outPath, Buffer.from(await res.arrayBuffer()));
   cache[sound.file] = signature;
+  // persist after every paid call so a mid-run failure never re-bills done sounds
+  saveCache(CACHE_FILE, cache);
   generated++;
 }
-saveCache(CACHE_FILE, cache);
 console.log(`done — ${generated} generated, ${sounds.length - generated} cached`);

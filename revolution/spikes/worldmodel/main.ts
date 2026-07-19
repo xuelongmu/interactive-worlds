@@ -137,13 +137,19 @@ setInterval(renderMetrics, 500);
 // manual overrides for review. Either path fires each beat at most once.
 const firedBeats = new Set<string>();
 let beatTimers: number[] = [];
+/** invalidates in-flight beat continuations across teardown/reconnect */
+let sessionGeneration = 0;
 
 async function fireBeat(name: string) {
   if (!session || firedBeats.has(name)) return;
   firedBeats.add(name);
+  const generation = sessionGeneration;
   const beat = manifest.modelEvents?.find((e) => e.name === name);
   if (beat?.prompt) {
     await session.steer(name, beat.prompt);
+    // a disconnect (or reconnect) while steer was in flight owns the cue
+    // engine now — a stale continuation must not fire into the new session
+    if (generation !== sessionGeneration) return;
     log(`steer → ${name} (prompt hot-swap)`);
   } else {
     cueEngine.handleEvent({ type: "model-event", name });
@@ -186,6 +192,7 @@ async function getReferenceImage(): Promise<Blob> {
  *  connected session after a failed connect, which would otherwise keep a
  *  GPU session alive and billing with the Disconnect button disabled. */
 async function teardown() {
+  sessionGeneration++;
   clearBeatTimeline();
   stopFramePump();
   unbindKeys?.();

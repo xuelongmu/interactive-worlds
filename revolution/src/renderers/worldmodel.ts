@@ -191,8 +191,9 @@ export function bindWorldModelKeys(session: WorldModelSession): () => void {
     if (e.code.startsWith("Arrow")) e.preventDefault();
     keys.add(e.code); apply();
   };
+  // keyup always clears — a key pressed on the document but released inside
+  // a form field must not stay "held" and keep the model moving.
   const up = (e: KeyboardEvent) => {
-    if (inFormField(e)) return;
     keys.delete(e.code); apply();
   };
   document.addEventListener("keydown", down);

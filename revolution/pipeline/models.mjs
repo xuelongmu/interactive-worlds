@@ -46,6 +46,7 @@ for (const model of models) {
   if (!url) throw new Error(`no model url in output for ${model.file}`);
   await download(url, `public/assets/models/${model.file}`);
   cache[model.file] = signature;
+  // persist after every paid task so a mid-run failure never re-bills done models
+  saveCache(CACHE_FILE, cache);
 }
-saveCache(CACHE_FILE, cache);
 console.log("done");

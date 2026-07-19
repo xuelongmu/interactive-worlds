@@ -50,18 +50,34 @@ export async function download(url, outPath) {
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function pollUntil(fn, { intervalMs = 5000, timeoutMs = 15 * 60 * 1000, label = "operation" }) {
+export async function pollUntil(
+  fn,
+  { intervalMs = 5000, timeoutMs = 15 * 60 * 1000, attemptTimeoutMs = 30_000, label = "operation" }
+) {
   const startedAt = Date.now();
   let consecutiveErrors = 0;
   for (;;) {
+    let timeoutHandle;
     try {
-      const result = await fn();
+      // A stalled request must not hang the loop past the overall timeout —
+      // bound each attempt and treat a stall like any other retryable error.
+      const attempt = fn();
+      attempt.catch(() => {}); // a late rejection from a lost race is not unhandled
+      const timeout = new Promise((_, reject) => {
+        timeoutHandle = setTimeout(
+          () => reject(new Error(`${label}: poll attempt exceeded ${attemptTimeoutMs}ms`)),
+          attemptTimeoutMs
+        );
+      });
+      const result = await Promise.race([attempt, timeout]);
       consecutiveErrors = 0;
       if (result) return result;
     } catch (error) {
       // Tolerate transient network failures; only give up after a streak.
       if (++consecutiveErrors >= 5) throw error;
       process.stdout.write("!");
+    } finally {
+      clearTimeout(timeoutHandle);
     }
     if (Date.now() - startedAt > timeoutMs) throw new Error(`${label} timed out`);
     process.stdout.write(".");
