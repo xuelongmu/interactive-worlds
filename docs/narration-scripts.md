@@ -28,10 +28,20 @@ Interactive story of the American Revolution. Nine scenes, linear order:
 
 ## Cast (ElevenLabs)
 
-| Voice | Who | Direction |
-|---|---|---|
-| NARRATOR | Unnamed documentary narrator | Warm, measured, restrained. Stability ~0.50, slow pace. Never performs emotion; states facts and lets them land. |
-| DIEGETIC | Mariners, soldiers, officers | One voice each, spatialized in-scene |
+Speaker labels below are the ones `pipeline/vo.mjs` matches on: a line must
+begin `> SPEAKER:` (an optional `(diegetic)` is ignored). A new speaker needs an
+entry in the pipeline's `CAST` map, or its lines are skipped with a warning.
+
+| Speaker | Who | Voice | Direction |
+|---|---|---|---|
+| NARRATOR | Unnamed documentary narrator | James — Husky, Engaging and Bold | Warm, measured, restrained. Never performs emotion; states facts and lets them land. |
+| BOSUN | Tea Party, on deck (TEA-050) | Chris — Boston, non-rhotic | Shouted across a working deck. Directing a work party, not a mob. |
+| MARINER | Delaware, Marblehead fisherman (DEL-020 + bark pool) | Harry — Fierce Warrior | Shouted over wind and ice. Competent and unbothered; this is his trade. |
+| SERGEANT | Trenton, in the column (TRE-020) | George — War-torn Sergeant | Barked, urgent. Driving tired men toward gunfire. |
+
+Voice ids live in `revolution/.env` (`ELEVENLABS_<SPEAKER>_VOICE_ID`); delivery
+and per-speaker v3 audio tags live in the `CAST` map in `pipeline/vo.mjs`, so
+the prose here stays clean for subtitle use.
 
 ---
 
