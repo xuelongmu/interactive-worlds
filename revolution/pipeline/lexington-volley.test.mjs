@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  APPROVED_FIRST_SHOT_SHA256,
   buildAudioStages,
   MINIMUM_AFTERMATH_MS,
   reviewCheckpoints,
@@ -74,5 +75,12 @@ test("pins the immutable issue #43 volley artifact", () => {
   assert.equal(
     TRUSTED_VOLLEY_SHA256,
     "b5b74d6f3dcdfe3d02648ff9f86cc788105203acc2c40462e20e28f48bc49eae"
+  );
+});
+
+test("pins the frozen issue #43 first-shot candidate", () => {
+  assert.equal(
+    APPROVED_FIRST_SHOT_SHA256,
+    "bd577ba5e6a32c8e65105bd4ea318921de7a823f573c225a36a75bc28a9d5b21"
   );
 });

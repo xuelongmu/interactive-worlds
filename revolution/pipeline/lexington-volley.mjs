@@ -6,6 +6,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { projectRoot } from "./lib.mjs";
 import {
+  APPROVED_FIRST_SHOT_SHA256,
   buildAudioStages,
   reviewCheckpoints,
   TRUSTED_VOLLEY_SHA256,
@@ -100,6 +101,12 @@ if (frameVideo.width !== config.output.width || frameVideo.height !== config.out
 }
 
 const duration = Math.min(config.targetDurationSeconds, sourceDuration);
+const isolatedShotSha256 = sha256(isolatedShotPath);
+if (isolatedShotSha256 !== APPROVED_FIRST_SHOT_SHA256) {
+  throw new Error(
+    `LEX-SFX-001 approved hash mismatch: expected ${APPROVED_FIRST_SHOT_SHA256}, got ${isolatedShotSha256}`
+  );
+}
 const isolatedShotProbe = probe(isolatedShotPath);
 const isolatedShotAudio = isolatedShotProbe.streams.find((stream) => stream.codec_type === "audio");
 const isolatedShotDuration = Number(isolatedShotProbe.format.duration);
@@ -177,7 +184,7 @@ const handoff = {
   issue: "https://github.com/xuelongmu/interactive-worlds/issues/7",
   candidate: relativeDisplay(outputPath).replaceAll("\\", "/"),
   source: relativeDisplay(sourcePath).replaceAll("\\", "/"),
-  directorStatus: "async veto pending",
+  directorStatus: "provisional integration approved; deployed playtest feedback pending",
   durationSeconds: duration,
   inputs: {
     triggerFrame: { path: relativeDisplay(framePath).replaceAll("\\", "/"), sha256: sha256(framePath) },
@@ -189,9 +196,9 @@ const handoff = {
     isolatedShotSfx: {
       cue: "LEX-SFX-001",
       path: relativeDisplay(isolatedShotPath).replaceAll("\\", "/"),
-      sha256: sha256(isolatedShotPath),
+      sha256: isolatedShotSha256,
       probe: isolatedShotProbe,
-      provenance: "Issue #43 ElevenLabs sound-generation handoff; ear approval tracked there.",
+      provenance: "Issue #43 frozen ElevenLabs candidate approved for provisional integration; technical pass; no ear-playback evidence supplied.",
     },
     volleySfx: {
       cue: "LEX-SFX-002",
@@ -210,7 +217,7 @@ const handoff = {
     probe: probe(outputPath),
   },
   visualReview: {
-    status: "pending director async-veto review",
+    status: "objective final-video playback review pending; provisional creative approval is not playback evidence",
     contactSheet: {
       path: relativeDisplay(contactSheetPath).replaceAll("\\", "/"),
       sha256: sha256(contactSheetPath),
@@ -231,7 +238,7 @@ const handoff = {
     "The isolated first shot and combined volley occupy separate, non-overlapping stages.",
     "The aftermath stage contains no authored audio source.",
     "The exact captured trigger frame opens the cut before blending into generated motion.",
-    "Director by-eye review and async veto remain pending.",
+    "Provisional creative integration is approved; no final-video by-eye playback evidence is claimed.",
   ],
 };
 writeFileSync(handoffPath, `${JSON.stringify(handoff, null, 2)}\n`);

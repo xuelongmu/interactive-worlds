@@ -64,6 +64,9 @@ camera shake, strobe-rate flashes, modern objects, or any music.
 
 Copy the authoritative issue #43 handoff for `LEX-SFX-001` to
 `public/assets/audio/sfx/lexington-first-shot.mp3`. Do not generate a substitute.
+The frozen provisional-integration candidate is pinned to SHA-256
+`bd577ba5e6a32c8e65105bd4ea318921de7a823f573c225a36a75bc28a9d5b21`;
+it has a technical pass, but no ear-playback evidence is claimed.
 The pipeline also pins the immutable `LEX-SFX-002` baseline at
 `public/assets/audio/sfx/musket-volley.mp3` to SHA-256
 `b5b74d6f3dcdfe3d02648ff9f86cc788105203acc2c40462e20e28f48bc49eae`.
@@ -92,12 +95,12 @@ source is the quiet Lexington dawn bed, which ends with the volley. There is
 no narration or music.
 
 The output handoff JSON records every input/output hash, media probe, prompt,
-audio boundary, provenance note, and still-pending director veto. The contact
+audio boundary, provenance note, and provisional integration status. The contact
 sheet is evidence for by-eye review, not approval by itself. Review the actual
 MP4 for continuity at the five recorded checkpoints, historical plausibility,
 the violence ceiling, flash/camera comfort, modern-object leakage, and any
-speech or score leakage. Record only observations actually made; do not change
-the generated `directorStatus` without the director's async-veto decision.
+speech or score leakage. Record only observations actually made; the provisional
+creative approval does not constitute final-video playback evidence.
 
 ## Blocked-path resolution options
 
