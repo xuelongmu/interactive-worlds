@@ -223,6 +223,24 @@ npm 11.9.0.
   were routed to the owner in [issue #37](https://github.com/xuelongmu/interactive-worlds/issues/37).
   The owner-controlled fix is evidence only and is not part of this QA delta.
 
+## Recorded PR interaction connector outage — 2026-07-19
+
+These checks were assigned as read-only acceptance gates for PRs #42 and #49.
+The local servers and AO preview opened successfully, but the permitted browser
+connector exposed no browser. This is reproducible blocker evidence, not a test
+result:
+
+| Target | HTTP evidence | AO preview | Browser inventory | Result |
+| --- | --- | --- | --- | --- |
+| PR #42 `http://localhost:41742` | 200, `text/html`, 392 bytes | succeeded | `[]` | BLOCKED / NOT RUN |
+| PR #49 `http://127.0.0.1:5197/spikes/signing/` | 200, `text/html`, 925 bytes | succeeded | `[]` | BLOCKED / NOT RUN |
+
+Because the browser inventory was empty after each preview, no DOM controls,
+audio state, human-audible result, screenshots, cue timestamps, or
+`revolution-story-state` inspection was claimed. Do not retry these checks until
+a real browser is attached. Do not substitute static source or HTTP evidence,
+and do not attempt the GPU-world walk without a real GPU browser.
+
 ## Release sign-off
 
 A release candidate is QA-green only when every drill is `PASS`; every browser
