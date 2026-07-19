@@ -20,8 +20,8 @@ test("Declaration cue manifest preserves the silent dry and +8s narration beats"
   const cues = declaration.cues;
   assert.deepEqual(cues.map((cue) => cue.id), ["DEC-010", "DEC-011", "DEC-030", "DEC-060", "DEC-061", "DEC-070"]);
   assert.deepEqual(cues[3].trigger, { type: "action", name: "sign-complete" });
-  assert.equal(cues[4].trigger.orAfterPrevious, 8);
-  assert.equal(cues[4].trigger.type, "timer");
+  assert.equal(cues[3].subtitle, " ");
+  assert.deepEqual(cues[4].trigger, { type: "action", name: "quill-down" });
 });
 
 test("signing flow emits four actions, captures normalized vectors, and persists", () => {
