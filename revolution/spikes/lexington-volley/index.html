@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lexington volley — trigger-frame capture</title>
+</head>
+<body>
+  <div id="app"></div>
+  <aside id="capture-panel">
+    <p class="eyebrow">Issue #7 · capture artifact</p>
+    <h1>Lexington trigger frame</h1>
+    <p id="status">Loading the pinned Lexington world…</p>
+    <p class="instructions">
+      Set the browser viewport to 1664 × 960, click the scene, and walk across
+      the trigger line. The exact rendered view locks and saves at first entry.
+    </p>
+    <dl id="evidence"></dl>
+    <img id="preview" alt="Captured trigger-line view" hidden />
+    <div class="actions">
+      <a id="download" class="button disabled" aria-disabled="true">Download frame</a>
+      <button id="retake" class="secondary" disabled>Retake</button>
+    </div>
+    <details>
+      <summary>Conditioning prompt</summary>
+      <pre id="prompt"></pre>
+    </details>
+  </aside>
+  <script type="module" src="/spikes/lexington-volley/main.ts"></script>
+</body>
+</html>
