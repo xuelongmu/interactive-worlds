@@ -9,7 +9,16 @@ import {
   promptFor,
   requestFor,
 } from "./music.candidates.mjs";
-import { artifactPath, candidateSignature, selectCandidates } from "./music.mjs";
+import {
+  artifactPath,
+  candidateSignature,
+  parseArgs,
+  publicMetadata,
+  run,
+  selectCandidates,
+  sha256,
+  validateCache,
+} from "./music.mjs";
 
 test("offers four distinct, reversible main-theme candidates", () => {
   assert.equal(CANDIDATES.length, 4);
@@ -18,7 +27,11 @@ test("offers four distinct, reversible main-theme candidates", () => {
     assert.match(candidate.id, /^[a-d]-[a-z-]+$/);
     assert.ok(candidate.direction.length > 40);
     assert.ok(candidate.tradeoff.includes("but"));
-    assert.equal(artifactPath(candidate), `public/assets/audio/music/candidates/${candidate.id}.mp3`);
+    assert.equal(
+      artifactPath(candidate),
+      `artifacts/music-theme-candidates/takes/${candidate.id}.mp3`
+    );
+    assert.ok(!artifactPath(candidate).startsWith("public/"));
   }
 });
 
@@ -55,12 +68,81 @@ test("content signatures change with candidate direction", () => {
   assert.equal(candidateSignature(original), candidateSignature({ ...original }));
 });
 
-test("candidate selection rejects unknown ids and de-duplicates requested ids", () => {
+test("CLI parsing requires an explicit mode and rejects unknown flags", () => {
+  assert.deepEqual(parseArgs(["--dry-run"]), { mode: "dry-run", requested: [] });
+  assert.deepEqual(parseArgs(["--generate", "--candidate", CANDIDATES[2].id]), {
+    mode: "generate",
+    requested: [CANDIDATES[2].id],
+  });
+  assert.throws(() => parseArgs([]), /choose a mode/);
+  assert.throws(() => parseArgs(["--dryrun"]), /unknown argument/);
+  assert.throws(() => parseArgs(["--generate", "--candiate", CANDIDATES[0].id]), /unknown/);
+  assert.throws(() => parseArgs(["--audit", "--generate"]), /exactly one mode/);
+  assert.throws(() => parseArgs(["--candidate", CANDIDATES[0].id]), /choose a mode/);
+});
+
+test("candidate selection rejects unknown ids and de-duplicates ids", () => {
   assert.deepEqual(selectCandidates([]), [...CANDIDATES]);
   assert.deepEqual(
-    selectCandidates(["--candidate", CANDIDATES[2].id, "--candidate", CANDIDATES[2].id]),
+    selectCandidates([CANDIDATES[2].id, CANDIDATES[2].id]),
     [CANDIDATES[2]]
   );
-  assert.throws(() => selectCandidates(["--candidate", "not-a-candidate"]), /unknown candidate/);
-  assert.throws(() => selectCandidates(["--candidate"]), /requires an id/);
+  assert.throws(() => selectCandidates(["not-a-candidate"]), /unknown candidate/);
+});
+
+test("mistyped flags fail before any paid request", async () => {
+  let requested = false;
+  const fetchImpl = async () => {
+    requested = true;
+    throw new Error("must not be called");
+  };
+  await assert.rejects(run(["--dryrun"], fetchImpl), /unknown argument/);
+  await assert.rejects(
+    run(["--generate", "--candiate", CANDIDATES[0].id], fetchImpl),
+    /unknown argument/
+  );
+  await assert.rejects(
+    run(["--generate", "--candidate", "not-a-candidate"], fetchImpl),
+    /unknown candidate/
+  );
+  assert.equal(requested, false);
+});
+
+test("metadata exposes hashes only for cache entries verified against current artifacts", () => {
+  const artifacts = new Map(
+    CANDIDATES.map((candidate) => [candidate.id, Buffer.from(`exact audio ${candidate.id}`)])
+  );
+  const cache = Object.fromEntries(
+    CANDIDATES.map((candidate) => [
+      candidate.id,
+      {
+        signature: candidateSignature(candidate),
+        sha256: sha256(artifacts.get(candidate.id)),
+        bytes: artifacts.get(candidate.id).byteLength,
+      },
+    ])
+  );
+  cache[CANDIDATES[0].id].signature = "stale-signature";
+  artifacts.delete(CANDIDATES[1].id);
+  cache[CANDIDATES[2].id].sha256 = "wrong-hash";
+
+  const candidateForPath = (path) =>
+    CANDIDATES.find((candidate) => String(path).endsWith(`${candidate.id}.mp3`));
+  const validation = validateCache(cache, {
+    exists: (path) => artifacts.has(candidateForPath(path)?.id),
+    read: (path) => artifacts.get(candidateForPath(path)?.id),
+  });
+  assert.deepEqual(Object.keys(validation.valid), [CANDIDATES[3].id]);
+  assert.deepEqual(
+    validation.invalid.map(({ reason }) => reason),
+    ["spec signature changed", "artifact missing", "artifact SHA-256 mismatch"]
+  );
+
+  const metadata = publicMetadata(validation);
+  for (const candidate of metadata.candidates.slice(0, 3)) {
+    assert.equal(candidate.status, "unavailable");
+    assert.equal("sha256" in candidate, false);
+  }
+  assert.equal(metadata.candidates[3].status, "verified");
+  assert.equal(metadata.candidates[3].sha256, cache[CANDIDATES[3].id].sha256);
 });

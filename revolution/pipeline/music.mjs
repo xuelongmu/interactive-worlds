@@ -2,12 +2,12 @@
  *
  * Usage:
  *   node pipeline/music.mjs --dry-run
- *   node pipeline/music.mjs
- *   node pipeline/music.mjs --candidate a-fife-lament
+ *   node pipeline/music.mjs --audit
+ *   node pipeline/music.mjs --generate [--candidate a-fife-lament]
  *
  * Outputs are intentionally ignored:
- *   public/assets/audio/music/candidates/<candidate>.mp3
- *   public/assets/audio/music/candidates/index.json
+ *   artifacts/music-theme-candidates/takes/<candidate>.mp3
+ *   artifacts/music-theme-candidates/takes/index.json
  *
  * This pipeline does not select a theme or wire music into runtime manifests.
  */
@@ -19,7 +19,7 @@ import { CANDIDATES, OUTPUT_FORMAT, requestFor } from "./music.candidates.mjs";
 import { hash, loadCache, projectRoot, requireKey, saveCache } from "./lib.mjs";
 
 export const CACHE_FILE = "pipeline/.music-candidate-cache.json";
-export const OUTPUT_ROOT = "public/assets/audio/music/candidates";
+export const OUTPUT_ROOT = "artifacts/music-theme-candidates/takes";
 
 export function artifactPath(candidate) {
   return `${OUTPUT_ROOT}/${candidate.id}.mp3`;
@@ -29,15 +29,34 @@ export function candidateSignature(candidate) {
   return hash({ outputFormat: OUTPUT_FORMAT, request: requestFor(candidate) });
 }
 
-export function selectCandidates(argv) {
+export function parseArgs(argv) {
   const requested = [];
+  let mode = null;
+  const setMode = (next) => {
+    if (mode && mode !== next) {
+      throw new Error(`choose exactly one mode; got --${mode} and --${next}`);
+    }
+    mode = next;
+  };
+
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
-    if (arg !== "--candidate") continue;
-    const id = argv[++index];
-    if (!id || id.startsWith("--")) throw new Error("--candidate requires an id");
-    requested.push(id);
+    if (["--help", "--dry-run", "--audit", "--generate"].includes(arg)) {
+      setMode(arg.slice(2));
+    } else if (arg === "--candidate") {
+      const id = argv[++index];
+      if (!id || id.startsWith("--")) throw new Error("--candidate requires an id");
+      requested.push(id);
+    } else {
+      throw new Error(`unknown argument: ${arg}`);
+    }
   }
+  if (!mode) throw new Error("choose a mode: --dry-run, --audit, or --generate");
+  if (mode === "help" && requested.length) throw new Error("--help cannot be combined with --candidate");
+  return { mode, requested };
+}
+
+export function selectCandidates(requested) {
   if (!requested.length) return [...CANDIDATES];
 
   const known = new Map(CANDIDATES.map((candidate) => [candidate.id, candidate]));
@@ -46,11 +65,39 @@ export function selectCandidates(argv) {
   return [...new Set(requested)].map((id) => known.get(id));
 }
 
-function sha256(buffer) {
+export function sha256(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
-function publicMetadata(cache) {
+function invalidReason(candidate, entry, io = {}) {
+  const exists = io.exists ?? existsSync;
+  const read = io.read ?? readFileSync;
+  const expectedSignature = candidateSignature(candidate);
+  const output = resolve(projectRoot, artifactPath(candidate));
+  if (!entry) return "cache entry missing";
+  if (entry.signature !== expectedSignature) return "spec signature changed";
+  if (!entry.sha256) return "artifact SHA-256 missing";
+  if (!exists(output)) return "artifact missing";
+  if (sha256(read(output)) !== entry.sha256) return "artifact SHA-256 mismatch";
+  return null;
+}
+
+export function validateCache(cache, io = {}) {
+  const valid = {};
+  const invalid = [];
+
+  for (const candidate of CANDIDATES) {
+    const entry = cache[candidate.id];
+    const reason = invalidReason(candidate, entry, io);
+
+    if (reason) invalid.push({ id: candidate.id, reason });
+    else valid[candidate.id] = entry;
+  }
+  return { valid, invalid };
+}
+
+export function publicMetadata(validation) {
+  const unavailableById = new Map(validation.invalid.map(({ id, reason }) => [id, reason]));
   return {
     purpose: "Main-theme candidates awaiting director by-ear selection",
     approvalStatus: "unselected",
@@ -60,22 +107,25 @@ function publicMetadata(cache) {
       artifact: artifactPath(candidate),
       direction: candidate.direction,
       tradeoff: candidate.tradeoff,
-      ...(cache[candidate.id] ?? {}),
+      status: validation.valid[candidate.id] ? "verified" : "unavailable",
+      ...(validation.valid[candidate.id] ?? {}),
+      ...(unavailableById.has(candidate.id)
+        ? { unavailableReason: unavailableById.get(candidate.id) }
+        : {}),
     })),
   };
 }
 
 function saveMetadata(cache) {
+  const validation = validateCache(cache);
   const output = resolve(projectRoot, OUTPUT_ROOT, "index.json");
   mkdirSync(resolve(output, ".."), { recursive: true });
-  writeFileSync(output, JSON.stringify(publicMetadata(cache), null, 2));
+  writeFileSync(output, JSON.stringify(publicMetadata(validation), null, 2));
+  return validation;
 }
 
 function cachedArtifactMatches(candidate, entry) {
-  if (!entry || entry.signature !== candidateSignature(candidate) || !entry.sha256) return false;
-  const output = resolve(projectRoot, artifactPath(candidate));
-  if (!existsSync(output)) return false;
-  return sha256(readFileSync(output)) === entry.sha256;
+  return invalidReason(candidate, entry) === null;
 }
 
 async function errorDetail(response) {
@@ -89,23 +139,37 @@ async function errorDetail(response) {
 }
 
 export async function run(argv = process.argv.slice(2), fetchImpl = fetch) {
-  if (argv.includes("--help")) {
-    console.log("Usage: node pipeline/music.mjs [--dry-run] [--candidate <id>]");
+  const { mode, requested } = parseArgs(argv);
+  if (mode === "help") {
+    console.log(
+      "Usage: node pipeline/music.mjs (--dry-run | --audit | --generate) [--candidate <id>]"
+    );
     return;
   }
-  const selected = selectCandidates(argv);
-  const dryRun = argv.includes("--dry-run");
+  const selected = selectCandidates(requested);
 
   for (const candidate of selected) {
     console.log(
       `${candidate.id.padEnd(23)} ${artifactPath(candidate)}  signature=${candidateSignature(candidate)}`
     );
-    if (dryRun) console.log(`  tradeoff: ${candidate.tradeoff}`);
+    if (mode === "dry-run") console.log(`  tradeoff: ${candidate.tradeoff}`);
   }
-  if (dryRun) return;
+  if (mode === "dry-run") return;
 
-  const key = requireKey("ELEVENLABS_API_KEY", "main-theme candidate generation");
   const cache = loadCache(CACHE_FILE);
+  if (mode === "audit") {
+    const validation = saveMetadata(cache);
+    if (validation.invalid.length) {
+      throw new Error(
+        `audit failed: ${validation.invalid.map(({ id, reason }) => `${id} (${reason})`).join(", ")}`
+      );
+    }
+    console.log(`audit passed - ${Object.keys(validation.valid).length} exact artifacts verified`);
+    return;
+  }
+
+  // Reaching the paid path requires the explicit, validated --generate mode.
+  const key = requireKey("ELEVENLABS_API_KEY", "main-theme candidate generation");
   let generated = 0;
   let cached = 0;
 
@@ -146,8 +210,11 @@ export async function run(argv = process.argv.slice(2), fetchImpl = fetch) {
     generated++;
   }
 
-  saveMetadata(cache);
-  console.log(`done - ${generated} generated, ${cached} cached, ${selected.length} requested`);
+  const validation = saveMetadata(cache);
+  console.log(
+    `done - ${generated} generated, ${cached} cached, ${selected.length} requested, ` +
+      `${Object.keys(validation.valid).length} exact artifacts verified`
+  );
 }
 
 // Comparing resolved paths is robust on Windows, where file URL drive-letter
