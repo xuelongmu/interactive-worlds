@@ -1,4 +1,5 @@
 import type { SceneManifest } from "./engine/types";
+import type { BranchPresentationState } from "./branch-state";
 
 export const CONTROL_STALL_DELAY_MS = 10_000;
 
@@ -26,6 +27,7 @@ export interface ControlHandoffDetail {
   movement?: ControlBinding;
   look?: ControlBinding;
   action?: ContextualActionBinding | null;
+  acknowledgement?: string | null;
   fallbacks?: ControlBinding[];
 }
 
@@ -63,6 +65,19 @@ export function defaultControlHandoff(
     controlsEnabled: true,
     movement: locomotion ? { binding: "W A S D", label: "Move", modality: "keyboard-mouse" } : undefined,
     look: locomotion ? { binding: "Mouse", label: "Look", modality: "keyboard-mouse" } : undefined,
+  };
+}
+
+/** #52 owns branch selection and copy. The HUD only combines its typed output
+ * with #37's live renderer availability; it never derives branch context. */
+export function withBranchPresentation(
+  controls: ControlHandoffDetail,
+  branch: BranchPresentationState
+): ControlHandoffDetail {
+  return {
+    ...controls,
+    action: branch.action,
+    acknowledgement: branch.acknowledgement,
   };
 }
 
@@ -124,6 +139,7 @@ export class InstructionHudModel {
     }
 
     const action = controls.action?.usable ? controls.action : null;
+    const contextualGuidance = controls.acknowledgement?.trim() || this.guidance;
     const baseBindings = [controls.movement, controls.look, ...(controls.fallbacks ?? [])]
       .filter((binding): binding is ControlBinding => !!binding);
 
@@ -132,16 +148,16 @@ export class InstructionHudModel {
         visible: true,
         reason: "action",
         bindings: [action],
-        guidance: "",
+        guidance: contextualGuidance,
         live: "polite",
       };
     }
-    if (this.guidance) {
+    if (contextualGuidance) {
       return {
         visible: true,
         reason: "guidance",
         bindings: baseBindings,
-        guidance: this.guidance,
+        guidance: contextualGuidance,
         live: "polite",
       };
     }
@@ -186,12 +202,18 @@ export function instructionHudMarkup(): string {
 
 export function controlAnnouncement(snapshot: InstructionHudSnapshot): string {
   if (!snapshot.visible || snapshot.live === "off") return "";
-  if (snapshot.guidance) return `Instruction. ${snapshot.guidance}`;
   const bindings = snapshot.bindings
     .map((binding) => `${binding.binding} — ${binding.label}`)
     .join(". ");
+  if (snapshot.reason === "action") {
+    return [
+      snapshot.guidance ? `Instruction. ${snapshot.guidance}` : "",
+      bindings ? `Action available. ${bindings}.` : "",
+    ].filter(Boolean).join(" ");
+  }
+  if (snapshot.guidance) return `Instruction. ${snapshot.guidance}`;
   return bindings
-    ? `${snapshot.reason === "action" ? "Action available" : "Controls reminder"}. ${bindings}.`
+    ? `Controls reminder. ${bindings}.`
     : "";
 }
 

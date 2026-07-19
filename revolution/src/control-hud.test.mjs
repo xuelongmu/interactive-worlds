@@ -5,7 +5,13 @@ import {
   defaultControlHandoff,
   instructionHudMarkup,
   InstructionHudModel,
+  withBranchPresentation,
 } from "./control-hud.ts";
+import {
+  createBranchState,
+  getBranchPresentation,
+  selectDelawareDuty,
+} from "./branch-state.ts";
 
 test("Witness and Participant defaults accurately name WASD and mouse look", () => {
   for (const renderer of ["splat", "worldmodel"]) {
@@ -101,4 +107,48 @@ test("paused or disabled input is not credited as demonstrated", () => {
   model.demonstrate("look");
   model.transition({ ...controls, controlsEnabled: true });
   assert.equal(model.snapshot().reason, "early");
+});
+
+test("#52 branch presentation supplies exact actions without leaking into subtitles", () => {
+  const base = defaultControlHandoff("delaware", "worldmodel");
+  const choice = withBranchPresentation(
+    base,
+    getBranchPresentation(createBranchState(), "delaware-pole-choice")
+  );
+  assert.deepEqual(choice.action, {
+    binding: "E",
+    label: "Pole from the bow",
+    usable: true,
+  });
+  assert.equal(choice.acknowledgement, null);
+
+  const outOfRange = withBranchPresentation(
+    { ...base, action: { binding: "E", label: "Interact", usable: true } },
+    getBranchPresentation(createBranchState(), "out-of-range")
+  );
+  assert.equal(outOfRange.action, null);
+});
+
+test("Trenton acknowledgement and usable action share only the instruction layer", () => {
+  const selected = selectDelawareDuty(createBranchState(), "clear-ice");
+  const controls = withBranchPresentation(
+    defaultControlHandoff("trenton", "worldmodel"),
+    getBranchPresentation(selected, "trenton-duty-callback")
+  );
+  const model = new InstructionHudModel();
+  model.transition(controls);
+  const snapshot = model.snapshot();
+
+  assert.equal(snapshot.reason, "action");
+  assert.equal(snapshot.guidance, "At the crossing, you chose to clear ice from the hull.");
+  assert.deepEqual(snapshot.bindings, [{
+    binding: "E",
+    label: "Clear the gun path",
+    usable: true,
+  }]);
+  assert.equal(
+    controlAnnouncement(snapshot),
+    "Instruction. At the crossing, you chose to clear ice from the hull. " +
+      "Action available. E — Clear the gun path."
+  );
 });
