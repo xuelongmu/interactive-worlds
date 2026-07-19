@@ -1,7 +1,9 @@
 import type {
+  BarkDef,
   ControlHandoffDetail,
   Cue,
   EngineEvent,
+  ListenerPose,
   RuntimePauseDetail,
   SceneManifest,
 } from "./types";
@@ -39,6 +41,7 @@ interface Runner {
   captureFrame?(): Promise<Blob | null>;
   /** Canonical action/acknowledgement for the active branch interaction. */
   getBranchPresentation?(): BranchPresentationState;
+  getAudioListenerPose?(): ListenerPose;
 }
 
 export type DirectorExitTarget = "title" | "chapters" | "settings";
@@ -326,7 +329,11 @@ export class Director {
       });
       this.cueEngine = cueEngine;
       this.updateTimer = window.setInterval(() => {
-        if (!this.paused) cueEngine.update(0.1);
+        if (!this.paused) {
+          cueEngine.update(0.1);
+          const pose = this.runner?.getAudioListenerPose?.();
+          if (pose) this.audio.setListenerPose(pose);
+        }
       }, 100);
 
       if (manifest.audio.ambience?.length) void this.audio.playAmbience(manifest.audio.ambience);
@@ -721,6 +728,7 @@ export class Director {
           if (!value) void this.canvasHost.requestPointerLock();
         },
         captureFrame: () => scene.captureFrame(),
+        getAudioListenerPose: () => scene.getAudioListenerPose(),
       };
     });
   }
@@ -897,12 +905,24 @@ export class Director {
 
   /** Repeatable diegetic bark pool (mariner calls across the water):
    *  a random bark every 18–35 s, no subtitle, no ducking — texture. */
-  private startBarks(urls: string[]) {
+  private startBarks(barks: (string | BarkDef)[]) {
     const schedule = () => {
+      const selected = barks[Math.floor(Math.random() * barks.length)];
+      const bark = typeof selected === "string" ? { url: selected } : selected;
+      const [minimum, maximum] = bark.intervalSeconds ?? [18, 35];
       this.sceneTimers.schedule(() => {
-        void this.audio.playOneShot(urls[Math.floor(Math.random() * urls.length)], "diegetic");
+        void this.audio.playOneShot(
+          bark.url,
+          "diegetic",
+          bark.position ? {
+            position: bark.position,
+            refDistance: bark.refDistance,
+            maxDistance: bark.maxDistance,
+            rolloffFactor: bark.rolloffFactor,
+          } : undefined
+        );
         schedule();
-      }, 18_000 + Math.random() * 17_000);
+      }, (minimum + Math.random() * (maximum - minimum)) * 1000);
     };
     schedule();
   }

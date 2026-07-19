@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   CANDIDATES,
@@ -144,4 +145,35 @@ test("review HTML is neutral, playable, and exposes exact provenance", () => {
     assert.match(html, new RegExp(`takes/${candidate.id}\\.mp3`));
   }
   assert.doesNotMatch(html, /recommended|approved voice|selected voice/i);
+});
+
+test("director selection preserves the approved exact takes and runtime handoff", () => {
+  const selection = JSON.parse(readFileSync(
+    new URL("../artifacts/casting-round-two/selection.json", import.meta.url),
+    "utf8"
+  ));
+  assert.equal(selection.approvalStatus, "director-approved");
+  assert.equal(
+    selection.decision,
+    "https://github.com/xuelongmu/interactive-worlds/issues/27#issuecomment-5017168767"
+  );
+
+  const expected = [
+    ["DRILLMASTER", "drillmaster-a-blake", "/assets/audio/vo/VAL-DRILLMASTER.mp3"],
+    ["OFFICER", "officer-c-callum", "/assets/audio/vo/YOR-041.officer.mp3"],
+  ];
+  for (const [speaker, candidateId, cdnPath] of expected) {
+    const role = selection.roles.find((item) => item.speaker === speaker);
+    const candidate = CANDIDATES.find(({ id }) => id === candidateId);
+    const audition = JSON.parse(readFileSync(
+      new URL("../artifacts/casting-round-two/manifest.json", import.meta.url),
+      "utf8"
+    )).roles.flatMap((item) => item.candidates).find(({ id }) => id === candidateId);
+    assert.equal(role.voiceId, candidate.voiceId);
+    assert.equal(role.sha256, audition.sha256);
+    assert.equal(role.bytes, audition.bytes);
+    assert.equal(role.durationSeconds, audition.durationSeconds);
+    assert.equal(role.cdnPath, cdnPath);
+    assert.match(role.provenance, /byte-for-byte.*no regeneration/i);
+  }
 });

@@ -1,8 +1,24 @@
 # Casting round two — director audition packet
 
-Status: **six exact takes generated; no voice selected and no approval
-claimed**. The DRILLMASTER and OFFICER lines below are proposed additions in
-the director's async-veto window. This packet does not edit
+## Director selection
+
+The director's final choices are recorded in `selection.json` and in
+[issue comment 5017168767](https://github.com/xuelongmu/interactive-worlds/issues/27#issuecomment-5017168767):
+
+- DRILLMASTER: A — Commander Blake, reused byte-for-byte as
+  `/assets/audio/vo/VAL-DRILLMASTER.mp3`.
+- OFFICER: C — Callum, reused byte-for-byte as
+  `/assets/audio/vo/YOR-041.officer.mp3`.
+
+The neutral audition manifest and review page below remain the immutable record
+of the pre-selection packet. No take was regenerated or processed for runtime;
+`selection.json` records the exact source/runtime filenames, voice ids, request
+settings, durations, byte counts, SHA-256 hashes, provenance, and integration
+notes.
+
+Packet status at generation time: **six exact takes generated; no voice
+selected and no approval claimed**. The DRILLMASTER and OFFICER lines below
+were proposed additions in the director's async-veto window. This packet did not edit
 `docs/narration-scripts.md`, add either role to the runtime `CAST`, or wire
 audio into Valley Forge or Yorktown.
 

@@ -66,3 +66,54 @@ describe("AudioEngine narration contract", () => {
     expect(ambienceGain).not.toHaveBeenCalled();
   });
 });
+
+describe("AudioEngine positional diegetic playback", () => {
+  it("routes a positioned one-shot through an HRTF panner", async () => {
+    const source = {
+      buffer: null as AudioBuffer | null,
+      connect: vi.fn(),
+      onended: null as (() => void) | null,
+      start: vi.fn(),
+    };
+    const panner = {
+      connect: vi.fn(),
+      panningModel: "equalpower",
+      distanceModel: "linear",
+      refDistance: 1,
+      maxDistance: 10_000,
+      rolloffFactor: 1,
+      positionX: { value: 0 },
+      positionY: { value: 0 },
+      positionZ: { value: 0 },
+    };
+    const diegetic = {};
+    const engine = new AudioEngine() as any;
+    engine.ctx = {
+      createBufferSource: () => source,
+      createPanner: () => panner,
+    };
+    engine.buses = new Map([["diegetic", diegetic]]);
+    engine.load = vi.fn().mockResolvedValue({ duration: 1 });
+
+    await engine.playOneShot("/drill.mp3", "diegetic", {
+      position: [10, 1.7, -42],
+      refDistance: 8,
+      maxDistance: 80,
+      rolloffFactor: 1.3,
+    });
+
+    expect(panner).toMatchObject({
+      panningModel: "HRTF",
+      distanceModel: "inverse",
+      refDistance: 8,
+      maxDistance: 80,
+      rolloffFactor: 1.3,
+      positionX: { value: 10 },
+      positionY: { value: 1.7 },
+      positionZ: { value: -42 },
+    });
+    expect(source.connect).toHaveBeenCalledWith(panner);
+    expect(panner.connect).toHaveBeenCalledWith(diegetic);
+    expect(source.start).toHaveBeenCalledOnce();
+  });
+});

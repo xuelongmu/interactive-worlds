@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
-import type { EngineEvent, SceneManifest, ZoneDef } from "../engine/types";
+import type { EngineEvent, ListenerPose, SceneManifest, ZoneDef } from "../engine/types";
 import { bindPointerLockClick } from "../engine/pointer-lock";
 
 export interface SplatSceneOptions {
@@ -232,6 +232,16 @@ export class SplatScene {
   }
 
   get position() { return this.camera.position; }
+
+  getAudioListenerPose(): ListenerPose {
+    const forward = this.camera.getWorldDirection(new THREE.Vector3());
+    const up = this.camera.up.clone().applyQuaternion(this.camera.quaternion);
+    return {
+      position: this.camera.position.toArray() as [number, number, number],
+      forward: forward.toArray() as [number, number, number],
+      up: up.toArray() as [number, number, number],
+    };
+  }
 
   /** True while any movement key is held — lets the director detect a key
    *  kept pressed through a controls-locked stretch (no new keydown fires). */

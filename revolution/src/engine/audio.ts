@@ -5,6 +5,13 @@
 
 export type BusName = "narration" | "diegetic" | "ambience" | "music";
 
+export interface SpatialAudioOptions {
+  position: [number, number, number];
+  refDistance?: number;
+  maxDistance?: number;
+  rolloffFactor?: number;
+}
+
 const DUCK_DB = -6;
 const dbToGain = (db: number) => Math.pow(10, db / 20);
 
@@ -34,6 +41,27 @@ export class AudioEngine {
     }
     if (this.ctx.state === "suspended" && !this.paused) void this.ctx.resume();
     return this.ctx;
+  }
+
+  /** Keep Web Audio's listener aligned with the active three.js camera so
+   * scene-local diegetic sources retain direction and distance while walking. */
+  setListenerPose(pose: {
+    position: [number, number, number];
+    forward: [number, number, number];
+    up: [number, number, number];
+  }) {
+    const ctx = this.ensure();
+    const listener = ctx.listener;
+    const at = ctx.currentTime;
+    listener.positionX.setValueAtTime(pose.position[0], at);
+    listener.positionY.setValueAtTime(pose.position[1], at);
+    listener.positionZ.setValueAtTime(pose.position[2], at);
+    listener.forwardX.setValueAtTime(pose.forward[0], at);
+    listener.forwardY.setValueAtTime(pose.forward[1], at);
+    listener.forwardZ.setValueAtTime(pose.forward[2], at);
+    listener.upX.setValueAtTime(pose.up[0], at);
+    listener.upY.setValueAtTime(pose.up[1], at);
+    listener.upZ.setValueAtTime(pose.up[2], at);
   }
 
   /** Suspend the shared context so narration, diegetic sound, ambience, and
@@ -113,13 +141,31 @@ export class AudioEngine {
   }
 
   /** Fire-and-forget playback (barks, stingers): no subtitle, no ducking. */
-  async playOneShot(url: string, bus: BusName = "diegetic") {
+  async playOneShot(
+    url: string,
+    bus: BusName = "diegetic",
+    spatial?: SpatialAudioOptions
+  ) {
     const buffer = await this.load(url);
     if (!buffer || this.disposed) return;
     const ctx = this.ensure();
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    source.connect(this.buses.get(bus)!);
+    if (spatial) {
+      const panner = ctx.createPanner();
+      panner.panningModel = "HRTF";
+      panner.distanceModel = "inverse";
+      panner.refDistance = spatial.refDistance ?? 6;
+      panner.maxDistance = spatial.maxDistance ?? 80;
+      panner.rolloffFactor = spatial.rolloffFactor ?? 1;
+      panner.positionX.value = spatial.position[0];
+      panner.positionY.value = spatial.position[1];
+      panner.positionZ.value = spatial.position[2];
+      source.connect(panner);
+      panner.connect(this.buses.get(bus)!);
+    } else {
+      source.connect(this.buses.get(bus)!);
+    }
     this.activeSources.add(source);
     source.onended = () => this.activeSources.delete(source);
     source.start();
