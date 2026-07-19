@@ -307,12 +307,15 @@ export class WorldModelSession {
     const res = await fetch(url, { method: "POST" });
     if (!res.ok) {
       if (res.status === 429) {
-        const retryAfter = formatSessionRetryAfter(res.headers.get("retry-after"));
-        throw new Error(
-          retryAfter
-            ? `Live session limit reached. Try again in about ${retryAfter}.`
-            : "Live session limit reached. Please try again later."
-        );
+        const error = await res.json().catch(() => null) as { code?: unknown } | null;
+        if (error?.code === "session_capacity_reached") {
+          const retryAfter = formatSessionRetryAfter(res.headers.get("retry-after"));
+          throw new Error(
+            retryAfter
+              ? `Live session limit reached. Try again in about ${retryAfter}.`
+              : "Live session limit reached. Please try again later."
+          );
+        }
       }
       throw new Error(`token mint failed (${res.status})`);
     }

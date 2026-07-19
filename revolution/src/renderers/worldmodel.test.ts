@@ -190,6 +190,15 @@ describe("WorldModelSession lifecycle", () => {
     );
   });
 
+  it("does not label an unrelated intermediary 429 as session capacity", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(
+      { error: "edge rate limit", code: "edge_rate_limited" },
+      { status: 429, headers: { "retry-after": "60" } }
+    )));
+
+    await expect(WorldModelSession.mintJwt()).rejects.toThrow("token mint failed (429)");
+  });
+
   it("formats client-window and daily-limit retry durations", () => {
     expect(formatSessionRetryAfter("45")).toBe("45 seconds");
     expect(formatSessionRetryAfter("600")).toBe("10 minutes");
