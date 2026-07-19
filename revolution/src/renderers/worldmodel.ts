@@ -112,9 +112,10 @@ export function isWorldModelActionKey(code: string): boolean {
 export function canDispatchWorldModelAction(
   code: string,
   presented: boolean,
-  locked: boolean
+  locked: boolean,
+  repeated = false
 ): boolean {
-  return isWorldModelActionKey(code) && presented && !locked;
+  return isWorldModelActionKey(code) && presented && !locked && !repeated;
 }
 
 export function isGroundedWorldModelEvent(name: string): boolean {
@@ -209,6 +210,7 @@ export class WorldModelSession {
     if (!this.hooks.referenceImage) throw new Error("connect() requires a reference image");
     await this.prepare(this.hooks.referenceImage, this.hooks.prompt ?? "");
     await this.begin();
+    await this.setInputEnabled(true);
   }
 
   attach(options: Pick<
@@ -229,6 +231,7 @@ export class WorldModelSession {
     const operation = ++this.operation;
     this.transition("connecting");
     this.installPermanentListeners();
+    if (typeof window !== "undefined") window.addEventListener("pagehide", this.onPageHide);
     this.transportPromise = this.runTransportPreparation(operation);
     return this.transportPromise;
   }
@@ -377,9 +380,10 @@ export class WorldModelSession {
       });
       this.transition("runtime-ready");
       this.hooks.onStatus?.("runtime ready");
-      if (typeof window !== "undefined") window.addEventListener("pagehide", this.onPageHide);
     } catch (error) {
-      if (operation !== this.operation) void this.model.disconnect().catch(() => undefined);
+      if (operation !== this.operation && !this.disconnectPromise) {
+        void this.model.disconnect().catch(() => undefined);
+      }
       this.fail(operation);
       throw error;
     }
@@ -687,22 +691,25 @@ export class WorldModelSession {
    * coordinator DELETE with keepalive, then also start normal SDK cleanup. */
   private onPageHide = (): void => {
     const sessionId = this.model.getSessionId();
-    if (!sessionId || !this.jwt || this.isTerminal()) return;
+    if (this.isTerminal()) return;
     const jwt = this.jwt;
     ++this.operation;
     this.cancelPending(new Error("page hidden"));
+    this.clearTimers();
     this.removePermanentListeners();
     this.transition("disposed");
-    void fetch(`${DEFAULT_BASE_URL}/sessions/${encodeURIComponent(sessionId)}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${jwt}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ reason: "pagehide" }),
-      keepalive: true,
-    }).catch(() => undefined);
-    void this.model.disconnect().catch(() => undefined);
+    if (sessionId && jwt) {
+      void fetch(`${DEFAULT_BASE_URL}/sessions/${encodeURIComponent(sessionId)}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${jwt}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reason: "pagehide" }),
+        keepalive: true,
+      }).catch(() => undefined);
+    }
+    this.disconnectPromise ??= this.model.disconnect().catch(() => undefined);
   };
 }
 
@@ -1416,7 +1423,7 @@ export function bindWorldModelKeys(
   const down = (event: KeyboardEvent) => {
     if (inFormField(event)) return;
     if (isWorldModelActionKey(event.code)) {
-      if (canDispatchWorldModelAction(event.code, isPresented(), isLocked())) {
+      if (canDispatchWorldModelAction(event.code, isPresented(), isLocked(), event.repeat)) {
         event.preventDefault();
         options.onActivity?.("action");
         options.onAction?.();

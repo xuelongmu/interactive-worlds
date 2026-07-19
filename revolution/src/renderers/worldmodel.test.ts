@@ -160,6 +160,21 @@ describe("WorldModelSession lifecycle", () => {
     expect(session.phase).toBe("streaming");
   });
 
+  it("keeps the legacy cold-start helper interactive", async () => {
+    const model = new FakeModel();
+    const session = new WorldModelSession({
+      referenceImage: new Blob(),
+      prompt: "scene",
+      mintJwt: async () => "jwt",
+      timeouts: { mint: 100, connect: 100, ready: 100, upload: 100, conditions: 100, begin: 100 },
+    }, model as unknown as LingbotWorld2Model);
+
+    await session.connect();
+    await session.setMovement("forward", "idle");
+
+    expect(model.calls).toContain("move-long:forward");
+  });
+
   it("cleans condition listeners and fails on a bounded timeout", async () => {
     vi.useFakeTimers();
     const model = new FakeModel();
@@ -288,6 +303,31 @@ describe("WorldModelSession lifecycle", () => {
       })
     );
     expect(model.calls).toContain("disconnect");
+  });
+
+  it("registers pagehide before minting and cancels in-flight preparation", async () => {
+    let resolveMint = (_jwt: string) => {};
+    const mint = new Promise<string>((resolve) => { resolveMint = resolve; });
+    const addEventListener = vi.fn();
+    vi.stubGlobal("window", {
+      setTimeout,
+      addEventListener,
+      removeEventListener: vi.fn(),
+    });
+    const model = new FakeModel();
+    const session = new WorldModelSession({
+      mintJwt: () => mint,
+      timeouts: { mint: 100, connect: 100, ready: 100 },
+    }, model as unknown as LingbotWorld2Model);
+
+    const preparation = session.prepareTransport();
+    expect(addEventListener).toHaveBeenCalledWith("pagehide", expect.any(Function));
+    (session as any).onPageHide();
+    resolveMint("jwt");
+
+    await expect(preparation).rejects.toThrow("stale or disposed");
+    expect(session.phase).toBe("disposed");
+    expect(model.calls.filter((call) => call === "disconnect")).toHaveLength(1);
   });
 });
 
@@ -477,6 +517,7 @@ describe("presentation and rollover gates", () => {
     expect(canDispatchWorldModelAction("KeyE", false, false)).toBe(false);
     expect(canDispatchWorldModelAction("KeyE", true, true)).toBe(false);
     expect(canDispatchWorldModelAction("KeyE", true, false)).toBe(true);
+    expect(canDispatchWorldModelAction("KeyE", true, false, true)).toBe(false);
   });
 });
 
