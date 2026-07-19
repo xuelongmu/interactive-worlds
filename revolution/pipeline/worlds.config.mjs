@@ -30,8 +30,8 @@ export const worlds = [
   },
   {
     scene: "valley-forge",
-    // 185eea37-2d59-4f27-8745-cc29ba29df2a generated but never published assets
-    worldId: null,
+    // note: an earlier take (185eea37) generated but never published assets
+    worldId: "25fb6684-20ab-4093-a8b3-890ad9729723",
     image: "public/reference/valley-forge.jpg",
     prompt:
       "A Continental Army winter encampment at Valley Forge, December 1777, at dusk. " +
