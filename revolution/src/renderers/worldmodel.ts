@@ -28,6 +28,23 @@ export function formatWorldModelError(error: unknown): string {
   return (safe || "unknown connection error").slice(0, 240);
 }
 
+export function formatSessionRetryAfter(value: string | null): string | null {
+  if (!value || !/^\d+$/.test(value)) return null;
+  const seconds = Number(value);
+  if (!Number.isSafeInteger(seconds) || seconds <= 0) return null;
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  if (seconds < 3_600) {
+    const minutes = Math.ceil(seconds / 60);
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  if (seconds < 86_400) {
+    const hours = Math.ceil(seconds / 3_600);
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+  const days = Math.max(1, Math.round(seconds / 86_400));
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
 export type WorldModelTelemetryName =
   | "token-mint"
   | "connect-to-runtime-ready"
@@ -69,7 +86,10 @@ export interface WorldModelSessionOptions {
 }
 
 export function isReactorCapacityErrorStatus(status: string): boolean {
-  return /(?:^|\D)503(?:\D|$)/.test(status);
+  return (
+    /(?:^|\D)503(?:\D|$)/.test(status) ||
+    status.startsWith("Live connection failed: Live session limit reached.")
+  );
 }
 
 interface WorldModelSessionTimeouts {
@@ -345,7 +365,20 @@ export class WorldModelSession {
   ): Promise<string> {
     const url = `/api/session?model=${encodeURIComponent(modelName)}`;
     const res = await fetch(url, { method: "POST" });
-    if (!res.ok) throw new Error(`token mint failed: ${res.status} ${await res.text()}`);
+    if (!res.ok) {
+      if (res.status === 429) {
+        const error = await res.json().catch(() => null) as { code?: unknown } | null;
+        if (error?.code === "session_capacity_reached") {
+          const retryAfter = formatSessionRetryAfter(res.headers.get("retry-after"));
+          throw new Error(
+            retryAfter
+              ? `Live session limit reached. Try again in about ${retryAfter}.`
+              : "Live session limit reached. Please try again later."
+          );
+        }
+      }
+      throw new Error(`token mint failed (${res.status})`);
+    }
     const body = (await res.json()) as { jwt?: string };
     if (!body.jwt) throw new Error("token mint returned no jwt");
     return body.jwt;
