@@ -62,6 +62,9 @@ export interface SceneManifest {
   };
   /** eye height (m) and movement speed (m/s) for walkable scenes */
   locomotion?: { eyeHeight: number; speed: number };
+  /** designed spawn orientation (radians yaw) — Marble worlds often have their
+   *  content behind the capture origin's default view direction */
+  entry?: { yaw?: number };
   zones: ZoneDef[];
   cues: Cue[];
   audio: { ambience?: string[] };

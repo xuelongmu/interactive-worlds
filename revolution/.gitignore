@@ -5,3 +5,4 @@ dist/
 public/assets/
 public/reference/
 pipeline/.*-cache.json
+snapshots/

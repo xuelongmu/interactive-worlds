@@ -4,7 +4,7 @@
 export const worlds = [
   {
     scene: "lexington",
-    worldId: null,
+    worldId: "dc292531-9d06-4f95-851c-0ebc32a3c73b",
     // GPT Image 2 starting frame (pipeline/frames.mjs) — uploaded as the
     // image prompt; the text prompt rides along as guidance.
     image: "public/reference/lexington.jpg",

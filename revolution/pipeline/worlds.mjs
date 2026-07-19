@@ -7,7 +7,7 @@
  *    node pipeline/worlds.mjs lexington       # one scene
  *    node pipeline/worlds.mjs lexington --world-id <id>   # adopt an existing world
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { requireKey, projectRoot, download, pollUntil } from "./lib.mjs";
 import { worlds } from "./worlds.config.mjs";
@@ -94,7 +94,7 @@ async function generateWorld(entry) {
 
   const worldRes = await fetch(`${API}/worlds/${worldId}`, { headers });
   if (!worldRes.ok) throw new Error(`world fetch failed ${worldRes.status}`);
-  const { world } = await worldRes.json();
+  const world = await worldRes.json();
   const splats = world.assets?.splats;
   const spzUrl = splats?.spz_urls?.["500k"] ?? splats?.spz_urls?.full_res;
   if (!spzUrl) throw new Error("world has no spz asset");
@@ -108,6 +108,10 @@ async function generateWorld(entry) {
   }
 
   const meta = splats?.semantics_metadata ?? {};
+  writeFileSync(
+    resolve(projectRoot, `public/assets/worlds/${entry.scene}.meta.json`),
+    JSON.stringify({ worldId, ...meta }, null, 2)
+  );
   console.log(`  scale factor: ${meta.metric_scale_factor ?? "?"} · ground offset: ${meta.ground_plane_offset ?? "?"}`);
 }
 

@@ -36,12 +36,31 @@ export class SplatScene {
   controlsLocked = false;
   onUpdate: (dt: number) => void = () => {};
   splatMesh: SplatMesh | null = null;
+  readonly worldGroup = new THREE.Group();
   private disposed = false;
+
+  /** Shift the world so the collider ground under the origin sits at y=0.
+   *  The world origin is the capture camera at roughly eye height, so cast
+   *  from just above it — casting from the sky hits tree canopy instead. */
+  private alignGroundToOrigin() {
+    if (!this.collider) return;
+    this.worldGroup.updateMatrixWorld(true);
+    this.raycaster.set(new THREE.Vector3(0, 0.5, 0), new THREE.Vector3(0, -1, 0));
+    this.raycaster.far = 100;
+    const hit = this.raycaster.intersectObject(this.collider, false)[0];
+    if (hit) {
+      this.worldGroup.position.y -= hit.point.y;
+      console.info(`[splat] ground aligned (shifted ${(-hit.point.y).toFixed(2)}m)`);
+    } else {
+      console.warn("[splat] no collider ground under origin — leaving world unshifted");
+    }
+  }
 
   constructor(private opts: SplatSceneOptions) {
     const { container, manifest } = opts;
     this.eyeHeight = manifest.locomotion?.eyeHeight ?? 1.65;
     this.speed = manifest.locomotion?.speed ?? 1.4; // slow, deliberate walk
+    this.yaw = manifest.entry?.yaw ?? 0;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -56,6 +75,7 @@ export class SplatScene {
 
     const spark = new SparkRenderer({ renderer: this.renderer });
     this.scene.add(spark);
+    this.scene.add(this.worldGroup);
 
     const splatUrl = opts.splatUrl ?? manifest.assets.splat;
     if (splatUrl) {
@@ -65,7 +85,18 @@ export class SplatScene {
       });
       // Splat files are Y-down; flip 180° around X into three.js space.
       this.splatMesh.quaternion.set(1, 0, 0, 0);
-      this.scene.add(this.splatMesh);
+      this.worldGroup.add(this.splatMesh);
+      // Marble worlds ship semantics metadata alongside (written by
+      // pipeline:worlds): metric_scale_factor converts splat units → meters.
+      void fetch(splatUrl.replace(/\.spz$/, ".meta.json"))
+        .then((res) => (res.ok && !(res.headers.get("content-type") ?? "").includes("text/html") ? res.json() : null))
+        .then((meta: { metric_scale_factor?: number } | null) => {
+          if (meta?.metric_scale_factor) {
+            this.worldGroup.scale.setScalar(meta.metric_scale_factor);
+            console.info(`[splat] metric scale ×${meta.metric_scale_factor.toFixed(2)}`);
+          }
+        })
+        .catch(() => undefined);
     }
 
     const colliderUrl = opts.colliderUrl ?? manifest.assets.collider;
@@ -74,10 +105,14 @@ export class SplatScene {
         gltf.scene.traverse((node) => {
           if (this.collider === null && node instanceof THREE.Mesh) {
             node.visible = false;
+            (node.material as THREE.Material & { wireframe?: boolean }).wireframe = true;
             this.collider = node;
           }
         });
-        this.scene.add(gltf.scene);
+        // Collider shares the splat's source frame — same flip.
+        gltf.scene.quaternion.set(1, 0, 0, 0);
+        this.worldGroup.add(gltf.scene);
+        this.alignGroundToOrigin();
       });
     }
 
@@ -117,7 +152,10 @@ export class SplatScene {
   };
   private onKeyDown = (e: KeyboardEvent) => {
     this.keys.add(e.code);
-    if (e.code === "KeyZ") this.debugGroup.visible = !this.debugGroup.visible;
+    if (e.code === "KeyZ") {
+      this.debugGroup.visible = !this.debugGroup.visible;
+      if (this.collider) this.collider.visible = this.debugGroup.visible;
+    }
   };
   private onKeyUp = (e: KeyboardEvent) => this.keys.delete(e.code);
   private onResize = () => {
