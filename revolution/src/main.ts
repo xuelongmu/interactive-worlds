@@ -17,8 +17,15 @@ import {
   hasChapterDevOverride,
   isChapterUnlocked,
   splitChapterHeading,
+  enhancePausePresentation,
   type ShellView,
 } from "./shell";
+import {
+  bridgeDirectorChrome,
+  defaultControlHandoff,
+  mountInstructionHud,
+  type InstructionHudController,
+} from "./control-hud";
 
 installSessionChallenge();
 claimAdapterAmbience(scenes);
@@ -27,6 +34,8 @@ const app = document.getElementById("app")!;
 let director: Director | null = null;
 let soundDesign: SoundDesignController | null = null;
 let stopNarrationObservation: (() => void) | null = null;
+let instructionHud: InstructionHudController | null = null;
+let disconnectChromeBridge: (() => void) | null = null;
 const reviewMode = import.meta.env.DEV && new URLSearchParams(window.location.search).get("review") === "1";
 
 async function disposeSoundDesign(): Promise<void> {
@@ -40,7 +49,12 @@ async function disposeSoundDesign(): Promise<void> {
 async function play(sceneId: string, newStory = false) {
   if (director) await director.dispose();
   await disposeSoundDesign();
+  disconnectChromeBridge?.();
+  disconnectChromeBridge = null;
+  instructionHud?.dispose();
+  instructionHud = null;
   if (newStory) resetStoryProgress();
+  const scene = scenes.find((candidate) => candidate.id === sceneId);
   const nextSoundDesign = new SoundDesignController(new BrowserSoundPlayback());
   const soundHooks = createSoundDirectorHooks(nextSoundDesign);
   const nextDirector = new Director({
@@ -48,6 +62,10 @@ async function play(sceneId: string, newStory = false) {
     reviewMode,
     ...soundHooks,
     onExit: (target = "title") => {
+      disconnectChromeBridge?.();
+      disconnectChromeBridge = null;
+      instructionHud?.dispose();
+      instructionHud = null;
       director = null;
       void disposeSoundDesign();
       renderShell(target);
@@ -57,7 +75,14 @@ async function play(sceneId: string, newStory = false) {
   soundDesign = nextSoundDesign;
   stopNarrationObservation = observeNarrationDucking(app, nextSoundDesign);
   nextSoundDesign.ensure();
+  const stage = app.querySelector<HTMLElement>(".stage")!;
+  instructionHud = mountInstructionHud(stage);
+  disconnectChromeBridge = bridgeDirectorChrome(stage, instructionHud);
+  if (scene) enhancePausePresentation(stage, splitChapterHeading(scene.title));
   await nextDirector.start(sceneId);
+  if (scene && instructionHud) {
+    instructionHud.update(defaultControlHandoff(scene.id, scene.renderer));
+  }
 }
 
 function shellHeader(backTarget?: ShellView) {

@@ -5,6 +5,7 @@ import {
   chapterAccessibleName,
   getTitleAction,
   hasChapterDevOverride,
+  isPauseToggleCode,
   isChapterUnlocked,
   splitChapterHeading,
 } from "./shell.ts";
@@ -70,4 +71,11 @@ test("an in-progress replay wins over Begin Again even when every chapter was co
     scenes,
     state({ completedScenes: ["tea", "lex", "declaration"] })
   ), "Begin Again");
+});
+
+test("Escape and P are the only pause toggle shortcuts", () => {
+  assert.equal(isPauseToggleCode("Escape"), true);
+  assert.equal(isPauseToggleCode("KeyP"), true);
+  assert.equal(isPauseToggleCode("Space"), false);
+  assert.equal(isPauseToggleCode("KeyE"), false);
 });
