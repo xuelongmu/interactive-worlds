@@ -35,3 +35,10 @@ test("--only rejects an unknown line before credential resolution", () => {
   assert.match(result.stderr, /spoken line id not found: TEA-999\.bosun/);
   assert.doesNotMatch(result.stdout + result.stderr, /ELEVENLABS_API_KEY/);
 });
+
+test("a bare line id is rejected instead of starting a full paid run", () => {
+  const result = run("TEA-050.bosun");
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /unknown argument\(s\): TEA-050\.bosun/);
+  assert.doesNotMatch(result.stdout + result.stderr, /ELEVENLABS_API_KEY/);
+});

@@ -55,8 +55,9 @@ const only = onlyIndex >= 0 ? args[onlyIndex + 1] : null;
 if (onlyIndex >= 0 && (!only || only.startsWith("--"))) {
   throw new Error("--only requires an exact spoken line id, for example TEA-050.bosun");
 }
+const onlyValueIndex = onlyIndex >= 0 ? onlyIndex + 1 : -1;
 const unknownArgs = args.filter((arg, index) =>
-  arg !== "--dry-run" && arg !== "--only" && index !== onlyIndex + 1
+  arg !== "--dry-run" && arg !== "--only" && index !== onlyValueIndex
 );
 if (unknownArgs.length) throw new Error(`unknown argument(s): ${unknownArgs.join(", ")}`);
 
