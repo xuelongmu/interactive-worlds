@@ -72,6 +72,11 @@ test("all 14 immutable baseline signatures match the preserved trusted cache", (
 });
 
 test("artifact handoff covers the whole plan with codec, loudness, and exact hashes", () => {
+  assert.equal(artifactManifest.integrationAuthorization.status, "provisional");
+  assert.equal(artifactManifest.integrationAuthorization.authorizedBy, "director");
+  assert.equal(artifactManifest.integrationAuthorization.earReviewPerformed, false);
+  assert.equal(artifactManifest.integrationAuthorization.postMergePlaytest, "pending");
+  assert.match(artifactManifest.reviewStatus, /no ear review recorded/);
   assert.equal(artifactManifest.artifacts.length, plan.assets.length);
   assert.deepEqual(
     artifactManifest.artifacts.map((artifact) => artifact.file).sort(),

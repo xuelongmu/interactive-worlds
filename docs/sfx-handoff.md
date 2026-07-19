@@ -1,8 +1,14 @@
 # Sound-design artifact handoff
 
 The pull request carries code and metadata only. The MP3 bytes are ignored
-media and must be delivered from the external roots recorded in
+media delivered through the external roots recorded in
 `revolution/pipeline/sfx-artifacts.json`.
+
+The director authorized these seven technically audited candidates for
+**provisional integration and merge** on 2026-07-19, with feedback deferred to
+the deployed playtest. This is not an ear-review approval: no human audition
+export was received, no candidate is described as aurally approved, and the
+post-merge playtest remains pending.
 
 ## Delivery roots
 
@@ -12,6 +18,12 @@ media and must be delivered from the external roots recorded in
   `C:/Users/xuelong/.ao/data/worktrees/interactive-worlds/interactive-worlds-19/revolution/.artifacts/issue-43/audio`
 - Canonical destination, preserving each `amb/...` or `sfx/...` relative path:
   `revolution/public/assets/audio`
+- Shared canonical delivery root:
+  `C:/Dev/interactive-worlds/revolution/public/assets/audio`
+
+The exact seven delta bytes were copied to both canonical roots after source
+hash verification. The destination bytes were then re-hashed against the
+manifest. No generation or reroll occurred during delivery.
 
 Before copying, compare SHA-256 against the manifest. Never overwrite a
 canonical file with a different hash without a newly authorized sound cue and
@@ -30,8 +42,9 @@ targeted mode and reported all seven as cached with zero paid requests.
 - Spectrogram review of the seven deltas found the expected broadband/impulse
   structures and no obvious sustained score-like tonal bed. This is not a
   substitute for listening: voice, score, and Redoubt-10 gunshot leakage remain
-  explicit checkboxes in `pipeline/sfx-audition.html` and are not marked
-  approved until a listener records that judgment.
+  explicit checkboxes in `pipeline/sfx-audition.html`. Provisional integration
+  does not mark them approved; a later playtest or listener may still reject a
+  candidate and authorize a targeted revision.
 
 Serve the `revolution/` directory over HTTP and open
 `pipeline/sfx-audition.html`. The page groups cues by scene, plays baseline and
