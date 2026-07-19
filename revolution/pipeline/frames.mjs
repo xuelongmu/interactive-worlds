@@ -7,10 +7,11 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { requireKey, projectRoot, loadCache, saveCache, hash } from "./lib.mjs";
 import { visualSourcesFor } from "./visual-sources.mjs";
 
-const CACHE_FILE = "pipeline/.frames-cache.json";
+export const CACHE_FILE = "pipeline/.frames-cache.json";
 const STYLE =
   "Photorealistic, historically accurate late 18th century, cinematic natural light, " +
   "film still, no modern objects, no text, no watermark. Treat supplied archival images " +
@@ -129,43 +130,53 @@ export const frames = [
   },
 ];
 
-const key = requireKey("FAL_KEY", "frame generation");
-const only = process.argv[2];
-const cache = loadCache(CACHE_FILE);
-const outDir = resolve(projectRoot, "public", "reference");
-mkdirSync(outDir, { recursive: true });
-
-for (const frame of frames) {
-  if (only && !frame.file.startsWith(only)) continue;
+export function frameGenerationSignature(frame) {
   const historicalSources = visualSourcesFor(frame.file);
-  const signature = hash({ frame, historicalSources });
-  if (cache[frame.file] === signature) { console.log(`${frame.file}: cached`); continue; }
-  console.log(`gpt-image-2 ${frame.file} (${frame.width}×${frame.height})…`);
-  const imageUrls = historicalSources.map((source) => source.imageUrl);
-  const endpoint = imageUrls.length
-    ? "https://fal.run/openai/gpt-image-2/edit"
-    : "https://fal.run/openai/gpt-image-2";
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { Authorization: `Key ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      prompt: frame.prompt,
-      image_size: { width: frame.width, height: frame.height },
-      quality: "high",
-      num_images: 1,
-      output_format: "jpeg",
-      ...(imageUrls.length ? { image_urls: imageUrls } : {}),
-    }),
-  });
-  if (!res.ok) throw new Error(`fal failed for ${frame.file}: ${res.status} ${await res.text()}`);
-  const body = await res.json();
-  const url = body.images?.[0]?.url;
-  if (!url) throw new Error(`no image url in fal response: ${JSON.stringify(body).slice(0, 300)}`);
-  const image = await fetch(url);
-  if (!image.ok) throw new Error(`image download failed for ${frame.file}: ${image.status}`);
-  writeFileSync(resolve(outDir, frame.file), Buffer.from(await image.arrayBuffer()));
-  console.log(`  ✓ public/reference/${frame.file}`);
-  cache[frame.file] = signature;
-  saveCache(CACHE_FILE, cache);
+  return hash({ frame, historicalSources });
 }
-console.log("done");
+
+export async function generateFrames(only = process.argv[2]) {
+  const key = requireKey("FAL_KEY", "frame generation");
+  const cache = loadCache(CACHE_FILE);
+  const outDir = resolve(projectRoot, "public", "reference");
+  mkdirSync(outDir, { recursive: true });
+
+  for (const frame of frames) {
+    if (only && !frame.file.startsWith(only)) continue;
+    const historicalSources = visualSourcesFor(frame.file);
+    const signature = frameGenerationSignature(frame);
+    if (cache[frame.file] === signature) { console.log(`${frame.file}: cached`); continue; }
+    console.log(`gpt-image-2 ${frame.file} (${frame.width}×${frame.height})…`);
+    const imageUrls = historicalSources.map((source) => source.imageUrl);
+    const endpoint = imageUrls.length
+      ? "https://fal.run/openai/gpt-image-2/edit"
+      : "https://fal.run/openai/gpt-image-2";
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { Authorization: `Key ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: frame.prompt,
+        image_size: { width: frame.width, height: frame.height },
+        quality: "high",
+        num_images: 1,
+        output_format: "jpeg",
+        ...(imageUrls.length ? { image_urls: imageUrls } : {}),
+      }),
+    });
+    if (!res.ok) throw new Error(`fal failed for ${frame.file}: ${res.status} ${await res.text()}`);
+    const body = await res.json();
+    const url = body.images?.[0]?.url;
+    if (!url) throw new Error(`no image url in fal response: ${JSON.stringify(body).slice(0, 300)}`);
+    const image = await fetch(url);
+    if (!image.ok) throw new Error(`image download failed for ${frame.file}: ${image.status}`);
+    writeFileSync(resolve(outDir, frame.file), Buffer.from(await image.arrayBuffer()));
+    console.log(`  ✓ public/reference/${frame.file}`);
+    cache[frame.file] = signature;
+    saveCache(CACHE_FILE, cache);
+  }
+  console.log("done");
+}
+
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  await generateFrames();
+}

@@ -1,0 +1,37 @@
+import { basename } from "node:path";
+import { frameGenerationSignature, frames } from "./frames.mjs";
+import { hash } from "./lib.mjs";
+
+export const WORLD_MODEL = "marble-1.1-plus";
+
+/** Hash every committed input that identifies a Marble take. */
+export function worldGenerationSignature(entry, frameDefinitions = frames) {
+  const imageFile = entry.image ? basename(entry.image) : null;
+  const conditioningFrame = imageFile
+    ? frameDefinitions.find((frame) => frame.file === imageFile)
+    : null;
+  if (imageFile && !conditioningFrame) {
+    throw new Error(`${entry.scene}: ${imageFile} is missing from the frame pipeline`);
+  }
+  return hash({
+    model: WORLD_MODEL,
+    image: entry.image ?? null,
+    imageSignature: conditioningFrame ? frameGenerationSignature(conditioningFrame) : null,
+    prompt: entry.prompt,
+  });
+}
+
+/** A pin is safe only when it was recorded for the current generation inputs. */
+export function reusablePinnedWorldId(entry, signature = worldGenerationSignature(entry)) {
+  if (!entry.worldId || entry.worldSignature !== signature) return null;
+  return entry.worldId;
+}
+
+/** Generated assets are reusable only when their metadata matches current inputs. */
+export function worldAssetCacheMatches(entry, metadata) {
+  if (!metadata?.worldId) return false;
+  const signature = worldGenerationSignature(entry);
+  if (metadata.generationSignature !== signature) return false;
+  const pinnedWorldId = reusablePinnedWorldId(entry, signature);
+  return !pinnedWorldId || metadata.worldId === pinnedWorldId;
+}
