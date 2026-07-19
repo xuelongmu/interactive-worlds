@@ -214,18 +214,12 @@ test("Trenton acknowledgement, objective, and E/F choices share the instruction 
 });
 
 test("Director callback bridge preserves exact control and pause detail", () => {
-  const branch = getBranchPresentation(
-    selectDelawareDuty(createBranchState(), "pole"),
-    "trenton-duty-callback"
-  );
   const detail = {
     sceneId: "trenton",
     renderer: "worldmodel",
     controlsEnabled: true,
     movement: { binding: "WASD", label: "Move" },
     look: { binding: "Mouse", label: "Look" },
-    action: branch.action,
-    acknowledgement: branch.acknowledgement ?? undefined,
     transitionKey: 9,
   };
   const events = [];
@@ -239,7 +233,6 @@ test("Director callback bridge preserves exact control and pause detail", () => 
   assert.equal(publishControlHandoff(detail, target), true);
   assert.equal(events[0].type, "revolution:control-handoff");
   assert.equal(events[0].detail, detail);
-  assert.equal(events[0].detail.action, branch.action);
 
   const pause = { paused: true, canResumePointerInput: true };
   assert.equal(publishPauseState(pause, target), true);
@@ -289,7 +282,10 @@ test("contextual choice input requests one edge and only confirmed latch complet
     { usable: true },
   );
   const requests = [];
-  const arbiter = new ContextualChoiceKeyArbiter((request) => requests.push(request));
+  const arbiter = new ContextualChoiceKeyArbiter((request) => {
+    requests.push(request);
+    return { status: "requested", requestId: request.requestId };
+  });
   const snapshot = choiceSnapshot("tea-party", 4, presentation);
   arbiter.update(snapshot);
 
@@ -338,7 +334,10 @@ test("contextual choice guards typing, modifiers, repeats, readiness, and lifecy
     { usable: true },
   );
   const requests = [];
-  const arbiter = new ContextualChoiceKeyArbiter((request) => requests.push(request));
+  const arbiter = new ContextualChoiceKeyArbiter((request) => {
+    requests.push(request);
+    return { status: "requested", requestId: request.requestId };
+  });
   const ready = choiceSnapshot("saratoga", 8, presentation);
 
   arbiter.update({ ...ready, ready: false });
@@ -375,6 +374,33 @@ test("contextual choice guards typing, modifiers, repeats, readiness, and lifecy
   const afterSceneReset = keyEvent({ code: "KeyE" });
   assert.equal(arbiter.handleKeyDown(afterSceneReset), true);
   assert.equal(requests.length, 4);
+});
+
+test("a rejected request result clears pending without confirming a choice", async () => {
+  const presentation = getBranchPresentation(
+    createBranchState(),
+    "delaware-duty-choice",
+    { usable: true },
+  );
+  const results = ["unavailable", "requested"];
+  const requests = [];
+  const arbiter = new ContextualChoiceKeyArbiter(async (request) => {
+    requests.push(request);
+    const status = results.shift();
+    return { status, requestId: request.requestId };
+  });
+  arbiter.update(choiceSnapshot("delaware", 2, presentation));
+
+  const unavailable = keyEvent({ code: "KeyE" });
+  assert.equal(arbiter.handleKeyDown(unavailable), true);
+  assert.equal(unavailable.wasPrevented(), true);
+  await Promise.resolve();
+  arbiter.handleKeyUp("KeyE");
+
+  const retry = keyEvent({ code: "KeyE" });
+  assert.equal(arbiter.handleKeyDown(retry), true);
+  assert.equal(requests.length, 2);
+  assert.equal(retry.wasPrevented(), true);
 });
 
 test("Period and Comma navigation accepts code/key fallbacks and requires release edges", () => {

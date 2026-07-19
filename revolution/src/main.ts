@@ -63,6 +63,15 @@ async function play(sceneId: string, newStory = false) {
     reviewMode,
     ...soundHooks,
     onControlHandoff: (detail) => { publishControlHandoff(detail); },
+    onContextualChoiceSnapshot: (snapshot) => {
+      instructionHud?.updateChoices(snapshot);
+    },
+    onBeatNavigationSnapshot: (snapshot) => {
+      instructionHud?.updateBeatNavigation(snapshot);
+    },
+    onBeatNavigationResult: (result) => {
+      instructionHud?.updateBeatNavigationResult(result);
+    },
     onPauseState: (detail) => { publishPauseState(detail); },
     onExit: (target = "title") => {
       disconnectChromeBridge?.();
@@ -74,12 +83,22 @@ async function play(sceneId: string, newStory = false) {
       renderShell(target);
     },
   });
+  if (newStory) nextDirector.resetBranchChoices();
   director = nextDirector;
   soundDesign = nextSoundDesign;
   stopNarrationObservation = observeNarrationDucking(app, nextSoundDesign);
   nextSoundDesign.ensure();
   const stage = app.querySelector<HTMLElement>(".stage")!;
-  instructionHud = mountInstructionHud(stage);
+  instructionHud = mountInstructionHud(stage, undefined, {
+    onContextualChoiceRequest: (request) => (
+      nextDirector.requestContextualChoice(request)
+    ),
+    onBeatNavigationRequest: (request) => (
+      request.type === "nextBeat"
+        ? nextDirector.nextBeat(request)
+        : nextDirector.previousBeat(request)
+    ),
+  });
   disconnectChromeBridge = bridgeDirectorChrome(stage, instructionHud);
   if (scene) enhancePausePresentation(stage, splitChapterHeading(scene.title));
   await nextDirector.start(sceneId);

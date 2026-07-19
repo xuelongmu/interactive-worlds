@@ -1,19 +1,25 @@
 import type {
+  BeatNavigationRequest,
+  BeatNavigationResult,
+  BeatNavigationSnapshot,
   ControlHandoffDetail as RuntimeControlHandoffDetail,
+  ContextualChoiceRequest,
+  ContextualChoiceRequestResult,
+  ContextualChoiceSnapshot,
   RuntimePauseDetail,
   SceneManifest,
 } from "./engine/types";
-import type {
-  BranchAcknowledgement,
-  BranchChoiceId,
-  BranchMomentId,
-  BranchObjective,
-  BranchPresentationAction,
-  BranchPresentationActions,
-  BranchRequestId,
-  BranchRuntimeHandoff,
-  BranchSelectionAcknowledgement,
-} from "./branch-state";
+
+export type {
+  BeatNavigationFeedback,
+  BeatNavigationRequest,
+  BeatNavigationResult,
+  BeatNavigationSnapshot,
+  ContextualChoiceCommandError,
+  ContextualChoiceRequest,
+  ContextualChoiceRequestResult,
+  ContextualChoiceSnapshot,
+} from "./engine/types";
 
 export const CONTROL_STALL_DELAY_MS = 10_000;
 
@@ -26,48 +32,6 @@ export interface ControlBinding {
   modality?: ControlModality;
   available?: boolean;
 }
-
-export interface ContextualActionBinding extends ControlBinding {
-  /** Unusable actions are deliberately omitted from the instruction layer. */
-  usable: boolean;
-}
-
-type BranchCommandErrorHandoff = Extract<
-  BranchRuntimeHandoff,
-  { outcome: "command_error" }
->;
-
-export type ContextualChoiceCommandError = Readonly<
-  Pick<BranchCommandErrorHandoff, "momentId" | "choiceId" | "requestId"> & {
-    message: BranchCommandErrorHandoff["error"]["message"];
-    visible: BranchCommandErrorHandoff["error"]["visible"];
-    retryable: BranchCommandErrorHandoff["error"]["retryable"];
-  }
->;
-
-export type ContextualChoiceAcknowledgement =
-  | BranchAcknowledgement
-  | BranchSelectionAcknowledgement;
-
-/** Outside-engine presentation seam. Runtime owns when a Reactor choice is
- * actually presentable; the HUD owns only rendering and keyboard arbitration. */
-export interface ContextualChoiceSnapshot {
-  readonly sceneId: string;
-  readonly transitionKey: number;
-  readonly momentId: BranchMomentId | null;
-  readonly objective: BranchObjective | null;
-  readonly actions: BranchPresentationActions | null;
-  readonly ready: boolean;
-  readonly selectedChoiceId: BranchChoiceId | null;
-  readonly latchedChoiceId: BranchChoiceId | null;
-  readonly acknowledgement: ContextualChoiceAcknowledgement | null;
-  readonly commandError: ContextualChoiceCommandError | null;
-}
-
-/** A key edge requests one exact runtime action. It does not imply success. */
-export type ContextualChoiceRequest = Readonly<
-  Pick<BranchPresentationAction, "momentId" | "choiceId" | "requestId">
->;
 
 export type ContextualChoiceResetReason =
   | "blur"
@@ -116,10 +80,24 @@ export class ContextualChoiceKeyArbiter {
   private snapshot: ContextualChoiceSnapshot | null = null;
   private readonly held = new Set<"E" | "F">();
   private pending: ContextualChoiceRequest | null = null;
-  private readonly onRequest: (request: ContextualChoiceRequest) => void;
+  private readonly onRequest: (
+    request: ContextualChoiceRequest,
+  ) => ContextualChoiceRequestResult | Promise<ContextualChoiceRequestResult>;
 
-  constructor(onRequest: (request: ContextualChoiceRequest) => void) {
+  constructor(onRequest: (
+    request: ContextualChoiceRequest,
+  ) => ContextualChoiceRequestResult | Promise<ContextualChoiceRequestResult>) {
     this.onRequest = onRequest;
+  }
+
+  private settleRequest(
+    request: ContextualChoiceRequest,
+    result: ContextualChoiceRequestResult,
+  ): void {
+    if (
+      this.pending?.requestId === request.requestId
+      && result.status !== "requested"
+    ) this.pending = null;
   }
 
   update(next: ContextualChoiceSnapshot): void {
@@ -176,7 +154,17 @@ export class ContextualChoiceKeyArbiter {
     };
     this.pending = request;
     try {
-      this.onRequest(request);
+      const result = this.onRequest(request);
+      if (result instanceof Promise) {
+        void result.then(
+          (settled) => this.settleRequest(request, settled),
+          () => {
+            if (this.pending?.requestId === request.requestId) this.pending = null;
+          },
+        );
+      } else {
+        this.settleRequest(request, result);
+      }
     } catch (error) {
       this.pending = null;
       throw error;
@@ -195,39 +183,6 @@ export class ContextualChoiceKeyArbiter {
     this.pending = null;
   }
 }
-
-export interface BeatNavigationSnapshot {
-  readonly sceneId: string;
-  readonly transitionKey: number;
-  /** False while pause/menu/other unsafe overlays own input. */
-  readonly active: boolean;
-  readonly nextAvailable: boolean;
-  readonly previousAvailable: boolean;
-  readonly feedback: BeatNavigationFeedback | null;
-}
-
-export type BeatNavigationRequest = Readonly<{
-  type: "nextBeat" | "previousBeat";
-  sceneId: string;
-  transitionKey: number;
-}>;
-
-export type BeatNavigationResult = Readonly<
-  | {
-      outcome: "navigated";
-      request: BeatNavigationRequest;
-    }
-  | {
-      outcome: "clamped" | "error";
-      request: BeatNavigationRequest;
-      message: string;
-    }
->;
-
-export type BeatNavigationFeedback = Extract<
-  BeatNavigationResult,
-  { outcome: "clamped" | "error" }
->;
 
 export interface BeatNavigationKeyEvent extends ContextualChoiceKeyEvent {
   readonly key: string;
@@ -248,9 +203,13 @@ function beatDirectionForEvent(
 export class BeatNavigationKeyArbiter {
   private snapshot: BeatNavigationSnapshot | null = null;
   private readonly held = new Set<BeatNavigationRequest["type"]>();
-  private readonly onRequest: (request: BeatNavigationRequest) => void;
+  private readonly onRequest: (
+    request: BeatNavigationRequest,
+  ) => BeatNavigationResult | Promise<BeatNavigationResult>;
 
-  constructor(onRequest: (request: BeatNavigationRequest) => void) {
+  constructor(onRequest: (
+    request: BeatNavigationRequest,
+  ) => BeatNavigationResult | Promise<BeatNavigationResult>) {
     this.onRequest = onRequest;
   }
 
@@ -310,12 +269,10 @@ export class BeatNavigationKeyArbiter {
  * code may publish this state without owning any HUD markup or copy. */
 export interface ControlHandoffDetail extends Omit<
   RuntimeControlHandoffDetail,
-  "movement" | "look" | "action" | "acknowledgement"
+  "movement" | "look"
 > {
   movement?: ControlBinding;
   look?: ControlBinding;
-  action?: ContextualActionBinding | null;
-  acknowledgement?: string | null;
   fallbacks?: ControlBinding[];
 }
 
@@ -405,10 +362,7 @@ export class InstructionHudModel {
       this.stalled = false;
       this.guidance = "";
     }
-    this.controls = {
-      ...next,
-      action: next.action?.usable ? next.action : null,
-    };
+    this.controls = next;
     if (
       this.choices
       && (
@@ -528,9 +482,7 @@ export class InstructionHudModel {
       ? choices.actions
       : null;
     const objective = choiceActions ? choices?.objective?.trim() ?? "" : "";
-    const acknowledgement = choices?.acknowledgement?.trim()
-      || controls.acknowledgement?.trim()
-      || "";
+    const acknowledgement = choices?.acknowledgement?.trim() ?? "";
     const error = choices?.commandError?.visible
       ? choices.commandError.message.trim()
       : beatNavigation?.feedback?.message.trim() ?? "";
@@ -676,8 +628,12 @@ export interface InstructionHudController {
 }
 
 export interface InstructionHudRuntimeCallbacks {
-  onContextualChoiceRequest?: (request: ContextualChoiceRequest) => void;
-  onBeatNavigationRequest?: (request: BeatNavigationRequest) => void;
+  onContextualChoiceRequest?: (
+    request: ContextualChoiceRequest,
+  ) => ContextualChoiceRequestResult | Promise<ContextualChoiceRequestResult>;
+  onBeatNavigationRequest?: (
+    request: BeatNavigationRequest,
+  ) => BeatNavigationResult | Promise<BeatNavigationResult>;
 }
 
 export function mountInstructionHud(
