@@ -30,7 +30,7 @@
       "lockControls": true, "then": "cutscene:volley" },
     { "id": "LEX-080", "trigger": { "type": "action", "name": "cutscene-volley-complete" },
       "subtitle": "The British fired two volleys and charged. It was over in minutes. Eight militiamen killed, ten wounded. Jonathan Harrington, shot on the green, crawled to his own doorstep and died there." },
-    { "id": "LEX-090", "trigger": { "type": "action", "name": "aftermath-walk" },
+    { "id": "LEX-090", "trigger": { "type": "action", "name": "resume-walk", "orTimer": 420 },
       "subtitle": "The regulars marched on to Concord. By afternoon, thousands of militiamen were converging on the road back to Boston. The war had begun.",
       "then": "scene:declaration" }
   ],

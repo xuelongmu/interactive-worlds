@@ -20,5 +20,5 @@
       "then": "scene:delaware" }
   ],
   "audio": { "ambience": ["/assets/audio/amb/assembly-room.mp3"] },
-  "next": { "scene": "delaware" }
+  "next": { "scene": "delaware", "preloadAt": "DEC-030" }
 }

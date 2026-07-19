@@ -10,6 +10,8 @@ export interface SplatSceneOptions {
   splatUrl?: string;
   colliderUrl?: string;
   onEvent: (event: EngineEvent) => void;
+  /** fires when the splat is presentable (loaded, or absent so nothing to wait for) */
+  onReady?: () => void;
 }
 
 /** Witness-register renderer: first-person walk inside a gaussian splat.
@@ -61,11 +63,16 @@ export class SplatScene {
     if (splatUrl) {
       this.splatMesh = new SplatMesh({
         url: splatUrl,
-        onLoad: () => console.info(`[splat] loaded ${splatUrl}`),
+        onLoad: () => {
+          console.info(`[splat] loaded ${splatUrl}`);
+          opts.onReady?.();
+        },
       });
       // Splat files are Y-down; flip 180° around X into three.js space.
       this.splatMesh.quaternion.set(1, 0, 0, 0);
       this.scene.add(this.splatMesh);
+    } else {
+      queueMicrotask(() => opts.onReady?.());
     }
 
     const colliderUrl = opts.colliderUrl ?? manifest.assets.collider;
@@ -177,6 +184,16 @@ export class SplatScene {
   }
 
   get position() { return this.camera.position; }
+
+  /** Snapshot the current view for world-model conditioning (the continuity
+   *  trick: the frozen world "wakes up" in place). Render + read back in the
+   *  same task — the drawing buffer isn't preserved across frames. */
+  captureFrame(): Promise<Blob | null> {
+    this.renderer.render(this.scene, this.camera);
+    return new Promise((resolve) =>
+      this.renderer.domElement.toBlob((blob) => resolve(blob), "image/jpeg", 0.9)
+    );
+  }
 
   dispose() {
     this.disposed = true;
