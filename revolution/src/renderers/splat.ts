@@ -28,6 +28,10 @@ export class SplatScene {
   private clock = new THREE.Clock();
   private keys = new Set<string>();
   private yaw = 0;
+  private captureBaseYaw = 0;
+  private captureElapsed = 0;
+  private readonly captureMode = import.meta.env.DEV
+    && new URLSearchParams(window.location.search).get("capture") === "1";
   private pitch = 0;
   private insideZones = new Set<string>();
   private zoneBoxes: { def: ZoneDef; box: THREE.Box3 }[] = [];
@@ -70,6 +74,7 @@ export class SplatScene {
     this.eyeHeight = manifest.locomotion?.eyeHeight ?? 1.65;
     this.speed = manifest.locomotion?.speed ?? 1.4; // slow, deliberate walk
     this.yaw = manifest.entry?.yaw ?? 0;
+    this.captureBaseYaw = this.yaw;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -188,6 +193,11 @@ export class SplatScene {
     const dt = Math.min(this.clock.getDelta(), 0.1);
 
     if (!this.controlsLocked) {
+      if (this.captureMode) {
+        this.captureElapsed += dt;
+        this.yaw = this.captureBaseYaw + this.captureElapsed * 0.16;
+        this.pitch = Math.sin(this.captureElapsed * 0.55) * 0.025;
+      }
       const forward = Number(this.keys.has("KeyW")) - Number(this.keys.has("KeyS"));
       const strafe = Number(this.keys.has("KeyD")) - Number(this.keys.has("KeyA"));
       if (forward !== 0 || strafe !== 0) {
