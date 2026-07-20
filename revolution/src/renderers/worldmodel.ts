@@ -15,6 +15,11 @@ import type {
 import type { BranchPresentationActions } from "../branch-state";
 import { PausableTimeouts } from "../engine/timers";
 import { resolveWorldModelInput } from "../engine/worldmodel-input";
+import {
+  SemanticInputController,
+  type InputModality,
+  type SemanticLookIntent,
+} from "../engine/semantic-input";
 import { composeWorldModelPrompt, WORLD_MODEL_PROMPT_BUDGET } from "../engine/worldmodel-prompt";
 
 export type WorldModelSessionPhase =
@@ -1448,6 +1453,9 @@ export interface WorldModelPlayerOptions {
   onControlHandoff?: (
     detail: Omit<ControlHandoffDetail, "sceneId" | "transitionKey">
   ) => void;
+  /** Mount seam for the later mobile HUD; no presentation is created here. */
+  onSemanticInputReady?: (input: SemanticInputController | null) => void;
+  onInputModalityChange?: (modality: InputModality) => void;
   conditioningFrame?: Blob;
   preparedSession?: WorldModelSession;
   /** Begin-to-presented-output budget. Default 15 seconds. */
@@ -1467,6 +1475,7 @@ export class WorldModelScenePlayer {
   private videoFrameCallbacks = new Set<number>();
   private pendingWaits = new Set<(error: Error) => void>();
   private unbindKeys: (() => void) | null = null;
+  semanticInput: SemanticInputController | null = null;
   private disposed = false;
   private paused = false;
   private controlsLocked = false;
@@ -1519,15 +1528,17 @@ export class WorldModelScenePlayer {
     });
     this.rollover = new WorldModelRolloverGate({
       mask: () => {
-        this.opts.onBranchTransientReset?.("rollover");
+        if (!this.semanticInput) this.opts.onBranchTransientReset?.("rollover");
         this.maskForRollover();
         void this.session?.setInputEnabled(false);
+        this.semanticInput?.setEnabled(false, "generation-rollover");
         this.emitLiveControls(false);
       },
       reveal: () => {
         this.clearRolloverDeadline();
         this.revealLiveVideo();
         void this.session?.setInputEnabled(true);
+        this.semanticInput?.setEnabled(this.inputIsUsable(), "generation-rollover-complete");
         this.emitLiveControls(true);
       },
     });
@@ -1537,6 +1548,8 @@ export class WorldModelScenePlayer {
     try {
       await this.startLive();
       this.mode = "live";
+      this.semanticInput?.setEnabled(this.inputIsUsable(), "control-handoff");
+      if (this.semanticInput) this.opts.onSemanticInputReady?.(this.semanticInput);
     } catch (error) {
       const reason = formatWorldModelError(error);
       const visibleError = `Live connection failed: ${reason}`;
@@ -1545,6 +1558,7 @@ export class WorldModelScenePlayer {
       if (this.disposed) return;
       this.reportStatus(visibleError);
       this.cancelVideoFrames();
+      this.semanticInput?.setEnabled(false, "fallback");
       this.unbindKeys?.();
       this.unbindKeys = null;
       const failed = this.session;
@@ -1563,7 +1577,11 @@ export class WorldModelScenePlayer {
 
   setControlsLocked(locked: boolean): void {
     this.controlsLocked = locked;
-    if (locked && this.session) {
+    this.semanticInput?.setEnabled(
+      !locked && this.inputIsUsable(),
+      locked ? "controls-locked" : "controls-unlocked"
+    );
+    if (locked && this.session && !this.semanticInput) {
       this.opts.onBranchTransientReset?.("controls-locked");
       void this.session.clearPersistentInput("controls-locked");
     }
@@ -1581,8 +1599,12 @@ export class WorldModelScenePlayer {
 
   setPaused(paused: boolean): void {
     this.paused = paused;
+    this.semanticInput?.setEnabled(
+      !paused && this.inputIsUsable(),
+      paused ? "pause" : "resume"
+    );
     if (paused) {
-      this.opts.onBranchTransientReset?.("pause");
+      if (!this.semanticInput) this.opts.onBranchTransientReset?.("pause");
       this.controlTimers.pause();
       this.video.pause();
       if (document.pointerLockElement === this.video) document.exitPointerLock();
@@ -1604,7 +1626,7 @@ export class WorldModelScenePlayer {
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
-    this.opts.onBranchTransientReset?.("dispose");
+    if (!this.semanticInput) this.opts.onBranchTransientReset?.("dispose");
     this.emitLiveControls(false);
     this.cancelPendingWaits(new Error("world-model player disposed"));
     this.cancelVideoFrames();
@@ -1650,7 +1672,7 @@ export class WorldModelScenePlayer {
       onBranchReadiness: this.opts.onBranchReadiness,
       onMessage: (message) => this.handleModelMessage(message),
     });
-    this.unbindKeys = bindWorldModelKeys(
+    const inputBinding = bindWorldModelInput(
       session,
       () => this.paused || this.controlsLocked,
       {
@@ -1658,7 +1680,9 @@ export class WorldModelScenePlayer {
         isPresented: () => this.inputIsUsable(),
         navigationEnabled: () => this.navigationEnabled,
         onAction: (binding) => {
-          const action = this.opts.getBranchActions?.()?.find((candidate) => candidate.binding === binding);
+          const action = this.opts.getBranchActions?.()?.find(
+            (candidate) => candidate.binding === binding || candidate.choiceId === binding
+          );
           if (action?.usable) this.opts.onBranchActionRequest?.({
             momentId: action.momentId,
             choiceId: action.choiceId,
@@ -1667,8 +1691,18 @@ export class WorldModelScenePlayer {
         },
         onActionRelease: (binding) => this.releaseBranchAction(binding),
         onReset: (reason) => this.opts.onBranchTransientReset?.(reason),
+        onModalityChange: this.opts.onInputModalityChange,
       }
     );
+    this.semanticInput = inputBinding.input;
+    this.semanticInput.setNavigationEnabled(this.navigationEnabled, "non-navigable-model");
+    this.unbindKeys = () => {
+      inputBinding.dispose();
+      if (this.semanticInput === inputBinding.input) {
+        this.semanticInput = null;
+        this.opts.onSemanticInputReady?.(null);
+      }
+    };
 
     if (session.phase === "idle") await session.prepareTransport();
     if (session.phase === "runtime-ready") {
@@ -1761,12 +1795,14 @@ export class WorldModelScenePlayer {
     if (mode === "live") {
       this.revealLiveVideo();
       void this.session?.setInputEnabled(true);
+      this.semanticInput?.setEnabled(this.inputIsUsable(), "control-handoff");
       this.startLiveClock();
       this.emitLiveControls(true);
     } else if (this.fallbackUsesWallClock) {
       this.startWallClock();
     }
     if (mode === "fallback") this.emitLiveControls(false);
+    if (mode === "fallback") this.semanticInput?.setEnabled(false, "fallback");
     this.opts.onEvent({ type: "action", name: "boarded" });
     this.controlTimers.schedule(
       () => this.opts.onEvent({ type: "action", name: "control-granted" }),
@@ -1833,13 +1869,21 @@ export class WorldModelScenePlayer {
   }
 
   async clearPersistentInput(reason: string): Promise<void> {
-    this.opts.onBranchTransientReset?.(reason);
-    await this.session?.clearPersistentInput(reason);
+    if (this.semanticInput) this.semanticInput.clear(reason);
+    else {
+      this.opts.onBranchTransientReset?.(reason);
+      await this.session?.clearPersistentInput(reason);
+    }
   }
 
-  private releaseBranchAction(binding: "E" | "F"): void {
-    const action = this.opts.getBranchActions?.()?.find((candidate) => candidate.binding === binding);
-    const config = action && this.opts.manifest.branching?.actions?.find((candidate) => candidate.choiceId === action.choiceId);
+  private releaseBranchAction(binding: string): void {
+    const action = this.opts.getBranchActions?.()?.find(
+      (candidate) => candidate.binding === binding || candidate.choiceId === binding
+    );
+    const choiceId = action?.choiceId
+      ?? this.opts.manifest.branching?.actions?.find((candidate) => candidate.choiceId === binding)?.choiceId;
+    const config = choiceId
+      && this.opts.manifest.branching?.actions?.find((candidate) => candidate.choiceId === choiceId);
     if (config) this.session?.releaseBranchAction(config.releasedPrompt);
   }
 
@@ -1960,6 +2004,7 @@ export class WorldModelScenePlayer {
     const visibleError = `Live connection lost: ${formatWorldModelError(reason)}`;
     this.reportStatus(visibleError);
     this.cancelVideoFrames();
+    this.semanticInput?.setEnabled(false, "fallback");
     this.unbindKeys?.();
     this.unbindKeys = null;
     const failed = this.session;
@@ -2045,31 +2090,88 @@ export class WorldModelScenePlayer {
   }
 }
 
-/** Keyboard/mouse -> retained World 2 intent. Every held edge has a release. */
+/** Desktop binding feeding the same semantic port used by the touch adapter. */
 export interface WorldModelInputBindingOptions {
   target?: HTMLElement;
   isPresented?: () => boolean;
-  onAction?: (binding: "E" | "F") => void;
-  onActionRelease?: (binding: "E" | "F") => void;
+  onAction?: (bindingOrChoiceId: string) => void;
+  onActionRelease?: (bindingOrChoiceId: string) => void;
   onReset?: (reason: string) => void;
   onActivity?: (kind: "movement" | "look" | "action") => void;
   navigationEnabled?: () => boolean;
+  onModalityChange?: (modality: InputModality) => void;
+  initiallyEnabled?: boolean;
 }
 
-export function bindWorldModelKeys(
+export interface WorldModelInputBinding {
+  input: SemanticInputController;
+  dispose(): void;
+}
+
+function worldModelLookFromSemantic(intent: Readonly<SemanticLookIntent>): { h: LookH; v: LookV } {
+  return {
+    h: intent.yaw > 0 ? "right" : intent.yaw < 0 ? "left" : "idle",
+    v: intent.pitch > 0 ? "up" : intent.pitch < 0 ? "down" : "idle",
+  };
+}
+
+export function bindWorldModelInput(
   session: WorldModelSession,
   isLocked: () => boolean = () => false,
   options: WorldModelInputBindingOptions = {}
-): () => void {
+): WorldModelInputBinding {
   const keys = new Set<string>();
-  const heldActions = new Set<"E" | "F">();
   let lookIdleTimer = 0;
   const isPresented = options.isPresented ?? (() => true);
   const navigationEnabled = options.navigationEnabled ?? (() => true);
+  const input = new SemanticInputController({
+    onMovement: (intent) => {
+      void session.setMovement(
+        intent.forward > 0 ? "forward" : intent.forward < 0 ? "back" : "idle",
+        intent.strafe > 0 ? "strafe_right" : intent.strafe < 0 ? "strafe_left" : "idle"
+      );
+    },
+    onLook: (intent) => {
+      clearTimeout(lookIdleTimer);
+      const { h, v } = worldModelLookFromSemantic(intent);
+      void session.setLook(h, v);
+      if (intent.mode === "delta" && (h !== "idle" || v !== "idle")) {
+        lookIdleTimer = window.setTimeout(() => {
+          input.releaseLook("pointer-look", input.modality);
+        }, 80);
+      }
+    },
+    onAction: (intent) => {
+      if (intent.phase === "press") options.onAction?.(intent.id);
+      else options.onActionRelease?.(intent.id);
+    },
+    onReset: (reason) => {
+      clearTimeout(lookIdleTimer);
+      options.onReset?.(reason);
+      void session.clearPersistentInput(reason);
+    },
+    onActivity: options.onActivity,
+    onModalityChange: (modality) => {
+      if (modality === "touch") keys.clear();
+      options.onModalityChange?.(modality);
+    },
+  }, {
+    enabled: options.initiallyEnabled ?? true,
+    navigationEnabled: navigationEnabled(),
+  });
   const apply = () => {
     const { longitudinal, lateral, lookH, lookV } = resolveWorldModelInput(keys, isLocked());
-    void session.setMovement(longitudinal, lateral);
-    void session.setLook(lookH, lookV);
+    input.setNavigationEnabled(navigationEnabled(), "non-navigable-model");
+    input.setMovement("desktop-keyboard", {
+      forward: longitudinal === "forward" ? 1 : longitudinal === "back" ? -1 : 0,
+      strafe: lateral === "strafe_right" ? 1 : lateral === "strafe_left" ? -1 : 0,
+    }, "keyboard-mouse");
+    input.setLookRate(
+      "desktop-arrows",
+      lookH === "right" ? 1 : lookH === "left" ? -1 : 0,
+      lookV === "up" ? 1 : lookV === "down" ? -1 : 0,
+      "keyboard-mouse"
+    );
   };
   const inFormField = (event: KeyboardEvent) => {
     const target = event.target as HTMLElement | null;
@@ -2080,12 +2182,9 @@ export function bindWorldModelKeys(
     if (isWorldModelActionKey(event.code)) {
       const binding = event.code === "KeyE" ? "E" : "F";
       if (!event.ctrlKey && !event.altKey && !event.metaKey
-        && !heldActions.has(binding)
         && canDispatchWorldModelAction(event.code, isPresented(), isLocked(), event.repeat)) {
         event.preventDefault();
-        heldActions.add(binding);
-        options.onActivity?.("action");
-        options.onAction?.(binding);
+        input.pressAction(`desktop-action:${binding}`, binding, "keyboard-mouse");
       }
       return;
     }
@@ -2102,7 +2201,7 @@ export function bindWorldModelKeys(
   const up = (event: KeyboardEvent) => {
     if (isWorldModelActionKey(event.code)) {
       const binding = event.code === "KeyE" ? "E" : "F";
-      if (heldActions.delete(binding)) options.onActionRelease?.(binding);
+      input.releaseAction(`desktop-action:${binding}`, "keyboard-mouse");
       return;
     }
     keys.delete(event.code);
@@ -2114,10 +2213,12 @@ export function bindWorldModelKeys(
     if (options.target && document.pointerLockElement !== options.target) return;
     const { h, v } = resolveWorldModelPointerLook(event.movementX, event.movementY);
     if (h === "idle" && v === "idle") return;
-    options.onActivity?.("look");
-    void session.setLook(h, v);
-    clearTimeout(lookIdleTimer);
-    lookIdleTimer = window.setTimeout(() => void session.setLook("idle", "idle"), 80);
+    input.applyLookDelta(
+      "pointer-look",
+      h === "right" ? Math.abs(event.movementX) : -Math.abs(event.movementX),
+      v === "up" ? Math.abs(event.movementY) : -Math.abs(event.movementY),
+      "keyboard-mouse"
+    );
   };
   const requestPointer = () => {
     if (navigationEnabled() && isPresented() && !isLocked()) void options.target?.requestPointerLock();
@@ -2125,10 +2226,7 @@ export function bindWorldModelKeys(
   const releaseAll = (reason: string) => {
     keys.clear();
     clearTimeout(lookIdleTimer);
-    for (const binding of heldActions) options.onActionRelease?.(binding);
-    heldActions.clear();
-    options.onReset?.(reason);
-    void session.clearPersistentInput(reason);
+    input.clear(reason);
   };
   const onBlur = () => releaseAll("blur");
   const onVisibility = () => {
@@ -2140,7 +2238,7 @@ export function bindWorldModelKeys(
   window.addEventListener("blur", onBlur);
   document.addEventListener("visibilitychange", onVisibility);
   options.target?.addEventListener("click", requestPointer);
-  return () => {
+  const dispose = () => {
     clearTimeout(lookIdleTimer);
     document.removeEventListener("keydown", down);
     document.removeEventListener("keyup", up);
@@ -2148,7 +2246,18 @@ export function bindWorldModelKeys(
     window.removeEventListener("blur", onBlur);
     document.removeEventListener("visibilitychange", onVisibility);
     options.target?.removeEventListener("click", requestPointer);
-    releaseAll("input-disposed");
+    keys.clear();
+    input.dispose("input-disposed");
     if (options.target && document.pointerLockElement === options.target) document.exitPointerLock();
   };
+  return { input, dispose };
+}
+
+/** Backwards-compatible desktop-only disposer used by existing spike/tests. */
+export function bindWorldModelKeys(
+  session: WorldModelSession,
+  isLocked: () => boolean = () => false,
+  options: WorldModelInputBindingOptions = {}
+): () => void {
+  return bindWorldModelInput(session, isLocked, options).dispose;
 }

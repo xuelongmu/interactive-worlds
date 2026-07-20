@@ -3,6 +3,12 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 import type { EngineEvent, ListenerPose, SceneManifest, ZoneDef } from "../engine/types";
 import { bindPointerLockClick } from "../engine/pointer-lock";
+import {
+  SemanticInputController,
+  type InputModality,
+  type SemanticLookIntent,
+  type SemanticMovementIntent,
+} from "../engine/semantic-input";
 
 export interface SplatSceneOptions {
   container: HTMLElement;
@@ -13,11 +19,42 @@ export interface SplatSceneOptions {
   onEvent: (event: EngineEvent) => void;
   /** fires when the splat is presentable (loaded, or absent so nothing to wait for) */
   onReady?: () => void;
+  /** Mount seam for the later touch HUD; this PR intentionally supplies no chrome. */
+  onSemanticInputReady?: (input: SemanticInputController | null) => void;
+  onInputModalityChange?: (modality: InputModality) => void;
+}
+
+export function resolveSplatMovement(
+  intent: Readonly<SemanticMovementIntent>,
+  yaw: number,
+  speed: number,
+  dt: number
+): THREE.Vector3 {
+  if (intent.forward === 0 && intent.strafe === 0) return new THREE.Vector3();
+  return new THREE.Vector3(
+    Math.sin(yaw) * -intent.forward + Math.cos(yaw) * intent.strafe,
+    0,
+    Math.cos(yaw) * -intent.forward - Math.sin(yaw) * intent.strafe
+  ).normalize().multiplyScalar(speed * dt);
+}
+
+export function resolveSplatLook(
+  yaw: number,
+  pitch: number,
+  intent: Readonly<SemanticLookIntent>,
+  pitchLimit = 1.2
+): { yaw: number; pitch: number } {
+  if (intent.mode !== "delta") return { yaw, pitch };
+  return {
+    yaw: yaw - intent.yaw,
+    pitch: THREE.MathUtils.clamp(pitch + intent.pitch, -pitchLimit, pitchLimit),
+  };
 }
 
 /** Witness-register renderer: first-person walk inside a gaussian splat.
  *  - Spark SplatMesh inside a plain three.js scene
- *  - pointer-lock mouse look, WASD at forced walking pace
+ *  - semantic movement/look from desktop or a mounted touch adapter
+ *  - pointer-lock mouse look and WASD preserved at the forced walking pace
  *  - ground from Marble collider mesh when present, else flat plane
  *  - box trigger zones -> zone-enter/exit EngineEvents
  *  - debug overlay (KeyZ): zone wireframes + position readout */
@@ -27,6 +64,7 @@ export class SplatScene {
   readonly camera: THREE.PerspectiveCamera;
   private clock = new THREE.Clock();
   private keys = new Set<string>();
+  private movementIntent: Readonly<SemanticMovementIntent> = { forward: 0, strafe: 0 };
   private yaw = 0;
   private captureBaseYaw = 0;
   private captureElapsed = 0;
@@ -42,7 +80,8 @@ export class SplatScene {
   private raycaster = new THREE.Raycaster();
   private eyeHeight: number;
   private speed: number;
-  controlsLocked = false;
+  private inputLocked = false;
+  readonly semanticInput: SemanticInputController;
   onUpdate: (dt: number) => void = () => {};
   splatMesh: SplatMesh | null = null;
   readonly worldGroup = new THREE.Group();
@@ -75,6 +114,19 @@ export class SplatScene {
     this.speed = manifest.locomotion?.speed ?? 1.4; // slow, deliberate walk
     this.yaw = manifest.entry?.yaw ?? 0;
     this.captureBaseYaw = this.yaw;
+    this.semanticInput = new SemanticInputController({
+      onMovement: (intent) => { this.movementIntent = intent; },
+      onLook: (intent) => {
+        const next = resolveSplatLook(this.yaw, this.pitch, intent);
+        this.yaw = next.yaw;
+        this.pitch = next.pitch;
+      },
+      onModalityChange: (modality) => {
+        if (modality === "touch") this.keys.clear();
+        opts.onInputModalityChange?.(modality);
+      },
+    });
+    opts.onSemanticInputReady?.(this.semanticInput);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -163,22 +215,42 @@ export class SplatScene {
     document.addEventListener("keydown", this.onKeyDown);
     document.addEventListener("keyup", this.onKeyUp);
     window.addEventListener("resize", this.onResize);
+    window.addEventListener("blur", this.onBlur);
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
   }
 
   private onMouseMove = (e: MouseEvent) => {
     if (!document.pointerLockElement || this.controlsLocked) return;
-    this.yaw -= e.movementX * 0.0022;
-    this.pitch = THREE.MathUtils.clamp(this.pitch - e.movementY * 0.0022, -1.2, 1.2);
+    this.semanticInput.applyLookDelta(
+      "desktop-mouse",
+      e.movementX * 0.0022,
+      -e.movementY * 0.0022,
+      "keyboard-mouse"
+    );
   };
   private onKeyDown = (e: KeyboardEvent) => {
     if (this.controlsLocked) return;
     this.keys.add(e.code);
+    this.applyKeyboardMovement();
     if (e.code === "KeyZ") {
       this.debugGroup.visible = !this.debugGroup.visible;
       for (const mesh of this.colliderMeshes) mesh.visible = this.debugGroup.visible;
     }
   };
-  private onKeyUp = (e: KeyboardEvent) => this.keys.delete(e.code);
+  private onKeyUp = (e: KeyboardEvent) => {
+    this.keys.delete(e.code);
+    this.applyKeyboardMovement();
+  };
+  private onBlur = () => {
+    this.keys.clear();
+    this.semanticInput.clear("blur");
+  };
+  private onVisibilityChange = () => {
+    if (document.visibilityState !== "visible") {
+      this.keys.clear();
+      this.semanticInput.clear("visibility");
+    }
+  };
   private onResize = () => {
     const { container } = this.opts;
     this.camera.aspect = container.clientWidth / container.clientHeight;
@@ -187,6 +259,21 @@ export class SplatScene {
   };
 
   get debugVisible() { return this.debugGroup.visible; }
+
+  get controlsLocked(): boolean { return this.inputLocked; }
+  set controlsLocked(locked: boolean) {
+    if (locked === this.inputLocked) return;
+    this.inputLocked = locked;
+    this.semanticInput.setEnabled(!locked, locked ? "controls-locked" : "controls-unlocked");
+    if (!locked) this.applyKeyboardMovement();
+  }
+
+  private applyKeyboardMovement(): void {
+    this.semanticInput.setMovement("desktop-keyboard", {
+      forward: Number(this.keys.has("KeyW")) - Number(this.keys.has("KeyS")),
+      strafe: Number(this.keys.has("KeyD")) - Number(this.keys.has("KeyA")),
+    }, "keyboard-mouse");
+  }
 
   private tick() {
     if (this.disposed) return;
@@ -198,16 +285,7 @@ export class SplatScene {
         this.yaw = this.captureBaseYaw + this.captureElapsed * 0.16;
         this.pitch = Math.sin(this.captureElapsed * 0.55) * 0.025;
       }
-      const forward = Number(this.keys.has("KeyW")) - Number(this.keys.has("KeyS"));
-      const strafe = Number(this.keys.has("KeyD")) - Number(this.keys.has("KeyA"));
-      if (forward !== 0 || strafe !== 0) {
-        const dir = new THREE.Vector3(
-          Math.sin(this.yaw) * -forward + Math.cos(this.yaw) * strafe,
-          0,
-          Math.cos(this.yaw) * -forward - Math.sin(this.yaw) * strafe
-        ).normalize().multiplyScalar(this.speed * dt);
-        this.camera.position.add(dir);
-      }
+      this.camera.position.add(resolveSplatMovement(this.movementIntent, this.yaw, this.speed, dt));
       this.camera.rotation.set(this.pitch, this.yaw, 0);
     }
 
@@ -256,7 +334,13 @@ export class SplatScene {
   /** True while any movement key is held — lets the director detect a key
    *  kept pressed through a controls-locked stretch (no new keydown fires). */
   hasMovementInput(): boolean {
-    return ["KeyW", "KeyA", "KeyS", "KeyD"].some((code) => this.keys.has(code));
+    return this.movementIntent.forward !== 0
+      || this.movementIntent.strafe !== 0
+      || ["KeyW", "KeyA", "KeyS", "KeyD"].some((code) => this.keys.has(code));
+  }
+
+  clearPersistentInput(reason: string): void {
+    this.semanticInput.clear(reason);
   }
 
   /** Snapshot the current view for world-model conditioning (the continuity
@@ -271,11 +355,15 @@ export class SplatScene {
 
   dispose() {
     this.disposed = true;
+    this.opts.onSemanticInputReady?.(null);
+    this.semanticInput.dispose("scene-disposed");
     this.renderer.setAnimationLoop(null);
     document.removeEventListener("mousemove", this.onMouseMove);
     document.removeEventListener("keydown", this.onKeyDown);
     document.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("resize", this.onResize);
+    window.removeEventListener("blur", this.onBlur);
+    document.removeEventListener("visibilitychange", this.onVisibilityChange);
     this.unbindPointerLock?.();
     this.unbindPointerLock = null;
     this.renderer.dispose();
