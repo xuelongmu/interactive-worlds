@@ -17,8 +17,16 @@ import {
   hasChapterDevOverride,
   isChapterUnlocked,
   splitChapterHeading,
+  enhancePausePresentation,
   type ShellView,
 } from "./shell";
+import {
+  bridgeDirectorChrome,
+  mountInstructionHud,
+  publishControlHandoff,
+  publishPauseState,
+  type InstructionHudController,
+} from "./control-hud";
 
 installSessionChallenge();
 claimAdapterAmbience(scenes);
@@ -27,6 +35,8 @@ const app = document.getElementById("app")!;
 let director: Director | null = null;
 let soundDesign: SoundDesignController | null = null;
 let stopNarrationObservation: (() => void) | null = null;
+let instructionHud: InstructionHudController | null = null;
+let disconnectChromeBridge: (() => void) | null = null;
 const searchParams = new URLSearchParams(window.location.search);
 const reviewMode = import.meta.env.DEV && searchParams.get("review") === "1";
 const captureMode = import.meta.env.DEV && searchParams.get("capture") === "1";
@@ -48,23 +58,57 @@ async function play(sceneId: string, newStory = false) {
   stopTitleTheme();
   if (director) await director.dispose();
   await disposeSoundDesign();
+  disconnectChromeBridge?.();
+  disconnectChromeBridge = null;
+  instructionHud?.dispose();
+  instructionHud = null;
   if (newStory) resetStoryProgress();
+  const scene = scenes.find((candidate) => candidate.id === sceneId);
   const nextSoundDesign = new SoundDesignController(new BrowserSoundPlayback());
   const soundHooks = createSoundDirectorHooks(nextSoundDesign);
   const nextDirector = new Director({
     container: app,
     reviewMode,
     ...soundHooks,
+    onControlHandoff: (detail) => { publishControlHandoff(detail); },
+    onContextualChoiceSnapshot: (snapshot) => {
+      instructionHud?.updateChoices(snapshot);
+    },
+    onBeatNavigationSnapshot: (snapshot) => {
+      instructionHud?.updateBeatNavigation(snapshot);
+    },
+    onBeatNavigationResult: (result) => {
+      instructionHud?.updateBeatNavigationResult(result);
+    },
+    onPauseState: (detail) => { publishPauseState(detail); },
     onExit: (target = "title") => {
+      disconnectChromeBridge?.();
+      disconnectChromeBridge = null;
+      instructionHud?.dispose();
+      instructionHud = null;
       director = null;
       void disposeSoundDesign();
       renderShell(target);
     },
   });
+  if (newStory) nextDirector.resetBranchChoices();
   director = nextDirector;
   soundDesign = nextSoundDesign;
   stopNarrationObservation = observeNarrationDucking(app, nextSoundDesign);
   nextSoundDesign.ensure();
+  const stage = app.querySelector<HTMLElement>(".stage")!;
+  instructionHud = mountInstructionHud(stage, undefined, {
+    onContextualChoiceRequest: (request) => (
+      nextDirector.requestContextualChoice(request)
+    ),
+    onBeatNavigationRequest: (request) => (
+      request.type === "nextBeat"
+        ? nextDirector.nextBeat(request)
+        : nextDirector.previousBeat(request)
+    ),
+  });
+  disconnectChromeBridge = bridgeDirectorChrome(stage, instructionHud);
+  if (scene) enhancePausePresentation(stage, splitChapterHeading(scene.title));
   await nextDirector.start(sceneId);
 }
 

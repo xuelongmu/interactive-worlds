@@ -291,6 +291,11 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 /* narration-over-black IS the loading screen — subtitles must sit above
    the fade layer (40) and the title card (50) */
 .stage .subtitle-bar { z-index: 60; }
+.stage .subtitle-bar[data-accessibility-layer="spoken-content"] {
+  padding: 10px 16px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.58) 12% 88%, transparent);
+}
 .video-host {
   position: absolute;
   inset: 0;
@@ -368,6 +373,8 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   pointer-events: none;
   transition: opacity 500ms ease, transform 500ms ease;
 }
+.stall-hint[hidden],
+.beat-guidance[hidden] { display: none !important; }
 .stall-hint.visible { opacity: 1; transform: translate(-50%, 0); }
 .beat-guidance {
   position: absolute;
@@ -388,6 +395,105 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   transition: opacity 350ms ease, transform 350ms ease;
 }
 .beat-guidance.visible { opacity: 1; transform: translate(-50%, 0); }
+
+/* Instructions are intentionally their own layer: compact, upright,
+   utilitarian, and spatially separate from spoken subtitles. */
+.instruction-hud {
+  position: absolute;
+  top: clamp(82px, 13vh, 138px);
+  left: clamp(14px, 3vw, 42px);
+  z-index: 75;
+  width: min(390px, calc(100% - 28px));
+  padding: 11px 13px 12px;
+  color: #f1eadc;
+  background: rgba(10, 9, 7, 0.9);
+  border: 1px solid rgba(232, 226, 213, 0.4);
+  border-left: 3px solid var(--accent);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  font: 12px/1.35 Consolas, "Courier New", monospace;
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 260ms ease, transform 260ms ease;
+  pointer-events: none;
+}
+.instruction-hud[data-visible="false"] {
+  opacity: 0;
+  transform: translateX(-8px);
+  visibility: hidden;
+}
+.instruction-hud__eyebrow {
+  margin-bottom: 7px;
+  color: #c9b378;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.instruction-hud__bindings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.instruction-hud__binding {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 25px;
+}
+.instruction-hud__binding kbd,
+.pause-shortcuts kbd {
+  min-width: 29px;
+  padding: 3px 6px;
+  color: #19150d;
+  background: var(--paper-light);
+  border: 1px solid #9e8b63;
+  border-bottom-width: 2px;
+  border-radius: 2px;
+  box-shadow: inset 0 -1px rgba(40, 30, 14, 0.18);
+  font: 10px/1.2 Consolas, "Courier New", monospace;
+  text-align: center;
+  white-space: nowrap;
+}
+.instruction-hud[data-reason="action"] .instruction-hud__binding kbd,
+.instruction-hud[data-reason="error"] .instruction-hud__binding kbd {
+  color: #171109;
+  background: #d7b65e;
+  border-color: #f1d485;
+}
+.instruction-hud[data-reason="action"] .instruction-hud__binding > span::before,
+.instruction-hud[data-reason="error"] .instruction-hud__binding > span::before {
+  content: "— ";
+}
+.instruction-hud__objective,
+.instruction-hud__guidance {
+  margin-top: 8px;
+  color: #f1eadc;
+  font: 13px/1.4 Georgia, "Times New Roman", serif;
+}
+.instruction-hud__objective {
+  margin: 0 0 8px;
+  color: #f6e9c3;
+}
+.instruction-hud__acknowledgement,
+.instruction-hud__error {
+  margin-top: 8px;
+}
+.instruction-hud__acknowledgement { color: #d9cba8; }
+.instruction-hud__error { color: #f0b9a7; }
+.instruction-hud__objective:empty,
+.instruction-hud__guidance:empty,
+.instruction-hud__acknowledgement:empty,
+.instruction-hud__error:empty { display: none; }
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
 .review-controls {
   position: absolute;
   top: 14px;
@@ -432,23 +538,52 @@ html[data-experience-ui="hidden"] .stall-hint {
 }
 .pause-overlay[hidden] { display: none; }
 .pause-panel {
-  width: min(430px, 100%);
-  padding: 44px;
-  text-align: center;
+  width: min(480px, 100%);
+  padding: 48px 46px 38px;
+  text-align: left;
   background:
     repeating-linear-gradient(9deg, transparent 0 5px, rgba(50,40,25,0.045) 6px),
     var(--paper);
   border: 1px solid #796b4e;
   outline: 1px solid rgba(33, 29, 22, 0.32);
-  outline-offset: -8px;
+  outline-offset: -9px;
+  box-shadow: 0 28px 85px rgba(0, 0, 0, 0.52);
 }
-.pause-panel h2 { margin: 8px 0 30px; font-size: 31px; font-weight: normal; }
+.pause-panel h2 { margin: 8px 0 4px; font-size: 34px; line-height: 1.08; font-weight: normal; }
 .pause-panel .card-kicker { color: #6c614f; }
+.pause-description {
+  margin-bottom: 25px;
+  color: #6c614f;
+  font-size: 13px;
+  font-style: italic;
+}
 .pause-menu[hidden],
 .pause-settings-view[hidden] { display: none; }
 .pause-actions { display: grid; gap: 9px; }
-.pause-actions button { padding: 10px 16px; background: var(--paper-ink); color: var(--paper-light); }
+.pause-actions button {
+  min-height: 44px;
+  padding: 10px 16px;
+  background: var(--paper-ink);
+  color: var(--paper-light);
+  text-align: left;
+}
 .pause-actions button.secondary { border-color: #766a54; color: var(--paper-ink); background: transparent; }
+.pause-actions button:hover,
+.pause-actions button:focus-visible { outline-color: #4e4029; background: #332a1d; color: var(--paper-light); }
+.pause-actions button.secondary:hover,
+.pause-actions button.secondary:focus-visible { color: var(--paper-ink); background: rgba(80, 63, 35, 0.1); }
+.pause-shortcuts {
+  margin-top: 20px;
+  color: #6c614f;
+  font: 10px/1.4 Consolas, "Courier New", monospace;
+  text-align: center;
+}
+.pause-shortcuts kbd {
+  display: inline-block;
+  margin: 0 2px;
+  padding: 2px 5px;
+  background: rgba(234, 223, 199, 0.68);
+}
 .pause-settings-hook {
   min-height: 92px;
   padding: 16px;
@@ -530,4 +665,14 @@ html[data-experience-ui="hidden"] .stall-hint {
   .chapter-grid { grid-template-columns: 1fr; }
   .title-panel { padding: 52px 25px; }
   .chapter-card { min-height: 285px; }
+  .instruction-hud { top: 74px; }
+  .pause-panel { padding: 42px 28px 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .instruction-hud,
+  .pause-overlay,
+  .pause-panel,
+  .pause-actions button { transition: none !important; }
+  .pause-overlay { backdrop-filter: none; }
 }

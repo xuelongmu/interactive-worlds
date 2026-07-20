@@ -69,3 +69,45 @@ export function getTitleAction(
 export function hasChapterDevOverride(search: string): boolean {
   return new URLSearchParams(search).get("unlock") === "chapters";
 }
+
+/** Presentation-only pause enhancement. The director continues to own pause
+ * state, navigation, input release, focus trapping, and settings lifecycle. */
+export function enhancePausePresentation(stage: HTMLElement, heading: ChapterHeading) {
+  const dialog = stage.querySelector<HTMLElement>(".pause-overlay");
+  if (!dialog) return;
+  dialog.dataset.accessibilityLayer = "pause-menu";
+  dialog.setAttribute("aria-describedby", "pause-description pause-shortcuts");
+
+  const menu = dialog.querySelector<HTMLElement>(".pause-menu");
+  const title = menu?.querySelector<HTMLElement>("#pause-title");
+  if (title) title.textContent = heading.title || "American Revolution";
+
+  const kicker = menu?.querySelector<HTMLElement>(".card-kicker");
+  if (kicker) kicker.textContent = "Chapter paused";
+
+  if (menu && !menu.querySelector("#pause-description")) {
+    const description = document.createElement("p");
+    description.id = "pause-description";
+    description.className = "pause-description";
+    description.textContent = heading.date
+      ? `${heading.title} · ${heading.date}`
+      : heading.title;
+    title?.insertAdjacentElement("afterend", description);
+  }
+
+  const resume = dialog.querySelector<HTMLButtonElement>('[data-pause-action="resume"]');
+  resume?.setAttribute("aria-keyshortcuts", "Escape P");
+  const chapters = dialog.querySelector<HTMLButtonElement>('[data-pause-action="chapters"]');
+  if (chapters) {
+    chapters.textContent = "Chapter select";
+    chapters.setAttribute("aria-label", "Open chapter select");
+  }
+
+  if (menu && !menu.querySelector("#pause-shortcuts")) {
+    const shortcuts = document.createElement("p");
+    shortcuts.id = "pause-shortcuts";
+    shortcuts.className = "pause-shortcuts";
+    shortcuts.innerHTML = '<kbd>Esc</kbd> or <kbd>P</kbd> to resume';
+    menu.appendChild(shortcuts);
+  }
+}
