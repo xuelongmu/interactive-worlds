@@ -76,15 +76,18 @@ export const worlds = [
   },
   {
     scene: "treaty-paris",
-    // Prompt corrected after this scene's previous take; generate and curate a new pin.
-    worldId: null,
-    worldSignature: null,
-    image: "public/reference/treaty-paris.jpg",
+    worldId: "ee35087c-9525-495c-a2f8-aeb897351be7",
+    worldSignature: "7a50b66aeadd34cf7ebdc7c9c061b2568c343498",
+    // Benjamin West's unfinished 1783 painting, frozen from the public-domain
+    // Wikimedia Commons original supplied for this project.
+    image: "public/reference/treaty-paris-benjamin-west.jpg",
+    imageSignature: "sha256:3962707d38bae29977f39724c586533e613958e8ea82ff7c937c7cad777c05a8",
     prompt:
-      "Benjamin West's London studio around 1783, eye level. The actual unfinished American " +
-      "Commissioners painting anchors the room: five negotiators in varying states of finish " +
-      "around a table on the left and the authentic broad unpainted field on the right. Do not " +
-      "invent a Paris definitive-treaty signing or a different monumental canvas. Tall north " +
-      "window light, pigments, a clock, parquet floor, historically accurate, no modern objects.",
+      "Transform the supplied authentic Benjamin West painting into a restrained, walkable 3D " +
+      "tableau while preserving the original composition and painterly appearance. Keep the five " +
+      "American commissioners grouped on the left and the unfinished pale expanse unmistakably " +
+      "blank on the right. Extend a shallow period interior and floor into the foreground for a " +
+      "first-person approach. Do not add British commissioners, complete the unfinished area, " +
+      "modernize the scene, or add text.",
   },
 ];

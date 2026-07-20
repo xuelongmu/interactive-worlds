@@ -1,6 +1,11 @@
 import { defineConfig, type Plugin } from "vite";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+  REFERENCE_R2_ORIGIN,
+  rewriteReferenceRequest,
+  shouldProxyReferenceRequest,
+} from "./vite-reference-proxy";
 
 const root = __dirname;
 const DEFAULT_REACTOR_MODEL = "reactor/lingbot-world-2";
@@ -92,7 +97,21 @@ export default defineConfig({
   define: {
     "import.meta.env.VITE_DEPLOYMENT_ENV": JSON.stringify(process.env.VERCEL_ENV ?? ""),
   },
-  server: { port: Number(process.env.PORT ?? 5173), strictPort: !!process.env.PORT },
+  server: {
+    port: Number(process.env.PORT ?? 5173),
+    strictPort: !!process.env.PORT,
+    proxy: {
+      "/reference/": {
+        target: REFERENCE_R2_ORIGIN,
+        changeOrigin: true,
+        secure: true,
+        bypass(req) {
+          return shouldProxyReferenceRequest(req.method, req.url ?? "") ? undefined : false;
+        },
+        rewrite: rewriteReferenceRequest,
+      },
+    },
+  },
   build: {
     rollupOptions: {
       input: {
