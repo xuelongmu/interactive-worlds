@@ -47,7 +47,7 @@ describe("AudioEngine narration contract", () => {
     };
     const ambienceGain = vi.fn();
     const engine = new AudioEngine() as any;
-    engine.ctx = { currentTime: 0, createBufferSource: () => source };
+    engine.ctx = { state: "running", currentTime: 0, createBufferSource: () => source };
     engine.buses = new Map([
       ["narration", { gain: { setTargetAtTime: vi.fn() } }],
       ["diegetic", { gain: { setTargetAtTime: vi.fn() } }],
@@ -172,7 +172,7 @@ describe("AudioEngine editorial music", () => {
       start: vi.fn(() => { end = () => source.onended?.(); }),
     };
     const engine = new AudioEngine() as any;
-    engine.ctx = { currentTime: 0, createBufferSource: () => source };
+    engine.ctx = { state: "running", currentTime: 0, createBufferSource: () => source };
     engine.buses = new Map([["music", { gain: { setTargetAtTime: vi.fn() } }]]);
     engine.load = vi.fn().mockResolvedValue({ duration: 2 });
 
@@ -185,5 +185,150 @@ describe("AudioEngine editorial music", () => {
 
     expect(finished).toBe(true);
     expect(source.connect).toHaveBeenCalledWith(engine.buses.get("music"));
+  });
+
+  it("skips a chapter sting when a suspended context cannot finish resuming", async () => {
+    vi.useFakeTimers();
+    const source = {
+      buffer: null as AudioBuffer | null,
+      connect: vi.fn(),
+      onended: null as (() => void) | null,
+      start: vi.fn(),
+      stop: vi.fn(),
+    };
+    const engine = new AudioEngine() as any;
+    engine.ctx = {
+      state: "suspended",
+      currentTime: 0,
+      resume: vi.fn(() => new Promise<void>(() => {})),
+      createBufferSource: () => source,
+    };
+    engine.buses = new Map([["music", {}]]);
+    engine.load = vi.fn().mockResolvedValue({ duration: 2 });
+
+    let finished = false;
+    const playback = engine.playOneShotAndWait("/chapter-sting.mp3").then(() => { finished = true; });
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(finished).toBe(true);
+    expect(source.start).not.toHaveBeenCalled();
+    await playback;
+    vi.useRealTimers();
+  });
+
+  it("contains resume rejection and continues without starting inaudible playback", async () => {
+    const source = {
+      buffer: null as AudioBuffer | null,
+      connect: vi.fn(),
+      onended: null as (() => void) | null,
+      start: vi.fn(),
+    };
+    const engine = new AudioEngine() as any;
+    engine.ctx = {
+      state: "suspended",
+      currentTime: 0,
+      resume: vi.fn().mockRejectedValue(new Error("audio output unavailable")),
+      createBufferSource: () => source,
+    };
+    engine.buses = new Map([["music", {}]]);
+    engine.load = vi.fn().mockResolvedValue({ duration: 2 });
+
+    await expect(engine.playOneShotAndWait("/chapter-sting.mp3")).resolves.toBeUndefined();
+    expect(source.start).not.toHaveBeenCalled();
+  });
+
+  it("bounds playback that never emits an end event", async () => {
+    vi.useFakeTimers();
+    const source = {
+      buffer: null as AudioBuffer | null,
+      connect: vi.fn(),
+      onended: null as (() => void) | null,
+      start: vi.fn(),
+      stop: vi.fn(),
+    };
+    const engine = new AudioEngine() as any;
+    engine.ctx = { state: "running", currentTime: 0, createBufferSource: () => source };
+    engine.buses = new Map([["music", {}]]);
+    engine.load = vi.fn().mockResolvedValue({ duration: 0.1 });
+
+    let finished = false;
+    const playback = engine.playOneShotAndWait("/chapter-sting.mp3").then(() => { finished = true; });
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(source.start).toHaveBeenCalledOnce();
+    expect(source.stop).toHaveBeenCalledOnce();
+    expect(finished).toBe(true);
+    await playback;
+    vi.useRealTimers();
+  });
+
+  it("does not expire an awaited one-shot while audio is explicitly paused", async () => {
+    vi.useFakeTimers();
+    try {
+      let state: "running" | "suspended" = "running";
+      const source = {
+        buffer: null as AudioBuffer | null,
+        connect: vi.fn(),
+        onended: null as (() => void) | null,
+        start: vi.fn(),
+        stop: vi.fn(),
+      };
+      const engine = new AudioEngine() as any;
+      engine.ctx = {
+        get state() { return state; },
+        currentTime: 0,
+        suspend: vi.fn(async () => { state = "suspended"; }),
+        resume: vi.fn(async () => { state = "running"; }),
+        createBufferSource: () => source,
+      };
+      engine.buses = new Map([["music", {}]]);
+      engine.load = vi.fn().mockResolvedValue({ duration: 0.1 });
+
+      let finished = false;
+      const playback = engine.playOneShotAndWait("/chapter-sting.mp3").then(() => { finished = true; });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(source.start).toHaveBeenCalledOnce();
+
+      await engine.pause();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(finished).toBe(false);
+      expect(source.stop).not.toHaveBeenCalled();
+
+      await engine.resume();
+      source.onended?.();
+      await playback;
+      expect(finished).toBe(true);
+      expect(source.stop).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the next chapter audio behind an audible sting end event", async () => {
+    let end!: () => void;
+    const order: string[] = [];
+    const source = {
+      buffer: null as AudioBuffer | null,
+      connect: vi.fn(),
+      onended: null as (() => void) | null,
+      start: vi.fn(() => {
+        order.push("sting-start");
+        end = () => source.onended?.();
+      }),
+    };
+    const engine = new AudioEngine() as any;
+    engine.ctx = { state: "running", currentTime: 0, createBufferSource: () => source };
+    engine.buses = new Map([["music", {}]]);
+    engine.load = vi.fn().mockResolvedValue({ duration: 2 });
+
+    const chapterStart = engine.playOneShotAndWait("/chapter-sting.mp3").then(() => {
+      order.push("ambience-and-narration");
+    });
+    await vi.waitFor(() => expect(source.start).toHaveBeenCalledOnce());
+    expect(order).toEqual(["sting-start"]);
+    end();
+    await chapterStart;
+
+    expect(order).toEqual(["sting-start", "ambience-and-narration"]);
   });
 });

@@ -20,13 +20,17 @@ export function worldGenerationSignature(entry, frameDefinitions = frames) {
   const conditioningFrame = imageFile
     ? frameDefinitions.find((frame) => frame.file === imageFile)
     : null;
-  if (imageFile && !conditioningFrame) {
-    throw new Error(`${entry.scene}: ${imageFile} is missing from the frame pipeline`);
+  if (imageFile && !conditioningFrame && !entry.imageSignature) {
+    throw new Error(
+      `${entry.scene}: ${imageFile} is missing from the frame pipeline and has no imageSignature`,
+    );
   }
   return hash({
     model: WORLD_MODEL,
     image: entry.image ?? null,
-    imageSignature: conditioningFrame ? frameGenerationSignature(conditioningFrame) : null,
+    imageSignature: conditioningFrame
+      ? frameGenerationSignature(conditioningFrame)
+      : entry.imageSignature ?? null,
     prompt: entry.prompt,
   });
 }
