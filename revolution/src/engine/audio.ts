@@ -76,6 +76,14 @@ export class AudioEngine {
     if (this.ctx?.state === "suspended") await this.ctx.resume();
   }
 
+  capturePlaybackGeneration(): number {
+    return this.playbackGeneration;
+  }
+
+  isPlaybackGenerationCurrent(generation: number): boolean {
+    return !this.disposed && generation === this.playbackGeneration;
+  }
+
   private async load(url: string): Promise<AudioBuffer | null> {
     if (this.bufferCache.has(url)) return this.bufferCache.get(url)!;
     try {
@@ -135,8 +143,13 @@ export class AudioEngine {
         await this.waitWhileUnpaused(seconds * 1000, generation);
       }
     } finally {
-      this.duck(duckTargets, false);
-      this.onSubtitle(null);
+      // stopAll() already reset the old scene's buses and subtitle. A late
+      // onended from suspended/cancelled VO must not overwrite the restarted
+      // scene's ducking or subtitle state.
+      if (!this.disposed && generation === this.playbackGeneration) {
+        this.duck(duckTargets, false);
+        this.onSubtitle(null);
+      }
     }
   }
 

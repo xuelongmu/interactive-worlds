@@ -353,8 +353,11 @@ describe("Director live-session prewarming", () => {
 describe("Director editorial music sequencing", () => {
   it("finishes narration, then music, before the cue transition can run", async () => {
     const order: string[] = [];
+    let finishNarration!: () => void;
     const audio = {
-      playVoice: vi.fn(async () => { order.push("narration"); }),
+      capturePlaybackGeneration: vi.fn(() => 0),
+      isPlaybackGenerationCurrent: vi.fn(() => true),
+      playVoice: vi.fn(() => new Promise<void>((resolve) => { finishNarration = resolve; })),
       playOneShotAndWait: vi.fn(async () => { order.push("music"); }),
     };
     const cue = {
@@ -364,11 +367,43 @@ describe("Director editorial music sequencing", () => {
       musicAfter: "/assets/audio/music/swell-test.mp3",
     };
 
-    await playCueAudio(audio, cue);
+    const playback = playCueAudio(audio, cue);
+    await vi.waitFor(() => expect(audio.playVoice).toHaveBeenCalledOnce());
+    expect(audio.playOneShotAndWait).not.toHaveBeenCalled();
+    order.push("narration");
+    finishNarration();
+    await playback;
     order.push("transition");
 
     expect(order).toEqual(["narration", "music", "transition"]);
     expect(audio.playOneShotAndWait).toHaveBeenCalledWith(cue.musicAfter);
+  });
+
+  it("does not launch the old swell when Pause -> Restart cancels narration", async () => {
+    let finishNarration!: () => void;
+    let generation = 0;
+    const audio = {
+      capturePlaybackGeneration: vi.fn(() => generation),
+      isPlaybackGenerationCurrent: vi.fn((captured: number) => captured === generation),
+      playVoice: vi.fn(() => new Promise<void>((resolve) => { finishNarration = resolve; })),
+      playOneShotAndWait: vi.fn().mockResolvedValue(undefined),
+    };
+    const cue = {
+      id: "TEST-RESTART-MUSIC",
+      trigger: { type: "scene-start" as const },
+      subtitle: "The old chapter's final line.",
+      musicAfter: "/assets/audio/music/swell-test.mp3",
+    };
+
+    const playback = playCueAudio(audio, cue);
+    await vi.waitFor(() => expect(audio.playVoice).toHaveBeenCalledOnce());
+    // teardownScene() calls stopAll(); the interrupted voice reports that its
+    // playback generation was invalidated once restart releases the pause.
+    generation++;
+    finishNarration();
+    await playback;
+
+    expect(audio.playOneShotAndWait).not.toHaveBeenCalled();
   });
 
   it("uses the approved score's chapter sting on title cards", () => {

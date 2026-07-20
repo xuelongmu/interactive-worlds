@@ -81,11 +81,15 @@ const CHAPTER_WORDS = [
 
 export const CHAPTER_STING_URL = "/assets/audio/music/chapter-sting.mp3";
 
-type DirectorAudio = Pick<AudioEngine, "playVoice" | "playOneShotAndWait">;
+type DirectorAudio = Pick<
+  AudioEngine,
+  "capturePlaybackGeneration" | "isPlaybackGenerationCurrent" | "playVoice" | "playOneShotAndWait"
+>;
 
 /** Keep every editorial swell after its authored line and inside the cue
  * queue, so `then:` transitions cannot race ahead of the music. */
 export async function playCueAudio(audio: DirectorAudio, cue: Cue) {
+  const generation = audio.capturePlaybackGeneration();
   if (cue.diegeticVo) {
     await audio.playVoice({
       url: cue.diegeticVo,
@@ -93,6 +97,7 @@ export async function playCueAudio(audio: DirectorAudio, cue: Cue) {
       bus: "diegetic",
       duck: [],
     });
+    if (!audio.isPlaybackGenerationCurrent(generation)) return;
   }
   await audio.playVoice({
     url: cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`,
@@ -100,6 +105,7 @@ export async function playCueAudio(audio: DirectorAudio, cue: Cue) {
     bus: cue.diegetic ? "diegetic" : "narration",
     duck: cue.diegetic ? [] : cue.duck as BusName[] | undefined,
   });
+  if (!audio.isPlaybackGenerationCurrent(generation)) return;
   if (cue.musicAfter) await audio.playOneShotAndWait(cue.musicAfter);
 }
 
