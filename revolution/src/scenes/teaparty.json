@@ -44,6 +44,21 @@
       "then": "scene:lexington" }
   ],
   "audio": { "ambience": ["/assets/audio/amb/wharf-night.mp3"] },
+  "branching": {
+    "context": "tea-party-deck-duty-choice",
+    "actions": [
+      {
+        "choiceId": "tea-party-deck-duty.break-chest",
+        "heldPrompt": "The viewer's visible hands grip a period hatchet and begin splitting the nearest tea chest at the rail.",
+        "releasedPrompt": "The first tea chest is split open at the rail; the viewer lowers the hatchet while the shared deck work continues."
+      },
+      {
+        "choiceId": "tea-party-deck-duty.sweep-deck",
+        "heldPrompt": "The viewer's visible hands push a period broom across the deck, sweeping loose tea and splinters clear.",
+        "releasedPrompt": "A narrow path on the deck is swept clear; the viewer steadies the broom while the shared deck work continues."
+      }
+    ]
+  },
   "modelEvents": [
     { "at": 15, "name": "chest-open",
       "prompt": "Same ship deck at night: the viewer's own hands swing a hatchet into a large wooden tea chest at the rail, splitting it open, then tip it so loose black tea pours over the side into dark harbor water. Other disguised men do the same along the rail. Lantern light, sleet, cold breath. Realistic, very low light." },

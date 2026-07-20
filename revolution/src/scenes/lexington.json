@@ -42,5 +42,6 @@
       "then": "scene:declaration" }
   ],
   "audio": { "ambience": ["/assets/audio/amb/green-dawn.mp3"] },
+  "branching": { "context": "lexington-deck-duty-acknowledgement" },
   "next": { "scene": "declaration", "preloadAt": "LEX-060" }
 }
