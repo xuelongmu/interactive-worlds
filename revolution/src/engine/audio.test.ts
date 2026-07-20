@@ -262,6 +262,48 @@ describe("AudioEngine editorial music", () => {
     vi.useRealTimers();
   });
 
+  it("does not expire an awaited one-shot while audio is explicitly paused", async () => {
+    vi.useFakeTimers();
+    try {
+      let state: "running" | "suspended" = "running";
+      const source = {
+        buffer: null as AudioBuffer | null,
+        connect: vi.fn(),
+        onended: null as (() => void) | null,
+        start: vi.fn(),
+        stop: vi.fn(),
+      };
+      const engine = new AudioEngine() as any;
+      engine.ctx = {
+        get state() { return state; },
+        currentTime: 0,
+        suspend: vi.fn(async () => { state = "suspended"; }),
+        resume: vi.fn(async () => { state = "running"; }),
+        createBufferSource: () => source,
+      };
+      engine.buses = new Map([["music", {}]]);
+      engine.load = vi.fn().mockResolvedValue({ duration: 0.1 });
+
+      let finished = false;
+      const playback = engine.playOneShotAndWait("/chapter-sting.mp3").then(() => { finished = true; });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(source.start).toHaveBeenCalledOnce();
+
+      await engine.pause();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(finished).toBe(false);
+      expect(source.stop).not.toHaveBeenCalled();
+
+      await engine.resume();
+      source.onended?.();
+      await playback;
+      expect(finished).toBe(true);
+      expect(source.stop).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps the next chapter audio behind an audible sting end event", async () => {
     let end!: () => void;
     const order: string[] = [];

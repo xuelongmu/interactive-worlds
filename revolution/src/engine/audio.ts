@@ -209,19 +209,23 @@ export class AudioEngine {
       const finish = () => {
         if (settled) return;
         settled = true;
-        clearTimeout(endFallback);
         source.onended = null;
         this.activeSources.delete(source);
         resolveDone();
       };
       const durationMs = Number.isFinite(buffer.duration) ? Math.max(0, buffer.duration * 1_000) : 0;
-      const endFallback = setTimeout(() => {
+      void this.waitWhileUnpaused(
+        durationMs + PLAYBACK_END_GRACE_MS,
+        generation,
+        () => settled
+      ).then(() => {
+        if (settled) return;
         // A running-looking context can still stop advancing. Do not leave a
         // latent sting that begins over narration if audio later recovers.
         source.onended = null;
         try { source.stop(); } catch { /* already stopped */ }
         finish();
-      }, durationMs + PLAYBACK_END_GRACE_MS);
+      });
       source.onended = () => {
         finish();
       };
@@ -287,10 +291,18 @@ export class AudioEngine {
     if (context && context.state !== "closed") await context.close();
   }
 
-  private async waitWhileUnpaused(durationMs: number, generation: number) {
+  private async waitWhileUnpaused(
+    durationMs: number,
+    generation: number,
+    cancelled: () => boolean = () => false
+  ) {
     let remaining = durationMs;
     let last = performance.now();
-    while (remaining > 0 && generation === this.playbackGeneration) {
+    while (
+      remaining > 0
+      && generation === this.playbackGeneration
+      && !cancelled()
+    ) {
       await new Promise((resolve) => setTimeout(resolve, Math.min(100, remaining)));
       const now = performance.now();
       if (!this.paused) remaining -= now - last;
