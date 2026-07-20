@@ -54,6 +54,9 @@ export interface Cue {
   once?: boolean;
   /** bus names to duck while this cue plays */
   duck?: string[];
+  /** Sparse editorial music played only after this line finishes and before
+   * any `then:` transition. Never place battle or source music here. */
+  musicAfter?: string;
   lockControls?: boolean;
   /** follow-up action for the director, e.g. "cutscene:volley", "scene:declaration" */
   then?: string;
