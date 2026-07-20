@@ -19,6 +19,7 @@ function installStorage() {
     key: (index) => [...values.keys()][index] ?? null,
     get length() { return values.size; },
   };
+  return values;
 }
 
 function sceneIds() {
@@ -35,6 +36,23 @@ test("every authored chapter can be restored as the in-progress resume target", 
   for (const scene of scenes) {
     const state = { completedScenes: [], currentSceneId: scene.id, signature: null };
     assert.equal(getResumeScene(scenes, state)?.id, scene.id);
+  }
+});
+
+test("every chapter survives a reload-equivalent storage round trip", () => {
+  const scenes = sceneIds();
+  for (const [index, scene] of scenes.entries()) {
+    installStorage();
+    const completedScenes = scenes.slice(0, index).map(({ id }) => id);
+    localStorage.setItem("revolution-story-state", JSON.stringify({
+      completedScenes,
+      currentSceneId: scene.id,
+      signature: null,
+    }));
+
+    const restored = loadState();
+    assert.deepEqual(restored.completedScenes, completedScenes);
+    assert.equal(getResumeScene(scenes, restored)?.id, scene.id);
   }
 });
 
@@ -68,4 +86,14 @@ test("missing narration preserves subtitle timing and restores ambience", async 
     ["subtitle", null],
   ]);
   assert.deepEqual(ambienceGain.at(-1), [1, 0, 0.15]);
+});
+
+test("loading surface stays a title-card status without spinner markup", () => {
+  const director = readFileSync(new URL("./engine/director.ts", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("./style.css", import.meta.url), "utf8");
+  const loadingSurface = `${director}\n${styles}`;
+
+  assert.match(director, /class="title-card"/);
+  assert.match(director, /class="card-status"/);
+  assert.doesNotMatch(loadingSurface, /class=["'][^"']*spinner|<progress\b|role=["']progressbar/i);
 });

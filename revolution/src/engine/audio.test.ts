@@ -109,6 +109,30 @@ describe("AudioEngine narration contract", () => {
     expect(subtitles).toHaveBeenCalledOnce();
     expect(subtitles).toHaveBeenCalledWith("Restarted opening line.");
   });
+
+  it("holds a configured voice gap across pause and cancels it on restart", async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = new AudioEngine() as any;
+      const generation = engine.capturePlaybackGeneration();
+      let completed = false;
+      const gap = engine.waitForPlaybackGap(500, generation).then((current: boolean) => {
+        completed = true;
+        return current;
+      });
+
+      await vi.advanceTimersByTimeAsync(200);
+      engine.paused = true;
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(completed).toBe(false);
+
+      engine.stopAll();
+      await vi.advanceTimersByTimeAsync(100);
+      await expect(gap).resolves.toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("AudioEngine positional diegetic playback", () => {

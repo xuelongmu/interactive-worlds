@@ -34,6 +34,8 @@ export interface CueTrigger {
   /** Fallback delay after the preceding cue finishes. This keeps exploratory
    * scenes moving when a viewer misses an authored zone. */
   orAfterPrevious?: number;
+  /** Pause-aware delay from a matched normalized event to cue dispatch. */
+  afterEventSeconds?: number;
 }
 
 export interface Cue {
@@ -57,6 +59,8 @@ export interface Cue {
   /** Sparse editorial music played only after this line finishes and before
    * any `then:` transition. Never place battle or source music here. */
   musicAfter?: string;
+  /** Explicitly bypasses the normal inter-cue breathing gap. */
+  interruption?: boolean;
   lockControls?: boolean;
   /** follow-up action for the director, e.g. "cutscene:volley", "scene:declaration" */
   then?: string;

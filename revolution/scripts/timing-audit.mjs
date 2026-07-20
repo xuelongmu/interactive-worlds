@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PERCEIVED_TIMING_POLICY, requiredVoiceGapMs } from "../src/timing/policy.ts";
+import {
+  PERCEIVED_TIMING_POLICY,
+  finalVoiceKindForCue,
+  firstVoiceKindForCue,
+  requiredVoiceGapMs,
+} from "../src/timing/policy.ts";
 import { summarizeTimingSamples } from "../src/timing/telemetry.ts";
 
 const CLOCK_CLASSIFICATIONS = new Map(Object.entries({
@@ -110,14 +115,16 @@ export function auditSceneTiming({ sceneDirectory, publicDirectory }) {
       }
       const previousCue = manifest.cues[cueIndex - 1];
       if (previousCue?.subtitle && cue.subtitle) {
+        const previousVoice = finalVoiceKindForCue(previousCue);
+        const nextVoice = firstVoiceKindForCue(cue);
         const sample = timingSample({
           id: `${manifest.id}:${previousCue.id}:${cue.id}:narrator-boundary`,
           sceneId: manifest.id,
           from: "voice-complete",
           to: "audible-beat",
           gapMs: requiredVoiceGapMs({
-            previous: previousCue.diegetic ? "diegetic" : "narrator",
-            next: cue.diegetic ? "diegetic" : "narrator",
+            previous: previousVoice ?? "narrator",
+            next: nextVoice ?? "narrator",
             interrupted: cue.interruption === true,
           }),
         });
