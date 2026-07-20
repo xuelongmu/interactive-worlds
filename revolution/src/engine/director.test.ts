@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   activeRunnerCanResumePointerInput,
   canPrewarmWorldModelTarget,
+  CHAPTER_STING_URL,
   completeCutsceneHandoff,
   controlHandoffForScene,
   defaultGuidanceForCue,
   dispatchEngineEvent,
   Director,
+  playCueAudio,
   runnerHasMovementInput,
   runnerCanResumePointerInput,
 } from "./director";
@@ -345,5 +347,66 @@ describe("Director live-session prewarming", () => {
     expect(await controller.prewarm({ scene: worldScene("failed"), strategy: "transport" })).toBe(false);
     expect(await controller.adopt("failed", "transport")).toBeNull();
     expect(session.disconnect).toHaveBeenCalledWith({ reason: "prewarm-failed", dispose: true });
+  });
+});
+
+describe("Director editorial music sequencing", () => {
+  it("finishes narration, then music, before the cue transition can run", async () => {
+    const order: string[] = [];
+    let finishNarration!: () => void;
+    const audio = {
+      capturePlaybackGeneration: vi.fn(() => 0),
+      isPlaybackGenerationCurrent: vi.fn(() => true),
+      playVoice: vi.fn(() => new Promise<void>((resolve) => { finishNarration = resolve; })),
+      playOneShotAndWait: vi.fn(async () => { order.push("music"); }),
+    };
+    const cue = {
+      id: "TEST-MUSIC",
+      trigger: { type: "scene-start" as const },
+      subtitle: "A final line.",
+      musicAfter: "/assets/audio/music/swell-test.mp3",
+    };
+
+    const playback = playCueAudio(audio, cue);
+    await vi.waitFor(() => expect(audio.playVoice).toHaveBeenCalledOnce());
+    expect(audio.playOneShotAndWait).not.toHaveBeenCalled();
+    order.push("narration");
+    finishNarration();
+    await playback;
+    order.push("transition");
+
+    expect(order).toEqual(["narration", "music", "transition"]);
+    expect(audio.playOneShotAndWait).toHaveBeenCalledWith(cue.musicAfter);
+  });
+
+  it("does not launch the old swell when Pause -> Restart cancels narration", async () => {
+    let finishNarration!: () => void;
+    let generation = 0;
+    const audio = {
+      capturePlaybackGeneration: vi.fn(() => generation),
+      isPlaybackGenerationCurrent: vi.fn((captured: number) => captured === generation),
+      playVoice: vi.fn(() => new Promise<void>((resolve) => { finishNarration = resolve; })),
+      playOneShotAndWait: vi.fn().mockResolvedValue(undefined),
+    };
+    const cue = {
+      id: "TEST-RESTART-MUSIC",
+      trigger: { type: "scene-start" as const },
+      subtitle: "The old chapter's final line.",
+      musicAfter: "/assets/audio/music/swell-test.mp3",
+    };
+
+    const playback = playCueAudio(audio, cue);
+    await vi.waitFor(() => expect(audio.playVoice).toHaveBeenCalledOnce());
+    // teardownScene() calls stopAll(); the interrupted voice reports that its
+    // playback generation was invalidated once restart releases the pause.
+    generation++;
+    finishNarration();
+    await playback;
+
+    expect(audio.playOneShotAndWait).not.toHaveBeenCalled();
+  });
+
+  it("uses the approved score's chapter sting on title cards", () => {
+    expect(CHAPTER_STING_URL).toBe("/assets/audio/music/chapter-sting.mp3");
   });
 });
