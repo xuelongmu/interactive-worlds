@@ -26,8 +26,8 @@ let installed = false;
 function loadTurnstile(): Promise<TurnstileApi> {
   if (window.turnstile) return Promise.resolve(window.turnstile);
   if (scriptPromise) return scriptPromise;
+  const script = document.createElement("script");
   scriptPromise = new Promise<TurnstileApi>((resolve, reject) => {
-    const script = document.createElement("script");
     script.src = TURNSTILE_SCRIPT;
     script.async = true;
     script.defer = true;
@@ -37,6 +37,10 @@ function loadTurnstile(): Promise<TurnstileApi> {
     }, { once: true });
     script.addEventListener("error", () => reject(new Error("Turnstile failed to load")), { once: true });
     document.head.appendChild(script);
+  }).catch((error) => {
+    scriptPromise = null;
+    script.remove();
+    throw error;
   });
   return scriptPromise;
 }
@@ -96,31 +100,98 @@ async function oneTimeChallenge(): Promise<string> {
   });
 }
 
-/**
- * Add a one-time Turnstile token to production session requests without
- * coupling the renderer to a specific challenge provider.
- */
-export function installSessionChallenge(): void {
-  if (!import.meta.env.PROD || installed) return;
-  installed = true;
-  const nativeFetch = window.fetch.bind(window);
+function isChallengeRequired(response: Response): boolean {
+  return response.status === 428 &&
+    response.headers.get("x-session-challenge") === "turnstile";
+}
 
-  window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const target = input instanceof Request ? new URL(input.url) : new URL(String(input), location.href);
+/**
+ * Request a session normally. Only an explicit broker challenge response opens
+ * Turnstile; concurrent callers share that one widget/token exchange. The
+ * exchange owner receives its JWT, while waiters retry after the HttpOnly
+ * clearance cookie has been stored and receive independently admitted JWTs.
+ */
+export function createSessionChallengeFetch(
+  nativeFetch: typeof fetch,
+  getChallengeToken: () => Promise<string>,
+  origin: string
+): typeof fetch {
+  let challengeFlight: Promise<Response> | null = null;
+  let clearanceGeneration = 0;
+
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const target = input instanceof Request ? new URL(input.url) : new URL(String(input), origin);
     const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
-    if (target.origin !== location.origin || target.pathname !== SESSION_PATH || method !== "POST") {
+    if (target.origin !== origin || target.pathname !== SESSION_PATH || method !== "POST") {
       return nativeFetch(input, init);
     }
 
-    const challengeToken = await oneTimeChallenge();
-    const headers = new Headers(input instanceof Request ? input.headers : undefined);
-    new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
-    headers.set("content-type", "application/json");
-    return nativeFetch(input, {
-      ...init,
-      method: "POST",
-      headers,
-      body: JSON.stringify({ challengeToken }),
-    });
-  }) as typeof window.fetch;
+    const generationAtStart = clearanceGeneration;
+    const retryInput = input instanceof Request ? input.clone() : input;
+    const response = await nativeFetch(input, init);
+    if (!isChallengeRequired(response)) return response;
+
+    // A concurrent exchange completed after this request was sent. Its cookie
+    // is already in the browser jar, so retry without opening another widget.
+    if (generationAtStart !== clearanceGeneration) {
+      return nativeFetch(retryInput, init);
+    }
+
+    const existingFlight = challengeFlight;
+    if (existingFlight) {
+      const exchange = await existingFlight;
+      if (!exchange.ok) return exchange.clone();
+      return nativeFetch(retryInput, init);
+    }
+
+    const exchangeTarget = input instanceof Request ? input.url : input;
+    const flight = (async () => {
+      const challengeToken = await getChallengeToken();
+      const headers = new Headers(input instanceof Request ? input.headers : undefined);
+      new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
+      headers.set("content-type", "application/json");
+      return nativeFetch(exchangeTarget, {
+        ...init,
+        method: "POST",
+        headers,
+        body: JSON.stringify({ challengeToken }),
+        credentials: "same-origin",
+      });
+    })();
+    challengeFlight = flight;
+
+    try {
+      const exchange = await flight;
+      if (exchange.ok) clearanceGeneration += 1;
+      return exchange;
+    } finally {
+      if (challengeFlight === flight) challengeFlight = null;
+    }
+  }) as typeof fetch;
+}
+
+export function sessionChallengeDisabled(
+  deploymentEnvironment: string | undefined,
+  challengeMode: string | undefined
+): boolean {
+  return deploymentEnvironment === "preview" && challengeMode === "disabled";
+}
+
+/**
+ * Install the production-only session challenge adapter. Local Vite
+ * development keeps its explicit loopback broker behavior.
+ */
+export function installSessionChallenge(): void {
+  const disabledForDeployment = sessionChallengeDisabled(
+    import.meta.env.VITE_DEPLOYMENT_ENV,
+    import.meta.env.VITE_SESSION_CHALLENGE_MODE
+  );
+  if (!import.meta.env.PROD || disabledForDeployment || installed) return;
+  installed = true;
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = createSessionChallengeFetch(
+    nativeFetch,
+    oneTimeChallenge,
+    location.origin
+  ) as typeof window.fetch;
 }

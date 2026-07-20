@@ -1,18 +1,93 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LingbotWorld2Message, LingbotWorld2Model } from "@reactor-models/lingbot-world-2";
+import { BRANCH_ACTION_MAPPINGS } from "../branch-state";
 import {
   canDispatchWorldModelAction,
+  bindWorldModelKeys,
+  createReactorWorldModel,
+  formatSessionRetryAfter,
+  formatWorldModelError,
   frameHasVisibleContent,
   isGroundedWorldModelEvent,
+  isReactorCapacityErrorStatus,
   isWorldModelActionKey,
   ModelEventTimeline,
+  REACTOR_WORLD_MODELS,
+  resolveLegacyLingbotMovement,
+  resolveReactorWorldModelName,
   resolveWorldModelPointerLook,
   ROLLOVER_OUTPUT_BUDGET_MS,
+  supportsReactorWorldNavigation,
   WorldModelPresentationGate,
   WorldModelRolloverGate,
   WorldModelScenePlayer,
   WorldModelSession,
 } from "./worldmodel";
+
+describe("Reactor world-model selection", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("allows the deployed URL to switch between the two navigable models", () => {
+    expect(resolveReactorWorldModelName("?reactorModel=lingbot", "")).toBe(
+      REACTOR_WORLD_MODELS.lingbot
+    );
+    expect(resolveReactorWorldModelName("?reactorModel=lingbot-world-2", "reactor/lingbot")).toBe(
+      REACTOR_WORLD_MODELS["lingbot-world-2"]
+    );
+  });
+
+  it("uses an allowlisted build default and fails unknown values back to World 2", () => {
+    expect(resolveReactorWorldModelName("", "reactor/lingbot")).toBe(REACTOR_WORLD_MODELS.lingbot);
+    expect(resolveReactorWorldModelName("?reactorModel=sana", "reactor/lingbot")).toBe(
+      REACTOR_WORLD_MODELS["lingbot-world-2"]
+    );
+  });
+
+  it("selects Helios only as a non-navigable cinematic model", () => {
+    expect(resolveReactorWorldModelName("?reactorModel=helios", "")).toBe(
+      REACTOR_WORLD_MODELS.helios
+    );
+    expect(supportsReactorWorldNavigation(REACTOR_WORLD_MODELS.helios)).toBe(false);
+    expect(supportsReactorWorldNavigation(REACTOR_WORLD_MODELS.lingbot)).toBe(true);
+  });
+
+  it("commits Helios image and prompt atomically before generation", async () => {
+    const model = createReactorWorldModel(REACTOR_WORLD_MODELS.helios) as any;
+    const image = { uploadId: "reference" };
+    model.setConditioning = vi.fn().mockResolvedValue(undefined);
+
+    await model.setImage({ image });
+    await model.setPrompt({ prompt: "historical scene" });
+
+    expect(model.setConditioning).toHaveBeenCalledWith({ image, prompt: "historical scene" });
+  });
+
+  it("maps diagonal input deterministically onto legacy LingBot's single axis", () => {
+    expect(resolveLegacyLingbotMovement("forward", "strafe_left")).toBe("forward");
+    expect(resolveLegacyLingbotMovement("idle", "strafe_right")).toBe("strafe_right");
+  });
+
+  it("requests a JWT scoped to the selected model", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ jwt: "jwt" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await WorldModelSession.mintJwt(REACTOR_WORLD_MODELS.lingbot);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/session?model=reactor%2Flingbot",
+      { method: "POST" }
+    );
+  });
+
+  it("recognizes capacity statuses without matching unrelated errors", () => {
+    expect(isReactorCapacityErrorStatus("token mint failed: 503 capacity exhausted")).toBe(true);
+    expect(isReactorCapacityErrorStatus(
+      "Live connection failed: Live session limit reached. Try again in about 1 hour."
+    )).toBe(true);
+    expect(isReactorCapacityErrorStatus("error 1503")).toBe(false);
+    expect(isReactorCapacityErrorStatus("Live connection failed: token mint failed (429)")).toBe(false);
+  });
+});
 
 type Handler<T = unknown> = (value: T) => void;
 
@@ -27,6 +102,15 @@ class FakeModel {
   private messages = new Set<Handler<LingbotWorld2Message>>();
   private imageAccepted = new Set<Handler<any>>();
   private conditionsReady = new Set<Handler<any>>();
+  private generationReset = new Set<Handler<any>>();
+  private promptAccepted = new Set<Handler<any>>();
+  private stateHandlers = new Set<Handler<any>>();
+  private input = {
+    move_longitudinal: "idle",
+    move_lateral: "idle",
+    look_horizontal: "idle",
+    look_vertical: "idle",
+  };
 
   on(event: string, handler: Handler) {
     this.calls.push(`listen:${event}`);
@@ -51,6 +135,21 @@ class FakeModel {
     this.conditionsReady.add(handler);
     return () => this.conditionsReady.delete(handler);
   }
+  onGenerationReset(handler: Handler) {
+    this.calls.push("listen:reset");
+    this.generationReset.add(handler);
+    return () => this.generationReset.delete(handler);
+  }
+  onPromptAccepted(handler: Handler) {
+    this.calls.push("listen:prompt");
+    this.promptAccepted.add(handler);
+    return () => this.promptAccepted.delete(handler);
+  }
+  onState(handler: Handler) {
+    this.calls.push("listen:state");
+    this.stateHandlers.add(handler);
+    return () => this.stateHandlers.delete(handler);
+  }
   getStatus() { return this.status; }
   async connect() {
     this.calls.push("connect");
@@ -61,6 +160,11 @@ class FakeModel {
     }
   }
   async uploadFile() { this.calls.push("upload"); return { id: "ref" } as any; }
+  async reset() {
+    this.calls.push("reset");
+    this.emit({ type: "generation_reset", reason: "test" });
+    this.emitState();
+  }
   async setImage() {
     this.calls.push("setImage");
     this.emit({ type: "image_accepted", width: 1664, height: 960 });
@@ -85,15 +189,23 @@ class FakeModel {
   async disconnect() { this.calls.push("disconnect"); }
   async setMoveLongitudinal({ move_longitudinal }: { move_longitudinal?: string }) {
     this.calls.push(`move-long:${move_longitudinal}`);
+    this.input.move_longitudinal = move_longitudinal ?? "idle";
+    this.emitState();
   }
   async setMoveLateral({ move_lateral }: { move_lateral?: string }) {
     this.calls.push(`move-lateral:${move_lateral}`);
+    this.input.move_lateral = move_lateral ?? "idle";
+    this.emitState();
   }
   async setLookHorizontal({ look_horizontal }: { look_horizontal?: string }) {
     this.calls.push(`look-h:${look_horizontal}`);
+    this.input.look_horizontal = look_horizontal ?? "idle";
+    this.emitState();
   }
   async setLookVertical({ look_vertical }: { look_vertical?: string }) {
     this.calls.push(`look-v:${look_vertical}`);
+    this.input.look_vertical = look_vertical ?? "idle";
+    this.emitState();
   }
   getConnectionTimings() { return undefined; }
   getStats() { return undefined; }
@@ -108,7 +220,34 @@ class FakeModel {
     if (message.type === "conditions_ready") {
       for (const handler of this.conditionsReady) handler(message);
     }
+    if (message.type === "generation_reset") {
+      for (const handler of this.generationReset) handler(message);
+    }
+    if (message.type === "prompt_accepted") {
+      for (const handler of this.promptAccepted) handler(message);
+    }
+    if (message.type === "state") {
+      for (const handler of this.stateHandlers) handler(message);
+    }
     for (const handler of this.messages) handler(message);
+  }
+
+  emitState() {
+    this.emit({
+      type: "state",
+      seed: 42,
+      paused: false,
+      running: false,
+      started: false,
+      has_image: true,
+      has_prompt: true,
+      ...this.input,
+      current_chunk: 0,
+      current_action: "still",
+      current_prompt: "scene",
+      camera_pose_active: false,
+      rotation_speed_deg: 5,
+    });
   }
 
   emitEvent(event: string, value: unknown) {
@@ -116,7 +255,62 @@ class FakeModel {
   }
 
   temporaryListenerCount() {
-    return this.imageAccepted.size + this.conditionsReady.size;
+    return this.imageAccepted.size + this.conditionsReady.size + this.generationReset.size
+      + this.promptAccepted.size + this.stateHandlers.size;
+  }
+}
+
+class LegacyLingbotConditioningModel extends FakeModel {
+  override emitState() {
+    this.emit({
+      type: "state",
+      seed: 42,
+      paused: false,
+      running: false,
+      started: false,
+      movement: "idle",
+      has_image: false,
+      has_prompt: false,
+      current_chunk: 0,
+      look_horizontal: "idle",
+      look_vertical: "idle",
+      current_action: "still",
+      current_prompt: null,
+      rotation_speed_deg: 5,
+    } as unknown as LingbotWorld2Message);
+  }
+}
+
+class HeliosConditioningModel extends FakeModel {
+  override onGenerationReset(_handler: Handler): never {
+    throw new Error("Helios does not expose onGenerationReset");
+  }
+
+  override async reset() {
+    this.calls.push("reset");
+    this.emit({
+      type: "state",
+      paused: false,
+      running: false,
+      started: false,
+      image_set: false,
+      current_chunk: 0,
+      current_frame: 0,
+      current_prompt: null,
+      image_strength: 1,
+      scheduled_prompts: {},
+    } as unknown as LingbotWorld2Message);
+  }
+
+  override async setImage() {
+    this.calls.push("setImage");
+  }
+
+  override async setPrompt({ prompt }: { prompt?: string }) {
+    this.calls.push(`setPrompt:${prompt ?? ""}`);
+    this.emit({ type: "image_accepted", width: 1664, height: 960 });
+    this.emit({ type: "prompt_accepted", prompt: prompt ?? "" });
+    this.emit({ type: "conditions_ready", has_image: true, has_prompt: true });
   }
 }
 
@@ -130,6 +324,31 @@ function makeSession(model = new FakeModel()) {
   return { model, session, telemetry };
 }
 
+async function makeBlockedInputCleanup() {
+  const { model, session } = makeSession();
+  await session.prepare(new Blob(), "scene");
+  await session.begin();
+  await session.setInputEnabled(true);
+  await session.setMovement("forward", "idle");
+
+  let releaseCleanup = () => {};
+  const cleanupBlocked = new Promise<void>((resolve) => { releaseCleanup = resolve; });
+  const setMoveLongitudinal = model.setMoveLongitudinal.bind(model);
+  vi.spyOn(model, "setMoveLongitudinal").mockImplementationOnce(async (input) => {
+    await cleanupBlocked;
+    await setMoveLongitudinal(input);
+  });
+
+  const transitions: Promise<void>[] = [];
+  const setInputEnabled = session.setInputEnabled.bind(session);
+  vi.spyOn(session, "setInputEnabled").mockImplementation((enabled) => {
+    const transition = setInputEnabled(enabled);
+    transitions.push(transition);
+    return transition;
+  });
+  return { model, session, transitions, releaseCleanup };
+}
+
 describe("WorldModelSession lifecycle", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -137,17 +356,95 @@ describe("WorldModelSession lifecycle", () => {
     vi.unstubAllGlobals();
   });
 
+  it("shows a clear retry message when session admission is full", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(
+      { error: "session capacity reached", code: "session_capacity_reached" },
+      { status: 429, headers: { "retry-after": "3600" } }
+    )));
+
+    await expect(WorldModelSession.mintJwt()).rejects.toThrow(
+      "Live session limit reached. Try again in about 1 hour."
+    );
+  });
+
+  it("does not label an unrelated intermediary 429 as session capacity", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(
+      { error: "edge rate limit", code: "edge_rate_limited" },
+      { status: 429, headers: { "retry-after": "60" } }
+    )));
+
+    await expect(WorldModelSession.mintJwt()).rejects.toThrow("token mint failed (429)");
+  });
+
+  it("formats client-window and daily-limit retry durations", () => {
+    expect(formatSessionRetryAfter("45")).toBe("45 seconds");
+    expect(formatSessionRetryAfter("600")).toBe("10 minutes");
+    expect(formatSessionRetryAfter("7200")).toBe("2 hours");
+    expect(formatSessionRetryAfter("86460")).toBe("1 day");
+    expect(formatSessionRetryAfter("invalid")).toBeNull();
+  });
+
   it("prepares transport and conditions without starting generation", async () => {
     const { model, session } = makeSession();
     await session.prepare(new Blob(["frame"]), "winter river");
 
     expect(session.phase).toBe("prepared");
-    expect(model.calls).toEqual([
-      "listen:statusChanged", "listen:video", "listen:message",
-      "mint", "connect", "listen:image", "listen:conditions",
-      "upload", "setImage", "setPrompt:winter river",
+    const commands = model.calls.filter((call) =>
+      ["mint", "connect", "reset", "upload", "setImage"].includes(call)
+      || call.startsWith("setPrompt:"));
+    expect(commands.map((call) => call.startsWith("setPrompt:") ? "setPrompt" : call)).toEqual([
+      "mint", "connect", "reset", "upload", "setImage", "setPrompt",
     ]);
+    expect(model.calls).toContain("listen:error");
+    expect(model.calls.find((call) => call.startsWith("setPrompt:"))).toContain("winter river");
     expect(model.calls).not.toContain("start");
+    expect(model.temporaryListenerCount()).toBe(0);
+  });
+
+  it("conditions legacy Lingbot from its single movement state schema", async () => {
+    const model = new LegacyLingbotConditioningModel();
+    const readiness = vi.fn();
+    const session = new WorldModelSession({
+      modelName: REACTOR_WORLD_MODELS.lingbot,
+      mintJwt: async () => "jwt",
+      onBranchReadiness: readiness,
+      timeouts: { mint: 100, connect: 100, ready: 100, upload: 100, conditions: 100, input: 100 },
+    }, model as unknown as LingbotWorld2Model);
+
+    await session.prepare(new Blob(["frame"]), "legacy scene");
+
+    expect(session.phase).toBe("prepared");
+    expect(readiness).toHaveBeenLastCalledWith({
+      sessionConfirmed: true,
+      imageConfirmed: true,
+      promptConfirmed: true,
+      inputConfirmed: true,
+    });
+    expect(model.temporaryListenerCount()).toBe(0);
+  });
+
+  it("conditions Helios from reset state and its atomic image/prompt command", async () => {
+    const model = new HeliosConditioningModel();
+    const readiness = vi.fn();
+    const session = new WorldModelSession({
+      modelName: REACTOR_WORLD_MODELS.helios,
+      mintJwt: async () => "jwt",
+      onBranchReadiness: readiness,
+      timeouts: { mint: 100, connect: 100, ready: 100, upload: 100, conditions: 100, input: 100 },
+    }, model as unknown as LingbotWorld2Model);
+
+    await session.prepare(new Blob(["frame"]), "cinematic scene");
+
+    expect(session.phase).toBe("prepared");
+    expect(model.calls.indexOf("setImage")).toBeLessThan(
+      model.calls.findIndex((call) => call.startsWith("setPrompt:")),
+    );
+    expect(readiness).toHaveBeenLastCalledWith({
+      sessionConfirmed: true,
+      imageConfirmed: true,
+      promptConfirmed: true,
+      inputConfirmed: true,
+    });
     expect(model.temporaryListenerCount()).toBe(0);
   });
 
@@ -182,7 +479,7 @@ describe("WorldModelSession lifecycle", () => {
     const { session } = makeSession(model);
     await session.prepareTransport();
     const conditioning = session.condition(new Blob(), "scene");
-    const rejection = expect(conditioning).rejects.toThrow("conditions_ready timeout");
+    const rejection = expect(conditioning).rejects.toThrow("prompt_accepted timeout");
     await vi.advanceTimersByTimeAsync(101);
 
     await rejection;
@@ -222,6 +519,206 @@ describe("WorldModelSession lifecycle", () => {
       "look-h:right",
       "look-v:down",
     ]);
+  });
+
+  it("keeps movement and E/F enabled when rapid resume overtakes pause cleanup", async () => {
+    vi.stubGlobal("document", { pointerLockElement: null, exitPointerLock: vi.fn() });
+    const { model, session, transitions, releaseCleanup } = await makeBlockedInputCleanup();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.paused = false;
+    player.presented = true;
+    player.mode = "live";
+    player.disposed = false;
+    player.controlsLocked = false;
+    player.navigationEnabled = true;
+    player.runtimeFallbackStarted = false;
+    player.rollover = { recycling: false };
+    player.controlTimers = { pause: vi.fn(), resume: vi.fn() };
+    player.video = {
+      pause: vi.fn(),
+      play: vi.fn().mockResolvedValue(undefined),
+      requestPointerLock: vi.fn(),
+    };
+    player.opts = { onBranchTransientReset: vi.fn() };
+    player.session = session;
+    player.emitLiveControls = vi.fn();
+
+    player.setPaused(true);
+    await vi.waitFor(() => expect(model.setMoveLongitudinal).toHaveBeenCalledWith({
+      move_longitudinal: "idle",
+    }));
+    player.setPaused(false);
+    releaseCleanup();
+    await Promise.all(transitions);
+
+    expect((session as any).inputEnabled).toBe(true);
+    await session.setMovement("back", "idle");
+    expect(model.calls).toContain("move-long:back");
+    const mapping = BRANCH_ACTION_MAPPINGS[0];
+    await expect(session.requestBranchAction({
+      momentId: mapping.momentId,
+      choiceId: mapping.choiceId,
+      requestId: mapping.requestId,
+    }, "Hands hold the hatchet briefly.")).resolves.toBeUndefined();
+  });
+
+  it("keeps movement and E/F enabled when rollover reveal overtakes mask cleanup", async () => {
+    const { model, session, transitions, releaseCleanup } = await makeBlockedInputCleanup();
+    const gate = new WorldModelRolloverGate({
+      mask: () => { void session.setInputEnabled(false); },
+      reveal: () => { void session.setInputEnabled(true); },
+    });
+
+    gate.markGenerationComplete();
+    await vi.waitFor(() => expect(model.setMoveLongitudinal).toHaveBeenCalledWith({
+      move_longitudinal: "idle",
+    }));
+    gate.markGenerationStarted();
+    gate.markFrameDisplayed();
+    gate.markChunkProduced();
+    releaseCleanup();
+    await Promise.all(transitions);
+
+    expect((session as any).inputEnabled).toBe(true);
+    await session.setMovement("back", "idle");
+    expect(model.calls).toContain("move-long:back");
+    const mapping = BRANCH_ACTION_MAPPINGS[1];
+    await expect(session.requestBranchAction({
+      momentId: mapping.momentId,
+      choiceId: mapping.choiceId,
+      requestId: mapping.requestId,
+    }, "Hands hold the broom briefly.")).resolves.toBeUndefined();
+  });
+
+  it("normalizes only backend prompt acceptance into one correlated branch confirmation", async () => {
+    const model = new FakeModel();
+    const runtimeEvents = vi.fn();
+    const readiness = vi.fn();
+    const session = new WorldModelSession({
+      mintJwt: async () => "jwt",
+      onBranchRuntimeEvent: runtimeEvents,
+      onBranchReadiness: readiness,
+      timeouts: { mint: 100, connect: 100, ready: 100, upload: 100, conditions: 100, begin: 100, input: 100 },
+    }, model as unknown as LingbotWorld2Model);
+    await session.prepare(new Blob(), "scene");
+    await session.begin();
+    await session.setInputEnabled(true);
+    const mapping = BRANCH_ACTION_MAPPINGS[0];
+    const request = { momentId: mapping.momentId, choiceId: mapping.choiceId, requestId: mapping.requestId };
+
+    await session.requestBranchAction(request, "Hands hold the hatchet briefly.");
+    expect(runtimeEvents).toHaveBeenCalledTimes(1);
+    expect(runtimeEvents).toHaveBeenCalledWith({
+      type: "branch-confirmed",
+      id: mapping.confirmationEventId,
+      requestId: mapping.requestId,
+    });
+    expect(readiness).toHaveBeenCalledWith({
+      sessionConfirmed: true,
+      imageConfirmed: true,
+      promptConfirmed: true,
+      inputConfirmed: true,
+    });
+
+    const lastPromptCall = [...model.calls].reverse().find((call: string) => call.startsWith("setPrompt:"))!;
+    model.emit({ type: "prompt_accepted", prompt: lastPromptCall.slice(10) });
+    expect(runtimeEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes correlated command_error and allows a clean retry", async () => {
+    const model = new FakeModel();
+    const runtimeEvents = vi.fn();
+    const { session } = makeSession(model);
+    session.attach({ onBranchRuntimeEvent: runtimeEvents });
+    await session.prepare(new Blob(), "scene");
+    await session.begin();
+    await session.setInputEnabled(true);
+    model.autoConditions = false;
+    const mapping = BRANCH_ACTION_MAPPINGS[1];
+    const request = { momentId: mapping.momentId, choiceId: mapping.choiceId, requestId: mapping.requestId };
+
+    const failedRequest = session.requestBranchAction(request, "Hands hold the broom briefly.");
+    const rejection = expect(failedRequest).rejects.toThrow("try again");
+    await Promise.resolve();
+    model.emit({ type: "command_error", command: "set_prompt", reason: "try again" });
+    await rejection;
+    expect(runtimeEvents).toHaveBeenCalledWith({
+      type: "command_error",
+      requestId: mapping.requestId,
+      message: "try again",
+    });
+    model.autoConditions = true;
+    await session.requestBranchAction(request, "Hands hold the broom briefly.");
+    expect(runtimeEvents).toHaveBeenLastCalledWith({
+      type: "branch-confirmed",
+      id: mapping.confirmationEventId,
+      requestId: mapping.requestId,
+    });
+  });
+
+  it("bounds a missing branch acceptance, emits retryable correlation, and permits retry", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const model = new FakeModel();
+    const runtimeEvents = vi.fn();
+    const session = new WorldModelSession({
+      mintJwt: async () => "jwt",
+      onBranchRuntimeEvent: runtimeEvents,
+      timeouts: { mint: 100, connect: 100, ready: 100, upload: 100, conditions: 100, begin: 100, input: 100, branch: 100 },
+    }, model as unknown as LingbotWorld2Model);
+    await session.prepare(new Blob(), "scene");
+    await session.begin();
+    await session.setInputEnabled(true);
+    const mapping = BRANCH_ACTION_MAPPINGS[2];
+    const request = { momentId: mapping.momentId, choiceId: mapping.choiceId, requestId: mapping.requestId };
+    model.autoConditions = false;
+
+    const pending = session.requestBranchAction(request, "Hands hold the pole briefly.");
+    const rejection = expect(pending).rejects.toThrow("branch prompt confirmation timeout");
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(101);
+    await rejection;
+    expect(runtimeEvents).toHaveBeenLastCalledWith({
+      type: "command_error",
+      requestId: mapping.requestId,
+      message: "branch prompt confirmation timeout",
+    });
+
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(101);
+    model.autoConditions = true;
+    await session.requestBranchAction(request, "Hands hold the pole briefly.");
+    expect(runtimeEvents).toHaveBeenLastCalledWith({
+      type: "branch-confirmed",
+      id: mapping.confirmationEventId,
+      requestId: mapping.requestId,
+    });
+  });
+
+  it("serializes behind an unrelated prompt update without misattributing its error", async () => {
+    const model = new FakeModel();
+    const runtimeEvents = vi.fn();
+    const { session } = makeSession(model);
+    session.attach({ onBranchRuntimeEvent: runtimeEvents });
+    await session.prepare(new Blob(), "scene");
+    await session.begin();
+    await session.setInputEnabled(true);
+    let finishUnrelated = () => {};
+    (session as any).promptFlush = new Promise<void>((resolve) => { finishUnrelated = resolve; });
+    const mapping = BRANCH_ACTION_MAPPINGS[3];
+    const request = { momentId: mapping.momentId, choiceId: mapping.choiceId, requestId: mapping.requestId };
+
+    const pending = session.requestBranchAction(request, "Hands clear ice briefly.");
+    await Promise.resolve();
+    model.emit({ type: "command_error", command: "set_prompt", reason: "unrelated update failed" });
+    expect(runtimeEvents).not.toHaveBeenCalled();
+    finishUnrelated();
+    await pending;
+    expect(runtimeEvents).toHaveBeenCalledExactlyOnceWith({
+      type: "branch-confirmed",
+      id: mapping.confirmationEventId,
+      requestId: mapping.requestId,
+    });
   });
 
   it("deterministically stops translation at a grounded/landed boundary", async () => {
@@ -282,6 +779,27 @@ describe("WorldModelSession lifecycle", () => {
     await session.disconnect({ dispose: true });
     model.emitEvent("statusChanged", "disconnected");
     expect(onUnexpectedDisconnect).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the SDK error visible when a later status only says disconnected", async () => {
+    const model = new FakeModel();
+    const onStatus = vi.fn();
+    const onUnexpectedDisconnect = vi.fn();
+    const session = new WorldModelSession({
+      mintJwt: async () => "jwt",
+      onStatus,
+      onUnexpectedDisconnect,
+      timeouts: { mint: 100, connect: 100, ready: 100 },
+    }, model as unknown as LingbotWorld2Model);
+
+    await session.prepareTransport();
+    model.emitEvent("error", new Error("WebRTC handshake failed"));
+    model.emitEvent("statusChanged", "disconnected");
+
+    expect(onStatus).toHaveBeenLastCalledWith("Connection error: WebRTC handshake failed");
+    expect(onUnexpectedDisconnect).toHaveBeenCalledWith("WebRTC handshake failed");
+    expect(formatWorldModelError(new Error("bad eyJabc.def.ghi token")))
+      .toBe("bad [redacted token] token");
   });
 
   it("uses an authenticated keepalive termination request on pagehide", async () => {
@@ -466,8 +984,61 @@ describe("presentation and rollover gates", () => {
     expect(unbindKeys).toHaveBeenCalledOnce();
     expect(disconnect).toHaveBeenCalledOnce();
     expect(player.startFallback).toHaveBeenCalledOnce();
-    expect(player.startFallback).toHaveBeenCalledWith(true);
+    expect(player.startFallback).toHaveBeenCalledWith(
+      true,
+      "Live connection lost: Reactor session disconnected"
+    );
     expect(player.mode).toBe("fallback");
+  });
+
+  it("does not overwrite a live failure when no fallback video is shipped", async () => {
+    const onStatus = vi.fn();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.disposed = false;
+    player.hasPoster = false;
+    player.fallbackUsesWallClock = false;
+    player.video = { srcObject: {}, style: { visibility: "visible" } };
+    player.poster = { style: { display: "none" } };
+    player.opts = { manifest: { assets: {} }, onStatus };
+    player.presentation = { markFallbackReady: vi.fn() };
+
+    await player.startFallback(false, "Live connection failed: WebRTC handshake failed");
+
+    expect(onStatus).toHaveBeenLastCalledWith(
+      "Live connection failed: WebRTC handshake failed"
+    );
+  });
+
+  it("keeps a 503 capacity error visible while routine fallback statuses arrive", () => {
+    const onStatus = vi.fn();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.opts = { onStatus };
+    player.stickyCapacityStatus = null;
+
+    player.reportStatus("Live connection failed: token mint failed: 503 capacity exhausted");
+    player.reportStatus("playing pre-rendered fallback");
+
+    expect(onStatus).toHaveBeenCalledOnce();
+    expect(onStatus).toHaveBeenLastCalledWith(
+      "Live connection failed: token mint failed: 503 capacity exhausted"
+    );
+  });
+
+  it("keeps broker session-limit guidance visible while fallback playback starts", () => {
+    const onStatus = vi.fn();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.opts = { onStatus };
+    player.stickyCapacityStatus = null;
+
+    player.reportStatus(
+      "Live connection failed: Live session limit reached. Try again in about 1 hour."
+    );
+    player.reportStatus("playing pre-rendered fallback");
+
+    expect(onStatus).toHaveBeenCalledOnce();
+    expect(onStatus).toHaveBeenLastCalledWith(
+      "Live connection failed: Live session limit reached. Try again in about 1 hour."
+    );
   });
 
   it("seeks a recovered recorded fallback to the current authored clock", async () => {
@@ -512,12 +1083,76 @@ describe("presentation and rollover gates", () => {
     expect(resolveWorldModelPointerLook(8, -4)).toEqual({ h: "right", v: "up" });
     expect(resolveWorldModelPointerLook(-8, 4)).toEqual({ h: "left", v: "down" });
     expect(resolveWorldModelPointerLook(0, 0)).toEqual({ h: "idle", v: "idle" });
-    expect(["KeyE", "Space", "Enter"].every(isWorldModelActionKey)).toBe(true);
+    expect(["KeyE", "KeyF"].every(isWorldModelActionKey)).toBe(true);
+    expect(["Space", "Enter"].some(isWorldModelActionKey)).toBe(false);
     expect(isWorldModelActionKey("KeyW")).toBe(false);
     expect(canDispatchWorldModelAction("KeyE", false, false)).toBe(false);
     expect(canDispatchWorldModelAction("KeyE", true, true)).toBe(false);
     expect(canDispatchWorldModelAction("KeyE", true, false)).toBe(true);
     expect(canDispatchWorldModelAction("KeyE", true, false, true)).toBe(false);
+  });
+
+  it("releases movement and contextual E/F edges on keyup, blur, visibility loss, and disposal", () => {
+    const documentTarget = new EventTarget() as EventTarget & { visibilityState: string; pointerLockElement: null };
+    documentTarget.visibilityState = "visible";
+    documentTarget.pointerLockElement = null;
+    const windowTarget = new EventTarget();
+    vi.stubGlobal("document", documentTarget);
+    vi.stubGlobal("window", windowTarget);
+    const session = {
+      setMovement: vi.fn(),
+      setLook: vi.fn(),
+      clearPersistentInput: vi.fn(),
+    };
+    const onAction = vi.fn();
+    const onActionRelease = vi.fn();
+    const keyboard = (type: string, code: string, repeat = false) => {
+      const event = new Event(type, { cancelable: true });
+      Object.defineProperties(event, {
+        code: { value: code }, repeat: { value: repeat },
+        ctrlKey: { value: false }, altKey: { value: false }, metaKey: { value: false },
+      });
+      return event;
+    };
+    const unbind = bindWorldModelKeys(session as unknown as WorldModelSession, () => false, {
+      isPresented: () => true,
+      onAction,
+      onActionRelease,
+    });
+
+    documentTarget.dispatchEvent(keyboard("keydown", "KeyW"));
+    documentTarget.dispatchEvent(keyboard("keyup", "KeyW"));
+    expect(session.setMovement).toHaveBeenCalledWith("forward", "idle");
+    expect(session.setMovement).toHaveBeenLastCalledWith("idle", "idle");
+    documentTarget.dispatchEvent(keyboard("keydown", "KeyE"));
+    documentTarget.dispatchEvent(keyboard("keydown", "KeyE", true));
+    documentTarget.dispatchEvent(keyboard("keyup", "KeyE"));
+    expect(onAction).toHaveBeenCalledOnce();
+    expect(onAction).toHaveBeenCalledWith("E");
+    expect(onActionRelease).toHaveBeenCalledWith("E");
+
+    windowTarget.dispatchEvent(new Event("blur"));
+    expect(session.clearPersistentInput).toHaveBeenCalledWith("blur");
+    documentTarget.visibilityState = "hidden";
+    documentTarget.dispatchEvent(new Event("visibilitychange"));
+    expect(session.clearPersistentInput).toHaveBeenCalledWith("visibility");
+    unbind();
+    expect(session.clearPersistentInput).toHaveBeenCalledWith("input-disposed");
+
+    session.setMovement.mockClear();
+    onAction.mockClear();
+    const unbindCinematic = bindWorldModelKeys(session as unknown as WorldModelSession, () => false, {
+      isPresented: () => true,
+      navigationEnabled: () => false,
+      onAction,
+      onActionRelease,
+    });
+    documentTarget.dispatchEvent(keyboard("keydown", "KeyW"));
+    documentTarget.dispatchEvent(keyboard("keydown", "KeyF"));
+    documentTarget.dispatchEvent(keyboard("keyup", "KeyF"));
+    expect(session.setMovement).not.toHaveBeenCalled();
+    expect(onAction).toHaveBeenCalledExactlyOnceWith("F");
+    unbindCinematic();
   });
 
   it("does not advertise a generic action through the director handoff", () => {
@@ -531,9 +1166,23 @@ describe("presentation and rollover gates", () => {
       renderer: "worldmodel",
       controlsEnabled: true,
       movement: { binding: "WASD", label: "Move" },
-      look: { binding: "Mouse / arrows", label: "Look" },
+      look: { binding: "Mouse", label: "Look" },
     });
     expect(onControlHandoff.mock.calls[0][0]).not.toHaveProperty("action");
+  });
+
+  it("does not advertise navigation controls for Helios cinematic mode", () => {
+    const onControlHandoff = vi.fn();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.opts = { onControlHandoff };
+    player.navigationEnabled = false;
+
+    player.emitLiveControls(true);
+
+    expect(onControlHandoff).toHaveBeenCalledWith({
+      renderer: "worldmodel",
+      controlsEnabled: false,
+    });
   });
 });
 

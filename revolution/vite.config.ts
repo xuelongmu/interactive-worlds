@@ -3,6 +3,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = __dirname;
+const DEFAULT_REACTOR_MODEL = "reactor/lingbot-world-2";
+const ALLOWED_REACTOR_MODELS = new Set([
+  DEFAULT_REACTOR_MODEL,
+  "reactor/lingbot",
+  "reactor/helios",
+]);
 
 /** Read a key from process.env, ./.env, or the parent workspace .env. */
 function readEnvValue(name: string): string {
@@ -18,9 +24,9 @@ function readEnvValue(name: string): string {
 }
 
 /**
- * Dev token broker: mints short-lived Reactor JWTs so the API key never
- * reaches the client. In production this becomes a serverless function
- * with identical behavior.
+ * Dev-only token broker: mints short-lived Reactor JWTs so the API key never
+ * reaches the client. It intentionally bypasses production Turnstile,
+ * clearance, and Redis admission so local behavior is explicit.
  */
 function tokenBroker(): Plugin {
   return {
@@ -47,7 +53,14 @@ function tokenBroker(): Plugin {
           return;
         }
         const key = readEnvValue("REACTOR_API_KEY");
+        const requestedModel = new URL(req.url ?? "", "http://localhost").searchParams.get("model")
+          ?? DEFAULT_REACTOR_MODEL;
         res.setHeader("content-type", "application/json; charset=utf-8");
+        if (!ALLOWED_REACTOR_MODELS.has(requestedModel)) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: "unsupported Reactor model" }));
+          return;
+        }
         if (!key) {
           res.statusCode = 500;
           res.end(JSON.stringify({ error: "REACTOR_API_KEY is not configured" }));
@@ -57,7 +70,11 @@ function tokenBroker(): Plugin {
           const upstream = await fetch("https://api.reactor.inc/tokens", {
             method: "POST",
             headers: { "Reactor-API-Key": key, "Content-Type": "application/json" },
-            body: "{}",
+            body: JSON.stringify({
+              authorization_details: [
+                { type: "session", resources: { models: { match: [requestedModel] } } },
+              ],
+            }),
           });
           res.statusCode = upstream.status;
           res.end(await upstream.text());
@@ -72,6 +89,9 @@ function tokenBroker(): Plugin {
 
 export default defineConfig({
   plugins: [tokenBroker()],
+  define: {
+    "import.meta.env.VITE_DEPLOYMENT_ENV": JSON.stringify(process.env.VERCEL_ENV ?? ""),
+  },
   server: { port: Number(process.env.PORT ?? 5173), strictPort: !!process.env.PORT },
   build: {
     rollupOptions: {

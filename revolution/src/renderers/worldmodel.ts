@@ -1,8 +1,21 @@
 import { LingbotWorld2Model, type LingbotWorld2Message } from "@reactor-models/lingbot-world-2";
-import { DEFAULT_BASE_URL } from "@reactor-team/js-sdk";
+import { LingbotModel } from "@reactor-models/lingbot";
+import { HeliosModel } from "@reactor-models/helios";
+import { DEFAULT_BASE_URL, type FileRef } from "@reactor-team/js-sdk";
 import type { ControlHandoffDetail, EngineEvent, SceneManifest } from "../engine/types";
+import {
+  BRANCH_ACTION_MAPPINGS,
+  type BranchRuntimeEvent,
+  type BranchChoiceId,
+} from "../branch-state";
+import type {
+  BranchActionRequest,
+  BranchRuntimeReadiness,
+} from "../engine/branch-runtime";
+import type { BranchPresentationActions } from "../branch-state";
 import { PausableTimeouts } from "../engine/timers";
 import { resolveWorldModelInput } from "../engine/worldmodel-input";
+import { composeWorldModelPrompt, WORLD_MODEL_PROMPT_BUDGET } from "../engine/worldmodel-prompt";
 
 export type WorldModelSessionPhase =
   | "idle"
@@ -16,6 +29,32 @@ export type WorldModelSessionPhase =
   | "failed"
   | "stopped"
   | "disposed";
+
+export function formatWorldModelError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  const safe = raw
+    .replace(/eyJ[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){1,2}/g, "[redacted token]")
+    .replace(/\s+/g, " ")
+    .trim();
+  return (safe || "unknown connection error").slice(0, 240);
+}
+
+export function formatSessionRetryAfter(value: string | null): string | null {
+  if (!value || !/^\d+$/.test(value)) return null;
+  const seconds = Number(value);
+  if (!Number.isSafeInteger(seconds) || seconds <= 0) return null;
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  if (seconds < 3_600) {
+    const minutes = Math.ceil(seconds / 60);
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  if (seconds < 86_400) {
+    const hours = Math.ceil(seconds / 3_600);
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+  const days = Math.max(1, Math.round(seconds / 86_400));
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
 
 export type WorldModelTelemetryName =
   | "token-mint"
@@ -46,13 +85,25 @@ export interface WorldModelSessionOptions {
   prompt?: string;
   onEvent?: (event: EngineEvent) => void;
   onMessage?: (message: LingbotWorld2Message) => void;
+  onBranchRuntimeEvent?: (event: BranchRuntimeEvent) => void;
+  onBranchReadiness?: (readiness: BranchRuntimeReadiness) => void;
+  onBranchTransientReset?: (reason: string) => void;
   onStatus?: (status: string) => void;
   /** Fires when a prepared or active runtime disconnects before local teardown. */
   onUnexpectedDisconnect?: (status: string) => void;
   onTelemetry?: (event: WorldModelTelemetryEvent) => void;
   /** Test seam; production always uses the challenge/admission broker. */
   mintJwt?: () => Promise<string>;
+  /** Defaults to the allowlisted URL/env selection, then LingBot World 2. */
+  modelName?: ReactorWorldModelName;
   timeouts?: Partial<WorldModelSessionTimeouts>;
+}
+
+export function isReactorCapacityErrorStatus(status: string): boolean {
+  return (
+    /(?:^|\D)503(?:\D|$)/.test(status) ||
+    status.startsWith("Live connection failed: Live session limit reached.")
+  );
 }
 
 interface WorldModelSessionTimeouts {
@@ -62,6 +113,8 @@ interface WorldModelSessionTimeouts {
   upload: number;
   conditions: number;
   begin: number;
+  input: number;
+  branch: number;
 }
 
 const DEFAULT_TIMEOUTS: WorldModelSessionTimeouts = {
@@ -71,6 +124,8 @@ const DEFAULT_TIMEOUTS: WorldModelSessionTimeouts = {
   upload: 30_000,
   conditions: 30_000,
   begin: 15_000,
+  input: 3_000,
+  branch: 5_000,
 };
 
 const ALLOWED_TRANSITIONS: Record<WorldModelSessionPhase, ReadonlySet<WorldModelSessionPhase>> = {
@@ -92,7 +147,138 @@ export type Lateral = "idle" | "strafe_left" | "strafe_right";
 export type LookH = "idle" | "left" | "right";
 export type LookV = "idle" | "up" | "down";
 
+export const REACTOR_WORLD_MODELS = {
+  "lingbot-world-2": "reactor/lingbot-world-2",
+  lingbot: "reactor/lingbot",
+  helios: "reactor/helios",
+} as const;
+
+export type ReactorWorldModelName = typeof REACTOR_WORLD_MODELS[keyof typeof REACTOR_WORLD_MODELS];
+
+const REACTOR_MODEL_ALIASES: Readonly<Record<string, ReactorWorldModelName>> = {
+  "lingbot-world-2": REACTOR_WORLD_MODELS["lingbot-world-2"],
+  "reactor/lingbot-world-2": REACTOR_WORLD_MODELS["lingbot-world-2"],
+  lingbot: REACTOR_WORLD_MODELS.lingbot,
+  "reactor/lingbot": REACTOR_WORLD_MODELS.lingbot,
+  helios: REACTOR_WORLD_MODELS.helios,
+  "reactor/helios": REACTOR_WORLD_MODELS.helios,
+};
+
+/** Query string wins so a deployed build can be moved off an overloaded model immediately. */
+export function resolveReactorWorldModelName(
+  search = typeof window === "undefined" ? "" : window.location?.search ?? "",
+  configured = import.meta.env.VITE_REACTOR_MODEL ?? ""
+): ReactorWorldModelName {
+  const requested = new URLSearchParams(search).get("reactorModel")?.trim().toLowerCase();
+  const selected = requested || configured.trim().toLowerCase();
+  return REACTOR_MODEL_ALIASES[selected] ?? REACTOR_WORLD_MODELS["lingbot-world-2"];
+}
+
+export function resolveLegacyLingbotMovement(
+  longitudinal: Longitudinal,
+  lateral: Lateral
+): Longitudinal | Lateral {
+  return longitudinal !== "idle" ? longitudinal : lateral;
+}
+
+export function supportsReactorWorldNavigation(modelName = resolveReactorWorldModelName()): boolean {
+  return modelName !== REACTOR_WORLD_MODELS.helios;
+}
+
+/** Legacy LingBot has one movement axis, so longitudinal input wins over strafe. */
+class CompatibleLingbotModel extends LingbotModel {
+  private longitudinal: Longitudinal = "idle";
+  private lateral: Lateral = "idle";
+  private movement: Longitudinal | Lateral = "idle";
+
+  async setMoveLongitudinal({ move_longitudinal = "idle" }: { move_longitudinal?: Longitudinal }) {
+    this.longitudinal = move_longitudinal;
+    await this.flushMovement();
+  }
+
+  async setMoveLateral({ move_lateral = "idle" }: { move_lateral?: Lateral }) {
+    this.lateral = move_lateral;
+    await this.flushMovement();
+  }
+
+  override setPrompt({ prompt = "" }: { prompt?: string }): Promise<void> {
+    const compatiblePrompt = prompt.slice(0, 1_000);
+    if (compatiblePrompt.length !== prompt.length) {
+      console.warn("[worldmodel] LingBot fallback prompt truncated to 1000 characters");
+    }
+    return super.setPrompt({ prompt: compatiblePrompt });
+  }
+
+  override async reset(): Promise<void> {
+    await super.reset();
+    this.longitudinal = "idle";
+    this.lateral = "idle";
+    this.movement = "idle";
+  }
+
+  private async flushMovement(): Promise<void> {
+    const next = resolveLegacyLingbotMovement(this.longitudinal, this.lateral);
+    if (next === this.movement) return;
+    this.movement = next;
+    await this.setMovement({ movement: next });
+  }
+}
+
+/** Helios preserves the authored image/prompt stream but intentionally has no camera navigation. */
+class CompatibleHeliosModel extends HeliosModel {
+  private pendingImage: FileRef | null = null;
+
+  override setImage({ image }: { image?: FileRef }): Promise<void> {
+    if (!image) return Promise.reject(new Error("Helios conditioning image is required"));
+    this.pendingImage = image;
+    return Promise.resolve();
+  }
+
+  override setPrompt({ prompt = "" }: { prompt?: string }): Promise<void> {
+    if (!this.pendingImage) return super.setPrompt({ prompt });
+    const image = this.pendingImage;
+    this.pendingImage = null;
+    return this.setConditioning({ image, prompt });
+  }
+
+  override async reset(): Promise<void> {
+    this.pendingImage = null;
+    await super.reset();
+  }
+
+  setMoveLongitudinal(_params: { move_longitudinal?: Longitudinal }): Promise<void> {
+    return Promise.resolve();
+  }
+
+  setMoveLateral(_params: { move_lateral?: Lateral }): Promise<void> {
+    return Promise.resolve();
+  }
+
+  setLookHorizontal(_params: { look_horizontal?: LookH }): Promise<void> {
+    return Promise.resolve();
+  }
+
+  setLookVertical(_params: { look_vertical?: LookV }): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+export function createReactorWorldModel(modelName: ReactorWorldModelName): LingbotWorld2Model {
+  const model = modelName === REACTOR_WORLD_MODELS.lingbot
+    ? new CompatibleLingbotModel()
+    : modelName === REACTOR_WORLD_MODELS.helios
+      ? new CompatibleHeliosModel()
+      : new LingbotWorld2Model();
+  // The official clients share the lifecycle, media, conditioning, and message
+  // surface consumed below; adapters normalize their control/conditioning differences.
+  return model as unknown as LingbotWorld2Model;
+}
+
 export const ROLLOVER_OUTPUT_BUDGET_MS = 10_000;
+
+const BRANCH_CONFIRMATION_BY_CHOICE = new Map(
+  BRANCH_ACTION_MAPPINGS.map((mapping) => [mapping.choiceId, mapping] as const),
+);
 
 export function resolveWorldModelPointerLook(
   movementX: number,
@@ -106,7 +292,7 @@ export function resolveWorldModelPointerLook(
 }
 
 export function isWorldModelActionKey(code: string): boolean {
-  return code === "KeyE" || code === "Space" || code === "Enter";
+  return code === "KeyE" || code === "KeyF";
 }
 
 export function canDispatchWorldModelAction(
@@ -145,6 +331,48 @@ interface InputState {
   lookV: LookV;
 }
 
+function normalizeWorldModelInputState(
+  modelName: ReactorWorldModelName,
+  message: unknown,
+): InputState {
+  const state = message as Partial<Record<string, unknown>>;
+  if (modelName === REACTOR_WORLD_MODELS.helios) {
+    return { longitudinal: "idle", lateral: "idle", lookH: "idle", lookV: "idle" };
+  }
+  if (modelName === REACTOR_WORLD_MODELS.lingbot) {
+    const movement = state.movement;
+    return {
+      longitudinal: movement === "forward" || movement === "back" ? movement : "idle",
+      lateral: movement === "strafe_left" || movement === "strafe_right" ? movement : "idle",
+      lookH: state.look_horizontal === "left" || state.look_horizontal === "right"
+        ? state.look_horizontal
+        : "idle",
+      lookV: state.look_vertical === "up" || state.look_vertical === "down"
+        ? state.look_vertical
+        : "idle",
+    };
+  }
+  return {
+    longitudinal: state.move_longitudinal === "forward" || state.move_longitudinal === "back"
+      ? state.move_longitudinal
+      : "idle",
+    lateral: state.move_lateral === "strafe_left" || state.move_lateral === "strafe_right"
+      ? state.move_lateral
+      : "idle",
+    lookH: state.look_horizontal === "left" || state.look_horizontal === "right"
+      ? state.look_horizontal
+      : "idle",
+    lookV: state.look_vertical === "up" || state.look_vertical === "down"
+      ? state.look_vertical
+      : "idle",
+  };
+}
+
+interface PendingBranchPrompt {
+  request: BranchActionRequest;
+  prompt: string;
+}
+
 interface PendingSignal {
   promise: Promise<void>;
   cancel(error?: Error): void;
@@ -154,6 +382,7 @@ interface PendingSignal {
  * conditioning, and generation start are deliberately separate operations. */
 export class WorldModelSession {
   private model: LingbotWorld2Model;
+  private modelName: ReactorWorldModelName;
   private hooks: WorldModelSessionOptions;
   private lifecyclePhase: WorldModelSessionPhase = "idle";
   private operation = 0;
@@ -162,6 +391,7 @@ export class WorldModelSession {
   private beginPromise: Promise<void> | null = null;
   private disconnectPromise: Promise<void> | null = null;
   private permanentListenersInstalled = false;
+  private lastConnectionError: string | null = null;
   private unsubscribes: (() => void)[] = [];
   private pendingSignals = new Set<(error?: Error) => void>();
   private timers = new Set<ReturnType<typeof setTimeout>>();
@@ -172,6 +402,7 @@ export class WorldModelSession {
   private sawFirstFrame = false;
   private sawFirstChunk = false;
   private inputEnabled = false;
+  private inputEnableGeneration = 0;
   private movementEnabled = true;
   private inputFlush: Promise<void> | null = null;
   private desired: InputState = {
@@ -181,24 +412,62 @@ export class WorldModelSession {
     lookV: "idle",
   };
   private sent: InputState = { ...this.desired };
+  private basePrompt = "";
+  private promptEvents = new Map<string, string>();
+  private promptFlush: Promise<void> | null = null;
+  private sentPrompt = "";
+  private desiredPrompt = "";
+  private pendingBranchPrompt: PendingBranchPrompt | null = null;
+  private branchPromptReserved = false;
+  private branchPromptSignal: PendingSignal | null = null;
+  private readiness: BranchRuntimeReadiness = {
+    sessionConfirmed: false,
+    imageConfirmed: false,
+    promptConfirmed: false,
+    inputConfirmed: false,
+  };
   /** Timestamp for command-to-chunk latency measurement. */
   lastCommandAt = 0;
 
   constructor(
     options: WorldModelSessionOptions = {},
-    model: LingbotWorld2Model = new LingbotWorld2Model()
+    model?: LingbotWorld2Model
   ) {
     this.hooks = options;
-    this.model = model;
+    // An injected client cannot be inferred from the deployment selector;
+    // callers supplying one must opt into a fallback schema explicitly.
+    this.modelName = options.modelName
+      ?? (model ? REACTOR_WORLD_MODELS["lingbot-world-2"] : resolveReactorWorldModelName());
+    this.model = model ?? createReactorWorldModel(this.modelName);
   }
 
   get phase(): WorldModelSessionPhase {
     return this.lifecyclePhase;
   }
 
-  static async mintJwt(): Promise<string> {
-    const res = await fetch("/api/session", { method: "POST" });
-    if (!res.ok) throw new Error(`token mint failed: ${res.status} ${await res.text()}`);
+  get supportsNavigation(): boolean {
+    return supportsReactorWorldNavigation(this.modelName);
+  }
+
+  static async mintJwt(
+    modelName: ReactorWorldModelName = resolveReactorWorldModelName()
+  ): Promise<string> {
+    const url = `/api/session?model=${encodeURIComponent(modelName)}`;
+    const res = await fetch(url, { method: "POST" });
+    if (!res.ok) {
+      if (res.status === 429) {
+        const error = await res.json().catch(() => null) as { code?: unknown } | null;
+        if (error?.code === "session_capacity_reached") {
+          const retryAfter = formatSessionRetryAfter(res.headers.get("retry-after"));
+          throw new Error(
+            retryAfter
+              ? `Live session limit reached. Try again in about ${retryAfter}.`
+              : "Live session limit reached. Please try again later."
+          );
+        }
+      }
+      throw new Error(`token mint failed (${res.status})`);
+    }
     const body = (await res.json()) as { jwt?: string };
     if (!body.jwt) throw new Error("token mint returned no jwt");
     return body.jwt;
@@ -216,9 +485,11 @@ export class WorldModelSession {
   attach(options: Pick<
     WorldModelSessionOptions,
     "video" | "onEvent" | "onMessage" | "onStatus" | "onUnexpectedDisconnect" | "onTelemetry"
+      | "onBranchRuntimeEvent" | "onBranchReadiness"
   >): void {
     this.hooks = { ...this.hooks, ...options };
     if (this.stream && options.video) this.attachStream(options.video, this.stream);
+    options.onBranchReadiness?.(Object.freeze({ ...this.readiness }));
   }
 
   async prepareTransport(): Promise<void> {
@@ -279,19 +550,27 @@ export class WorldModelSession {
 
   /** Input is retained while false and coalesced to the latest state on enable. */
   async setInputEnabled(enabled: boolean): Promise<void> {
+    const generation = ++this.inputEnableGeneration;
     if (!enabled && this.inputEnabled) {
-      this.desired = { longitudinal: "idle", lateral: "idle", lookH: "idle", lookV: "idle" };
-      await this.flushDesiredInput();
+      await this.clearPersistentInput("input-disabled");
+      if (generation !== this.inputEnableGeneration) return;
       this.inputEnabled = false;
+      this.updateReadiness({ inputConfirmed: false });
       return;
     }
     this.inputEnabled = enabled;
-    if (enabled) await this.flushDesiredInput();
+    if (enabled) {
+      if (this.inputMatches()) this.updateReadiness({ inputConfirmed: true });
+      await this.flushDesiredInput();
+    }
   }
 
   async setMovement(longitudinal: Longitudinal, lateral: Lateral): Promise<void> {
     this.desired.longitudinal = this.movementEnabled ? longitudinal : "idle";
-    this.desired.lateral = this.movementEnabled ? lateral : "idle";
+    this.desired.lateral = this.movementEnabled
+      && !(this.modelName === REACTOR_WORLD_MODELS.lingbot && longitudinal !== "idle")
+      ? lateral
+      : "idle";
     await this.flushDesiredInput();
   }
 
@@ -310,6 +589,93 @@ export class WorldModelSession {
     await this.flushDesiredInput();
   }
 
+  async requestBranchAction(request: BranchActionRequest, heldPrompt: string): Promise<void> {
+    if (!this.inputEnabled || this.isTerminal() || this.branchPromptReserved) {
+      throw new Error("Branch action is not ready.");
+    }
+    this.branchPromptReserved = true;
+    this.promptEvents.set("branch-choice", heldPrompt);
+    this.recomposePrompt();
+    const prompt = this.desiredPrompt;
+    const operation = this.runBranchPrompt(request, prompt).finally(() => {
+      this.branchPromptReserved = false;
+      this.branchPromptSignal = null;
+      void this.flushPrompt();
+    });
+    return operation;
+  }
+
+  private async runBranchPrompt(request: BranchActionRequest, prompt: string): Promise<void> {
+    // Finish any unrelated set_prompt before assigning errors to this request.
+    await this.promptFlush;
+    if (!this.inputEnabled || this.isTerminal() || !this.branchPromptReserved) {
+      throw new Error("Branch action was cancelled.");
+    }
+
+    this.pendingBranchPrompt = { request, prompt };
+    let commandFailure: Error | null = null;
+    const confirmation = this.waitForSignal<LingbotWorld2Message>(
+      (handler) => this.model.onMessage(handler),
+      (message) => {
+        if (message.type === "prompt_accepted" && message.prompt === prompt) return true;
+        if (message.type === "command_error" && message.command === "set_prompt") {
+          commandFailure = new Error(message.reason);
+          return true;
+        }
+        return false;
+      },
+      this.timeout("branch"),
+      "branch prompt confirmation timeout",
+    );
+    this.branchPromptSignal = confirmation;
+
+    try {
+      await Promise.all([
+        this.model.setPrompt({ prompt }),
+        confirmation.promise,
+      ]);
+      if (commandFailure) throw commandFailure;
+    } catch (error) {
+      // A backend command_error is already normalized by handleMessage. A
+      // local rejection or missing acceptance still needs the same correlated,
+      // retryable outcome.
+      if (this.pendingBranchPrompt?.request.requestId === request.requestId) {
+        this.pendingBranchPrompt = null;
+        this.hooks.onBranchRuntimeEvent?.({
+          type: "command_error",
+          requestId: request.requestId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      throw error;
+    } finally {
+      confirmation.cancel();
+    }
+  }
+
+  releaseBranchAction(releasedPrompt: string): void {
+    if (releasedPrompt.trim()) this.promptEvents.set("branch-choice", releasedPrompt);
+    else this.promptEvents.delete("branch-choice");
+    this.recomposePrompt();
+    if (!this.pendingBranchPrompt) void this.flushPrompt();
+  }
+
+  async clearPersistentInput(_reason: string): Promise<void> {
+    this.updateReadiness({ inputConfirmed: false });
+    this.desired = { longitudinal: "idle", lateral: "idle", lookH: "idle", lookV: "idle" };
+    this.promptEvents.clear();
+    this.pendingBranchPrompt = null;
+    this.branchPromptReserved = false;
+    this.branchPromptSignal?.cancel(new Error("branch prompt cancelled"));
+    this.branchPromptSignal = null;
+    this.recomposePrompt();
+    if (this.inputEnabled && !this.isTerminal()) {
+      await this.flushDesiredInput();
+      await this.flushPrompt();
+      this.updateReadiness({ inputConfirmed: this.inputMatches() });
+    }
+  }
+
   markVideoFrame(): void {
     if (!this.beginAt || this.sawFirstFrame) return;
     this.sawFirstFrame = true;
@@ -322,8 +688,10 @@ export class WorldModelSession {
 
   /** Prompt-steer failures still emit their authored model event. */
   async steer(eventName: string, prompt: string): Promise<void> {
+    this.promptEvents.set("authored-event", prompt);
+    this.recomposePrompt();
     try {
-      await this.model.setPrompt({ prompt });
+      await this.flushPrompt();
     } catch (error) {
       console.warn(`[worldmodel] steer "${eventName}" failed (cue still fires):`, error);
     } finally {
@@ -342,17 +710,30 @@ export class WorldModelSession {
   async disconnect(options: { reason?: string; dispose?: boolean } = {}): Promise<void> {
     if (this.disconnectPromise) return this.disconnectPromise;
     if (this.phase === "stopped" || this.phase === "disposed") return;
-    ++this.operation;
-    this.inputEnabled = false;
-    this.cancelPending(new Error(options.reason ?? "session disconnected"));
-    this.clearTimers();
-    this.removePermanentListeners();
-    if (typeof window !== "undefined") window.removeEventListener("pagehide", this.onPageHide);
-    this.transition(options.dispose ? "disposed" : "stopped");
-    this.disconnectPromise = this.model.disconnect().catch(() => undefined);
-    await this.disconnectPromise;
-    this.jwt = null;
-    this.stream = null;
+    let complete = () => {};
+    this.disconnectPromise = new Promise<void>((resolve) => { complete = resolve; });
+    try {
+      await this.clearPersistentInput(options.reason ?? "session-disconnected").catch(() => undefined);
+      ++this.operation;
+      this.inputEnabled = false;
+      this.updateReadiness({
+        sessionConfirmed: false,
+        imageConfirmed: false,
+        promptConfirmed: false,
+        inputConfirmed: false,
+      });
+      this.cancelPending(new Error(options.reason ?? "session disconnected"));
+      this.clearTimers();
+      this.removePermanentListeners();
+      if (typeof window !== "undefined") window.removeEventListener("pagehide", this.onPageHide);
+      this.transition(options.dispose ? "disposed" : "stopped");
+      await this.model.disconnect().catch(() => undefined);
+      this.jwt = null;
+      this.stream = null;
+    } finally {
+      complete();
+    }
+    return this.disconnectPromise;
   }
 
   private async runTransportPreparation(operation: number): Promise<void> {
@@ -360,7 +741,7 @@ export class WorldModelSession {
       this.hooks.onStatus?.("minting token");
       const mintAt = performance.now();
       const jwt = await this.withTimeout(
-        (this.hooks.mintJwt ?? WorldModelSession.mintJwt)(),
+        (this.hooks.mintJwt ?? (() => WorldModelSession.mintJwt(this.modelName)))(),
         this.timeout("mint"),
         "token mint timeout"
       );
@@ -379,6 +760,7 @@ export class WorldModelSession {
         durationMs: performance.now() - connectAt,
       });
       this.transition("runtime-ready");
+      this.updateReadiness({ sessionConfirmed: true });
       this.hooks.onStatus?.("runtime ready");
     } catch (error) {
       if (operation !== this.operation && !this.disconnectPromise) {
@@ -395,11 +777,27 @@ export class WorldModelSession {
     prompt: string
   ): Promise<void> {
     const acceptedAt = performance.now();
+    const reset = this.waitForResetConfirmation();
+    const inputReady = this.waitForSignal<InputState>(
+      (handler) => this.onNormalizedInputState(handler),
+      (state) => state.longitudinal === "idle"
+        && state.lateral === "idle"
+        && state.lookH === "idle"
+        && state.lookV === "idle",
+      this.timeout("input"),
+      "requested-input readiness timeout"
+    );
     const imageAccepted = this.waitForSignal<Extract<LingbotWorld2Message, { type: "image_accepted" }>>(
       (handler) => this.model.onImageAccepted(handler),
       () => true,
       this.timeout("conditions"),
       "image_accepted timeout"
+    );
+    const promptAccepted = this.waitForSignal<Extract<LingbotWorld2Message, { type: "prompt_accepted" }>>(
+      (handler) => this.model.onPromptAccepted(handler),
+      (message) => message.prompt === this.desiredPrompt,
+      this.timeout("conditions"),
+      "prompt_accepted timeout"
     );
     const conditionsReady = this.waitForSignal<Extract<LingbotWorld2Message, { type: "conditions_ready" }>>(
       (handler) => this.model.onConditionsReady(handler),
@@ -412,12 +810,23 @@ export class WorldModelSession {
         this.assertCurrent(operation);
         this.telemetry({ name: "image-accepted", durationMs: performance.now() - acceptedAt });
       }),
+      promptAccepted.promise.then(() => this.updateReadiness({ promptConfirmed: true })),
       conditionsReady.promise,
     ]);
     // Observe cancellation immediately even while upload/commands are pending.
     void conditioningSignals.catch(() => undefined);
 
     try {
+      this.updateReadiness({ imageConfirmed: false, promptConfirmed: false, inputConfirmed: false });
+      await this.model.reset();
+      await Promise.all([reset.promise, inputReady.promise]);
+      this.assertCurrent(operation);
+      this.sent = { longitudinal: "idle", lateral: "idle", lookH: "idle", lookV: "idle" };
+      this.desired = { ...this.sent };
+      this.updateReadiness({ inputConfirmed: true });
+      this.basePrompt = prompt;
+      this.promptEvents.clear();
+      this.recomposePrompt();
       this.hooks.onStatus?.("uploading reference image");
       const uploadAt = performance.now();
       const ref = await this.withTimeout(
@@ -433,8 +842,18 @@ export class WorldModelSession {
 
       await this.model.setImage({ image: ref });
       this.assertCurrent(operation);
-      await this.model.setPrompt({ prompt });
-      this.assertCurrent(operation);
+      if (this.modelName === REACTOR_WORLD_MODELS.helios) {
+        // The Helios adapter commits image + prompt atomically from setPrompt;
+        // its setImage only stages the uploaded reference.
+        await this.model.setPrompt({ prompt: this.desiredPrompt });
+        this.assertCurrent(operation);
+        await imageAccepted.promise;
+      } else {
+        await imageAccepted.promise;
+        await this.model.setPrompt({ prompt: this.desiredPrompt });
+        this.assertCurrent(operation);
+      }
+      this.updateReadiness({ imageConfirmed: true });
       this.hooks.onStatus?.("waiting for conditioning");
 
       await conditioningSignals;
@@ -446,7 +865,10 @@ export class WorldModelSession {
       this.fail(operation);
       throw error;
     } finally {
+      reset.cancel();
+      inputReady.cancel();
       imageAccepted.cancel();
+      promptAccepted.cancel();
       conditionsReady.cancel();
     }
   }
@@ -455,17 +877,28 @@ export class WorldModelSession {
     if (this.permanentListenersInstalled) return;
     this.permanentListenersInstalled = true;
     const statusHandler = (status: string) => {
-      this.hooks.onStatus?.(status);
+      this.hooks.onStatus?.(
+        status === "disconnected" && this.lastConnectionError
+          ? `Connection error: ${this.lastConnectionError}`
+          : status
+      );
       if (
         status === "disconnected"
         && ["runtime-ready", "conditioning", "prepared", "starting", "streaming", "recycling"].includes(this.phase)
       ) {
-        this.hooks.onUnexpectedDisconnect?.(status);
+        this.hooks.onUnexpectedDisconnect?.(this.lastConnectionError ?? status);
       }
     };
+    const errorHandler = (error: unknown) => {
+      const reason = formatWorldModelError(error);
+      this.lastConnectionError = reason;
+      this.hooks.onStatus?.(`Connection error: ${reason}`);
+    };
     this.model.on("statusChanged", statusHandler);
+    this.model.on("error", errorHandler);
     this.unsubscribes.push(
       () => this.model.off("statusChanged", statusHandler),
+      () => this.model.off("error", errorHandler),
       this.model.onMainVideo((_track, stream) => {
         if (this.isTerminal()) return;
         this.stream = stream;
@@ -484,6 +917,37 @@ export class WorldModelSession {
     if (this.isTerminal()) return;
     if (message.type === "command_error") {
       console.warn("[worldmodel] command_error:", message.command, message.reason);
+      if (message.command === "set_prompt" && this.pendingBranchPrompt) {
+        const { request } = this.pendingBranchPrompt;
+        this.pendingBranchPrompt = null;
+        this.hooks.onBranchRuntimeEvent?.({
+          type: "command_error",
+          requestId: request.requestId,
+          message: message.reason,
+        });
+        void this.flushPrompt();
+      }
+    } else if (message.type === "prompt_accepted") {
+      this.sentPrompt = message.prompt;
+      if (message.prompt === this.desiredPrompt) this.updateReadiness({ promptConfirmed: true });
+      if (this.pendingBranchPrompt?.prompt === message.prompt) {
+        const { request } = this.pendingBranchPrompt;
+        this.pendingBranchPrompt = null;
+        const mapping = BRANCH_CONFIRMATION_BY_CHOICE.get(request.choiceId);
+        if (mapping) {
+          this.hooks.onBranchRuntimeEvent?.({
+            type: "branch-confirmed",
+            id: mapping.confirmationEventId,
+            requestId: request.requestId,
+          });
+        }
+        void this.flushPrompt();
+      }
+    } else if (message.type === "image_accepted") {
+      this.updateReadiness({ imageConfirmed: true });
+    } else if (message.type === "state") {
+      this.sent = normalizeWorldModelInputState(this.modelName, message);
+      this.updateReadiness({ inputConfirmed: this.inputMatches() });
     } else if (message.type === "generation_started") {
       if (this.phase === "starting") {
         this.transition("streaming");
@@ -494,6 +958,7 @@ export class WorldModelSession {
       }
       // During rollover the model auto-starts; remain recycling until output.
     } else if (message.type === "generation_complete" && this.phase === "streaming") {
+      void this.clearPersistentInput("generation-rollover");
       this.rolloverAt = performance.now();
       this.transition("recycling");
     } else if (message.type === "chunk_complete") {
@@ -518,7 +983,7 @@ export class WorldModelSession {
   private async flushDesiredInput(): Promise<void> {
     if (!this.inputEnabled || this.isTerminal()) return;
     if (this.inputFlush) return this.inputFlush;
-    this.inputFlush = this.runInputFlush().finally(() => {
+    this.inputFlush = this.runInputFlush().catch(() => undefined).finally(() => {
       this.inputFlush = null;
       if (this.inputEnabled && !this.inputMatches()) void this.flushDesiredInput();
     });
@@ -529,31 +994,116 @@ export class WorldModelSession {
     while (this.inputEnabled && !this.isTerminal() && !this.inputMatches()) {
       const next = { ...this.desired };
       if (next.longitudinal !== this.sent.longitudinal) {
-        await this.sendInput(() => this.model.setMoveLongitudinal({ move_longitudinal: next.longitudinal }));
-        this.sent.longitudinal = next.longitudinal;
+        await this.sendInput(
+          () => this.model.setMoveLongitudinal({ move_longitudinal: next.longitudinal }),
+          (state) => state.longitudinal === next.longitudinal,
+        );
       }
       if (next.lateral !== this.sent.lateral) {
-        await this.sendInput(() => this.model.setMoveLateral({ move_lateral: next.lateral }));
-        this.sent.lateral = next.lateral;
+        await this.sendInput(
+          () => this.model.setMoveLateral({ move_lateral: next.lateral }),
+          (state) => state.lateral === next.lateral,
+        );
       }
       if (next.lookH !== this.sent.lookH) {
-        await this.sendInput(() => this.model.setLookHorizontal({ look_horizontal: next.lookH }));
-        this.sent.lookH = next.lookH;
+        await this.sendInput(
+          () => this.model.setLookHorizontal({ look_horizontal: next.lookH }),
+          (state) => state.lookH === next.lookH,
+        );
       }
       if (next.lookV !== this.sent.lookV) {
-        await this.sendInput(() => this.model.setLookVertical({ look_vertical: next.lookV }));
-        this.sent.lookV = next.lookV;
+        await this.sendInput(
+          () => this.model.setLookVertical({ look_vertical: next.lookV }),
+          (state) => state.lookV === next.lookV,
+        );
       }
+      this.recomposePrompt();
+      await this.flushPrompt();
     }
   }
 
-  private async sendInput(send: () => Promise<void>): Promise<void> {
+  private async sendInput(
+    send: () => Promise<void>,
+    accepted: (state: InputState) => boolean,
+  ): Promise<void> {
     this.lastCommandAt = performance.now();
+    const confirmation = this.waitForSignal<InputState>(
+      (handler) => this.onNormalizedInputState(handler),
+      accepted,
+      this.timeout("input"),
+      "input confirmation timeout",
+    );
     try {
       await send();
+      await confirmation.promise;
     } catch (error) {
       console.warn("[worldmodel] command failed:", error);
+      this.inputEnabled = false;
+      this.updateReadiness({ inputConfirmed: false });
+      throw error;
+    } finally {
+      confirmation.cancel();
     }
+  }
+
+  private recomposePrompt(): void {
+    const next = composeWorldModelPrompt({
+      base: this.basePrompt,
+      lookH: this.desired.lookH,
+      movement: {
+        longitudinal: this.desired.longitudinal,
+        lateral: this.desired.lateral,
+      },
+      events: [...this.promptEvents.values()],
+      lookV: this.desired.lookV,
+    }, this.modelName === REACTOR_WORLD_MODELS.lingbot ? 1_000 : WORLD_MODEL_PROMPT_BUDGET);
+    if (next !== this.desiredPrompt) this.updateReadiness({ promptConfirmed: next === this.sentPrompt });
+    this.desiredPrompt = next;
+  }
+
+  private async flushPrompt(): Promise<void> {
+    if (this.branchPromptReserved || this.pendingBranchPrompt || this.isTerminal() || !this.desiredPrompt || this.desiredPrompt === this.sentPrompt) return;
+    if (this.promptFlush) return this.promptFlush;
+    let lastAttempted = "";
+    const run = async () => {
+      while (!this.branchPromptReserved && !this.pendingBranchPrompt && !this.isTerminal() && this.desiredPrompt !== this.sentPrompt) {
+        const prompt = this.desiredPrompt;
+        lastAttempted = prompt;
+        const confirmation = this.waitForSignal<Extract<LingbotWorld2Message, { type: "prompt_accepted" }>>(
+          (handler) => this.model.onPromptAccepted(handler),
+          (message) => message.prompt === prompt,
+          this.timeout("conditions"),
+          "prompt update confirmation timeout",
+        );
+        try {
+          await this.model.setPrompt({ prompt });
+          await confirmation.promise;
+        } finally {
+          confirmation.cancel();
+        }
+      }
+    };
+    this.promptFlush = run().catch((error) => {
+      console.warn("[worldmodel] prompt update failed:", error);
+    }).finally(() => {
+      this.promptFlush = null;
+      if (!this.branchPromptReserved && !this.pendingBranchPrompt && this.sentPrompt === lastAttempted && this.desiredPrompt !== this.sentPrompt) {
+        void this.flushPrompt();
+      }
+    });
+    return this.promptFlush;
+  }
+
+  private updateReadiness(patch: Partial<BranchRuntimeReadiness>): void {
+    const next = { ...this.readiness, ...patch };
+    if (
+      next.sessionConfirmed === this.readiness.sessionConfirmed
+      && next.imageConfirmed === this.readiness.imageConfirmed
+      && next.promptConfirmed === this.readiness.promptConfirmed
+      && next.inputConfirmed === this.readiness.inputConfirmed
+    ) return;
+    this.readiness = next;
+    this.hooks.onBranchReadiness?.(Object.freeze({ ...next }));
   }
 
   private inputMatches(): boolean {
@@ -561,6 +1111,41 @@ export class WorldModelSession {
       && this.desired.lateral === this.sent.lateral
       && this.desired.lookH === this.sent.lookH
       && this.desired.lookV === this.sent.lookV;
+  }
+
+  private onNormalizedInputState(handler: (state: InputState) => void): () => void {
+    const model = this.model as unknown as {
+      onState(callback: (message: unknown) => void): () => void;
+    };
+    return model.onState((message) => handler(normalizeWorldModelInputState(this.modelName, message)));
+  }
+
+  private waitForResetConfirmation(): PendingSignal {
+    if (this.modelName === REACTOR_WORLD_MODELS.helios) {
+      const model = this.model as unknown as {
+        onState(callback: (message: unknown) => void): () => void;
+      };
+      return this.waitForSignal<unknown>(
+        (handler) => model.onState(handler),
+        (message) => {
+          const state = message as Partial<Record<string, unknown>>;
+          return state.type === "state"
+            && state.started === false
+            && state.running === false
+            && state.paused === false
+            && state.image_set === false
+            && state.current_prompt == null;
+        },
+        this.timeout("conditions"),
+        "Helios reset state timeout",
+      );
+    }
+    return this.waitForSignal<Extract<LingbotWorld2Message, { type: "generation_reset" }>>(
+      (handler) => this.model.onGenerationReset(handler),
+      () => true,
+      this.timeout("conditions"),
+      "generation_reset timeout",
+    );
   }
 
   private waitForReady(timeoutMs: number): Promise<void> {
@@ -694,6 +1279,12 @@ export class WorldModelSession {
     if (this.isTerminal()) return;
     const jwt = this.jwt;
     ++this.operation;
+    this.updateReadiness({
+      sessionConfirmed: false,
+      imageConfirmed: false,
+      promptConfirmed: false,
+      inputConfirmed: false,
+    });
     this.cancelPending(new Error("page hidden"));
     this.clearTimers();
     this.removePermanentListeners();
@@ -849,6 +1440,11 @@ export interface WorldModelPlayerOptions {
   onEvent: (event: EngineEvent) => void;
   onStatus?: (status: string) => void;
   onTelemetry?: (event: WorldModelTelemetryEvent) => void;
+  getBranchActions?: () => BranchPresentationActions | null;
+  onBranchActionRequest?: (request: BranchActionRequest) => void;
+  onBranchRuntimeEvent?: (event: BranchRuntimeEvent) => void;
+  onBranchReadiness?: (readiness: BranchRuntimeReadiness) => void;
+  onBranchTransientReset?: (reason: string) => void;
   onControlHandoff?: (
     detail: Omit<ControlHandoffDetail, "sceneId" | "transitionKey">
   ) => void;
@@ -882,6 +1478,8 @@ export class WorldModelScenePlayer {
   private healthSamplePending = false;
   private blackFrameSamples = 0;
   private runtimeFallbackStarted = false;
+  private stickyCapacityStatus: string | null = null;
+  private navigationEnabled = true;
   private rolloverDeadline: number | null = null;
   private controlTimers = new PausableTimeouts();
   private presentation = new WorldModelPresentationGate((mode) => this.onPresented(mode));
@@ -921,6 +1519,7 @@ export class WorldModelScenePlayer {
     });
     this.rollover = new WorldModelRolloverGate({
       mask: () => {
+        this.opts.onBranchTransientReset?.("rollover");
         this.maskForRollover();
         void this.session?.setInputEnabled(false);
         this.emitLiveControls(false);
@@ -939,18 +1538,21 @@ export class WorldModelScenePlayer {
       await this.startLive();
       this.mode = "live";
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = formatWorldModelError(error);
+      const visibleError = `Live connection failed: ${reason}`;
       console.warn("[worldmodel] live session unavailable, falling back:", error);
       this.telemetry({ name: "fallback", reason });
       if (this.disposed) return;
+      this.reportStatus(visibleError);
       this.cancelVideoFrames();
       this.unbindKeys?.();
       this.unbindKeys = null;
       const failed = this.session;
       this.session = null;
       await failed?.disconnect({ reason, dispose: true });
+      this.opts.onBranchTransientReset?.("fallback");
       try {
-        await this.startFallback();
+        await this.startFallback(false, visibleError);
       } catch (fallbackError) {
         if (this.disposed) return;
         throw fallbackError;
@@ -962,8 +1564,8 @@ export class WorldModelScenePlayer {
   setControlsLocked(locked: boolean): void {
     this.controlsLocked = locked;
     if (locked && this.session) {
-      void this.session.setMovement("idle", "idle");
-      void this.session.setLook("idle", "idle");
+      this.opts.onBranchTransientReset?.("controls-locked");
+      void this.session.clearPersistentInput("controls-locked");
     }
     if (this.presented && this.mode === "live") this.emitLiveControls(!locked && !this.paused);
   }
@@ -971,6 +1573,7 @@ export class WorldModelScenePlayer {
   canResumePointerInput(): boolean {
     return this.presented
       && this.mode === "live"
+      && this.navigationEnabled !== false
       && !this.disposed
       && !this.rollover.recycling
       && !this.runtimeFallbackStarted;
@@ -979,6 +1582,7 @@ export class WorldModelScenePlayer {
   setPaused(paused: boolean): void {
     this.paused = paused;
     if (paused) {
+      this.opts.onBranchTransientReset?.("pause");
       this.controlTimers.pause();
       this.video.pause();
       if (document.pointerLockElement === this.video) document.exitPointerLock();
@@ -1000,6 +1604,7 @@ export class WorldModelScenePlayer {
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
+    this.opts.onBranchTransientReset?.("dispose");
     this.emitLiveControls(false);
     this.cancelPendingWaits(new Error("world-model player disposed"));
     this.cancelVideoFrames();
@@ -1015,6 +1620,7 @@ export class WorldModelScenePlayer {
     this.video.removeEventListener("timeupdate", this.onFallbackTimeUpdate);
     this.video.remove();
     this.poster.remove();
+    await this.session?.clearPersistentInput("player-disposed").catch(() => undefined);
     await this.session?.disconnect({ reason: "scene-disposed", dispose: true });
     this.session = null;
   }
@@ -1029,16 +1635,19 @@ export class WorldModelScenePlayer {
       onTelemetry: this.opts.onTelemetry,
     });
     this.session = session;
+    this.navigationEnabled = session.supportsNavigation;
     session.attach({
       video: this.video,
       onEvent: this.opts.onEvent,
-      onStatus: this.opts.onStatus,
+      onStatus: (status) => this.reportStatus(status),
       onUnexpectedDisconnect: (status) => {
         if (this.presented && this.mode === "live") {
           void this.fallBackFromLive(`Reactor session ${status}`);
         }
       },
       onTelemetry: this.opts.onTelemetry,
+      onBranchRuntimeEvent: this.opts.onBranchRuntimeEvent,
+      onBranchReadiness: this.opts.onBranchReadiness,
       onMessage: (message) => this.handleModelMessage(message),
     });
     this.unbindKeys = bindWorldModelKeys(
@@ -1047,7 +1656,17 @@ export class WorldModelScenePlayer {
       {
         target: this.video,
         isPresented: () => this.inputIsUsable(),
-        onAction: () => this.opts.onEvent({ type: "action", name: "interact" }),
+        navigationEnabled: () => this.navigationEnabled,
+        onAction: (binding) => {
+          const action = this.opts.getBranchActions?.()?.find((candidate) => candidate.binding === binding);
+          if (action?.usable) this.opts.onBranchActionRequest?.({
+            momentId: action.momentId,
+            choiceId: action.choiceId,
+            requestId: action.requestId,
+          });
+        },
+        onActionRelease: (binding) => this.releaseBranchAction(binding),
+        onReset: (reason) => this.opts.onBranchTransientReset?.(reason),
       }
     );
 
@@ -1099,8 +1718,11 @@ export class WorldModelScenePlayer {
     }
   }
 
-  private async startFallback(preserveLiveClock = false): Promise<void> {
-    const { manifest, onStatus } = this.opts;
+  private async startFallback(
+    preserveLiveClock = false,
+    unavailableStatus?: string
+  ): Promise<void> {
+    const { manifest } = this.opts;
     this.video.srcObject = null;
     this.video.style.visibility = "hidden";
     if (this.hasPoster) this.poster.style.display = "block";
@@ -1111,7 +1733,7 @@ export class WorldModelScenePlayer {
       playable = !!head?.ok && !(head.headers.get("content-type") ?? "").includes("text/html");
     }
     if (playable && url) {
-      onStatus?.("playing pre-rendered fallback");
+      this.reportStatus("playing pre-rendered fallback");
       this.video.src = url;
       this.video.loop = false;
       const resumeAt = preserveLiveClock ? this.clock : 0;
@@ -1125,7 +1747,7 @@ export class WorldModelScenePlayer {
       this.revealLiveVideo();
       this.video.addEventListener("timeupdate", this.onFallbackTimeUpdate);
     } else {
-      onStatus?.("no fallback video - running beats on a wall clock");
+      this.reportStatus(unavailableStatus ?? "no fallback video - running beats on a wall clock");
       this.fallbackUsesWallClock = true;
       if (preserveLiveClock) this.startWallClock();
     }
@@ -1183,11 +1805,15 @@ export class WorldModelScenePlayer {
   }
 
   private emitLiveControls(enabled: boolean): void {
+    if (this.navigationEnabled === false) {
+      this.opts.onControlHandoff?.({ renderer: "worldmodel", controlsEnabled: false });
+      return;
+    }
     this.opts.onControlHandoff?.({
       renderer: "worldmodel",
       controlsEnabled: enabled,
       movement: { binding: "WASD", label: "Move" },
-      look: { binding: "Mouse / arrows", label: "Look" },
+      look: { binding: "Mouse", label: "Look" },
     });
   }
 
@@ -1198,6 +1824,23 @@ export class WorldModelScenePlayer {
       && !this.controlsLocked
       && !this.rollover.recycling
       && !this.runtimeFallbackStarted;
+  }
+
+  async requestBranchAction(request: BranchActionRequest): Promise<void> {
+    const config = this.opts.manifest.branching?.actions?.find((action) => action.choiceId === request.choiceId);
+    if (!config || !this.session || !this.inputIsUsable()) throw new Error("Branch action is not ready.");
+    await this.session.requestBranchAction(request, config.heldPrompt);
+  }
+
+  async clearPersistentInput(reason: string): Promise<void> {
+    this.opts.onBranchTransientReset?.(reason);
+    await this.session?.clearPersistentInput(reason);
+  }
+
+  private releaseBranchAction(binding: "E" | "F"): void {
+    const action = this.opts.getBranchActions?.()?.find((candidate) => candidate.binding === binding);
+    const config = action && this.opts.manifest.branching?.actions?.find((candidate) => candidate.choiceId === action.choiceId);
+    if (config) this.session?.releaseBranchAction(config.releasedPrompt);
   }
 
   private onFallbackTimeUpdate = (): void => {
@@ -1314,7 +1957,8 @@ export class WorldModelScenePlayer {
     this.stopSceneClock();
     this.telemetry({ name: "fallback", reason, durationMs });
     this.emitLiveControls(false);
-    this.opts.onStatus?.("Live output unavailable - switching to recorded fallback");
+    const visibleError = `Live connection lost: ${formatWorldModelError(reason)}`;
+    this.reportStatus(visibleError);
     this.cancelVideoFrames();
     this.unbindKeys?.();
     this.unbindKeys = null;
@@ -1323,12 +1967,19 @@ export class WorldModelScenePlayer {
     await failed?.disconnect({ reason, dispose: true });
     if (this.disposed) return;
     this.mode = "fallback";
-    await this.startFallback(true);
+    await this.startFallback(true, visibleError);
   }
 
   private cancelVideoFrames(): void {
     for (const callback of this.videoFrameCallbacks) this.video.cancelVideoFrameCallback(callback);
     this.videoFrameCallbacks.clear();
+  }
+
+  /** Capacity errors remain actionable while fallback setup emits routine status. */
+  private reportStatus(status: string): void {
+    if (this.stickyCapacityStatus && !isReactorCapacityErrorStatus(status)) return;
+    if (isReactorCapacityErrorStatus(status)) this.stickyCapacityStatus = status;
+    this.opts.onStatus?.(status);
   }
 
   private waitForPlayableFrame(): Promise<void> {
@@ -1394,12 +2045,15 @@ export class WorldModelScenePlayer {
   }
 }
 
-/** Keyboard -> retained world-model intent (WASD move, arrows look). */
+/** Keyboard/mouse -> retained World 2 intent. Every held edge has a release. */
 export interface WorldModelInputBindingOptions {
   target?: HTMLElement;
   isPresented?: () => boolean;
-  onAction?: () => void;
+  onAction?: (binding: "E" | "F") => void;
+  onActionRelease?: (binding: "E" | "F") => void;
+  onReset?: (reason: string) => void;
   onActivity?: (kind: "movement" | "look" | "action") => void;
+  navigationEnabled?: () => boolean;
 }
 
 export function bindWorldModelKeys(
@@ -1408,8 +2062,10 @@ export function bindWorldModelKeys(
   options: WorldModelInputBindingOptions = {}
 ): () => void {
   const keys = new Set<string>();
+  const heldActions = new Set<"E" | "F">();
   let lookIdleTimer = 0;
   const isPresented = options.isPresented ?? (() => true);
+  const navigationEnabled = options.navigationEnabled ?? (() => true);
   const apply = () => {
     const { longitudinal, lateral, lookH, lookV } = resolveWorldModelInput(keys, isLocked());
     void session.setMovement(longitudinal, lateral);
@@ -1422,13 +2078,20 @@ export function bindWorldModelKeys(
   const down = (event: KeyboardEvent) => {
     if (inFormField(event)) return;
     if (isWorldModelActionKey(event.code)) {
-      if (canDispatchWorldModelAction(event.code, isPresented(), isLocked(), event.repeat)) {
+      const binding = event.code === "KeyE" ? "E" : "F";
+      if (!event.ctrlKey && !event.altKey && !event.metaKey
+        && !heldActions.has(binding)
+        && canDispatchWorldModelAction(event.code, isPresented(), isLocked(), event.repeat)) {
         event.preventDefault();
+        heldActions.add(binding);
         options.onActivity?.("action");
-        options.onAction?.();
+        options.onAction?.(binding);
       }
       return;
     }
+    if (!["KeyW", "KeyA", "KeyS", "KeyD", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.code)
+      || event.repeat) return;
+    if (!navigationEnabled()) return;
     if (event.code.startsWith("Arrow")) event.preventDefault();
     keys.add(event.code);
     apply();
@@ -1437,11 +2100,17 @@ export function bindWorldModelKeys(
     }
   };
   const up = (event: KeyboardEvent) => {
+    if (isWorldModelActionKey(event.code)) {
+      const binding = event.code === "KeyE" ? "E" : "F";
+      if (heldActions.delete(binding)) options.onActionRelease?.(binding);
+      return;
+    }
     keys.delete(event.code);
+    if (!navigationEnabled()) return;
     apply();
   };
   const pointerMove = (event: MouseEvent) => {
-    if (!isPresented() || isLocked()) return;
+    if (!navigationEnabled() || !isPresented() || isLocked()) return;
     if (options.target && document.pointerLockElement !== options.target) return;
     const { h, v } = resolveWorldModelPointerLook(event.movementX, event.movementY);
     if (h === "idle" && v === "idle") return;
@@ -1451,18 +2120,35 @@ export function bindWorldModelKeys(
     lookIdleTimer = window.setTimeout(() => void session.setLook("idle", "idle"), 80);
   };
   const requestPointer = () => {
-    if (isPresented() && !isLocked()) void options.target?.requestPointerLock();
+    if (navigationEnabled() && isPresented() && !isLocked()) void options.target?.requestPointerLock();
+  };
+  const releaseAll = (reason: string) => {
+    keys.clear();
+    clearTimeout(lookIdleTimer);
+    for (const binding of heldActions) options.onActionRelease?.(binding);
+    heldActions.clear();
+    options.onReset?.(reason);
+    void session.clearPersistentInput(reason);
+  };
+  const onBlur = () => releaseAll("blur");
+  const onVisibility = () => {
+    if (document.visibilityState !== "visible") releaseAll("visibility");
   };
   document.addEventListener("keydown", down);
   document.addEventListener("keyup", up);
   document.addEventListener("mousemove", pointerMove);
+  window.addEventListener("blur", onBlur);
+  document.addEventListener("visibilitychange", onVisibility);
   options.target?.addEventListener("click", requestPointer);
   return () => {
     clearTimeout(lookIdleTimer);
     document.removeEventListener("keydown", down);
     document.removeEventListener("keyup", up);
     document.removeEventListener("mousemove", pointerMove);
+    window.removeEventListener("blur", onBlur);
+    document.removeEventListener("visibilitychange", onVisibility);
     options.target?.removeEventListener("click", requestPointer);
+    releaseAll("input-disposed");
     if (options.target && document.pointerLockElement === options.target) document.exitPointerLock();
   };
 }

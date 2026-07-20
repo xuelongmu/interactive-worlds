@@ -23,11 +23,11 @@ test("chapter heading separates title and date", () => {
   });
 });
 
-test("progress unlocks only the first chapter, completed chapters, and their successor", () => {
+test("every chapter is available regardless of story progress", () => {
   assert.equal(isChapterUnlocked(0, scenes, state()), true);
-  assert.equal(isChapterUnlocked(1, scenes, state()), false);
+  assert.equal(isChapterUnlocked(1, scenes, state()), true);
   assert.equal(isChapterUnlocked(1, scenes, state({ completedScenes: ["tea"] })), true);
-  assert.equal(isChapterUnlocked(2, scenes, state({ completedScenes: ["tea"] })), false);
+  assert.equal(isChapterUnlocked(2, scenes, state({ completedScenes: ["tea"] })), true);
   assert.equal(isChapterUnlocked(2, scenes, state({ currentSceneId: "declaration" })), true);
 });
 

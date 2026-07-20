@@ -13,31 +13,70 @@ build. The Turnstile **site key** is intentionally public; it is not a secret.
 2. Keep the build settings from `revolution/vercel.json`: `npm run build` and
    output directory `dist`.
 3. Complete the Turnstile and Redis setup below, then add every required
-   production environment variable. Add the full set to Preview only when live
-   paid sessions from previews are intentional.
-4. Deploy. Verify that `GET /api/session` returns `405`, an unchallenged POST is
-   rejected, and a missing policy variable makes POST fail closed with `503`.
+   production environment variable. Use the narrower authenticated-preview
+   configuration below only when live paid sessions from previews are
+   intentional.
+4. Deploy. Verify that `GET /api/session` returns `405`, an unchallenged POST
+   returns the explicit `428 challenge_required` contract without calling
+   Siteverify or Reactor, and a missing policy variable makes POST fail closed
+   with `503`.
 5. Open `/`, `/spikes/splat/`, and `/spikes/worldmodel/`. In the world-model
    spike, connect, wait for moving video, and verify WASD/arrows affect the
    stream before disconnecting. A token response alone does not prove WebRTC.
 
+### Authenticated preview sessions
+
+Preview deployments may skip Turnstile only while Vercel Authentication stays
+enabled. Configure `SESSION_PREVIEW_BYPASS=1` and
+`VITE_SESSION_CHALLENGE_MODE=disabled` in the Vercel **Preview** environment,
+never Production. The API accepts the bypass only when Vercel also supplies
+`VERCEL=1` and `VERCEL_ENV=preview`; both configured switches are required, and
+the public browser flag cannot enable the server bypass by itself. The Vite
+build also embeds Vercel's deployment environment, so an accidental Production
+copy of the public disable flag cannot suppress the production challenge.
+
+Preview still requires `REACTOR_API_KEY`, both Upstash values, a distinct
+`SESSION_CLIENT_HASH_SECRET`, and all three explicit limits. Use stricter
+limits than production. Preview counters use `iw:{session-broker-preview}` so
+they cannot consume production's Redis counters, although successful preview
+requests still consume Reactor capacity. Removing either bypass variable makes
+preview fail closed again.
+
 ## Paid-session abuse controls
 
-Production uses two independent server-enforced controls before Reactor:
+Production uses a verify-once browser clearance while retaining independent
+server-enforced admission before every Reactor mint:
 
-1. The browser completes a Cloudflare Turnstile widget with action `session`.
-   `/api/session` validates the single-use, five-minute token with Siteverify,
-   including its action, exact hostname, and Vercel-provided client address.
-2. One Upstash Redis Lua transaction checks and consumes the challenge hash,
-   enforces a fixed-window per-client issuance limit, and enforces a UTC-daily
-   global issuance budget. All keys share one Redis hash tag, so the decision
-   and counters are atomic. Client addresses are HMACed before storage.
+1. The client first sends its normal bodyless `POST /api/session`. With no valid
+   clearance, the broker returns `428`, JSON code `challenge_required`, and
+   header `X-Session-Challenge: turnstile`. It does not call Siteverify,
+   Redis admission, or Reactor for a missing credential.
+2. A singleflight client flow renders one Turnstile widget with action
+   `session`. It sends that response once to the broker. The broker performs
+   canonical server-side Siteverify, including action, exact hostname, and the
+   Vercel-provided client address.
+3. One Upstash Redis Lua transaction consumes the SHA-256 challenge hash,
+   enforces the fixed-window per-client and UTC-daily global limits, and stores
+   only an HMAC-SHA-256 hash of a new cryptographically random opaque
+   clearance. The response contains the requested Reactor JWT and sets the raw
+   clearance only in an `HttpOnly; Secure; SameSite=Strict` cookie scoped to
+   `Path=/api/session`.
+4. Later POSTs send that cookie automatically. A separate atomic Lua
+   transaction requires the hashed clearance to exist, applies the same client
+   and global admission limits, and renews its Redis TTL only after successful
+   validation and admission. No widget or Siteverify call occurs. The broker
+   then mints a fresh short-lived Reactor JWT and renews the cookie `Max-Age`.
 
-Only after both checks pass does the function call Reactor. Missing/invalid
-configuration, missing trusted client address, challenge failure, replay,
-budget exhaustion, or Redis failure returns without calling Reactor. An
-admitted request consumes its conservative budget slot even if Reactor later
-fails; this prevents retries from bypassing the cap.
+All Redis keys use one hash tag so validation, renewal, replay consumption, and
+counters remain atomic. Client addresses are HMACed before storage. Redis never
+receives a raw client address, Turnstile response, clearance, Reactor JWT, or
+API key.
+
+Missing/invalid configuration, missing trusted client address, challenge
+failure, replay, budget exhaustion, or Redis failure returns without calling
+Reactor. An admitted request consumes its conservative budget slot even if
+Reactor later fails; that response still sets or renews the already-admitted
+clearance so the browser does not replay its Turnstile response.
 
 Create a Turnstile widget restricted to every production hostname and create a
 durable Upstash Redis database. Configure these values in Vercel:
@@ -50,10 +89,15 @@ durable Upstash Redis database. Configure these values in Vercel:
 | `UPSTASH_REDIS_REST_URL` | server config | durable Redis REST endpoint |
 | `UPSTASH_REDIS_REST_TOKEN` | server secret | durable Redis credential |
 | `SESSION_CLIENT_HASH_SECRET` | server secret | random 32+ character HMAC secret for client identifiers |
+| `SESSION_CLEARANCE_HASH_SECRET` | server secret | separate random 32+ character HMAC secret for opaque clearances; rotation revokes all |
+| `SESSION_CLEARANCE_TTL_SECONDS` | server config, optional | sliding clearance lifetime, 300 through 2592000 seconds; default 2592000 (30 days) |
 | `SESSION_CLIENT_LIMIT` | server config | maximum admitted tokens per client window |
 | `SESSION_CLIENT_WINDOW_SECONDS` | server config | fixed-window duration |
 | `SESSION_GLOBAL_DAILY_LIMIT` | server config | maximum admitted tokens per UTC day |
 | `REACTOR_API_KEY` | server secret | Reactor token-mint credential |
+| `VITE_REACTOR_MODEL` | optional public build value | default `reactor/lingbot-world-2`; use `reactor/lingbot` for navigable fallback or `reactor/helios` for cinematic fallback |
+| `SESSION_PREVIEW_BYPASS` | preview-only server config | explicitly permits the server bypass on authenticated Vercel previews |
+| `VITE_SESSION_CHALLENGE_MODE` | preview-only public build value | set to `disabled` so preview clients do not request a challenge |
 
 There are deliberately no code defaults for the three limits. Pick values from
 the account's real concurrency/spend tolerance (for example, a small number of
@@ -61,8 +105,37 @@ sessions per ten-minute client window and a daily token count whose worst-case
 session duration is affordable), set provider alerts below the hard limit, and
 lower the global limit during incidents. Never create `VITE_*` copies
 of server secrets. The production client automatically opens Turnstile on the
-first session request; local `npm run dev` continues to use the loopback-only
-Vite broker without paid-route deployment semantics.
+first explicit challenge response only.
+
+### Clearance expiry, renewal, and revocation
+
+- The Redis record is authoritative. Its default TTL is 2592000 seconds
+  (30 days); configuration is bounded from 300 seconds through that 30-day
+  maximum. The browser cookie receives the same `Max-Age`.
+- Each valid, admitted clearance POST atomically resets the Redis TTL and
+  reissues the same opaque cookie with a fresh `Max-Age`. A malformed,
+  expired, unknown, revoked, or rate-limited credential is never extended.
+  Invalid credentials receive a fresh challenge contract and an expiring
+  `Set-Cookie` that removes the stale browser value.
+- Revoke one known clearance by HMACing its opaque value with
+  `SESSION_CLEARANCE_HASH_SECRET` and deleting the matching
+  `iw:{session-broker}:clearance:<hex-hmac>` key. The broker never logs or
+  stores the raw value, so operators normally revoke all clearances by scanning
+  and deleting only the `iw:{session-broker}:clearance:*` namespace, or by
+  rotating `SESSION_CLEARANCE_HASH_SECRET`. Secret rotation immediately makes
+  every old cookie unknown; old hashed keys disappear at their existing TTL.
+- Challenge replay hashes expire after ten minutes, covering Turnstile's
+  five-minute token validity plus margin. A verified response is atomically
+  consumed even if admission is already exhausted, so it cannot become usable
+  after a rate window resets.
+
+Local `npm run dev` remains an explicit loopback-only exception: Vite's broker
+uses `REACTOR_API_KEY` directly and does not emulate Turnstile, cookies, or
+Redis admission. A direct non-production broker harness over plain HTTP may set
+`NODE_ENV=development` and `SESSION_CLEARANCE_COOKIE_SECURE=false`; it then
+uses the unprefixed `iw_session_clearance` cookie. Production and Vercel
+Preview fail configuration closed if Secure is disabled. This opt-out must
+never be set in deployed environments.
 
 Alternative controls require a code/security review before substitution:
 
@@ -80,7 +153,8 @@ callers can forge headers and call a public endpoint directly.
 The function sends the Reactor key only in the `Reactor-API-Key` request
 header, returns only the upstream `jwt` on success, marks every response
 `Cache-Control: no-store`, and uses generic errors so exception/upstream text
-cannot disclose server configuration.
+cannot disclose server configuration. The opaque clearance is available only
+to the browser cookie jar and is never exposed to JavaScript or web storage.
 
 `revolution/.vercelignore` also excludes local environment files, generated
 media, tests, build output, and the trailer workspace from source uploads. The
@@ -199,6 +273,7 @@ From `revolution/`:
 ```powershell
 npm ci
 npm run test:server
+npm run test:ci
 npm run typecheck
 npm run build
 ```
