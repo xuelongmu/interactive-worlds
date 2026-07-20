@@ -1,0 +1,10 @@
+{"id":"bgm_001","type":"bgm","path":"assets/audio/musket-volley.mp3","source":"existing","description":"musket volley","duration":8,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_001","type":"image","path":"assets/images/delaware.png","source":"existing","description":"delaware","width":1920,"height":1080,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_002","type":"image","path":"assets/images/lexington.png","source":"existing","description":"lexington","width":1920,"height":1080,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_003","type":"image","path":"assets/images/tea-party.png","source":"existing","description":"tea party","width":1920,"height":1080,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_004","type":"image","path":"assets/images/title-screen.png","source":"existing","description":"title screen","width":1920,"height":1080,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_005","type":"image","path":"assets/images/treaty-paris.png","source":"existing","description":"treaty paris","width":1920,"height":1080,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_006","type":"image","path":"assets/images/valley-forge.png","source":"existing","description":"valley forge","width":1920,"height":1080,"provenance":{"provider":"local","adopted":true}}
+{"id":"bgm_002","type":"bgm","path":".media/audio/bgm/bgm_002.mp3","source":"ingested","description":"b-ink-and-string.mp3","provenance":{"provider":"local","from":"assets\\audio\\b-ink-and-string.mp3"}}
+{"id":"sfx_001","type":"sfx","path":".media/audio/sfx/sfx_001.mp3","source":"ingested","description":"musket-volley.mp3","provenance":{"provider":"local","from":"assets\\audio\\musket-volley.mp3"}}
+{"id":"image_007","type":"image","path":".media/images/image_007.jpg","source":"ingested","description":"Treaty_of_Paris_by_Benjamin_West_1783.jpg","provenance":{"provider":"local","from":"https://upload.wikimedia.org/wikipedia/commons/f/fe/Treaty_of_Paris_by_Benjamin_West_1783.jpg"}}

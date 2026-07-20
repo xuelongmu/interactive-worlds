@@ -1,0 +1,10 @@
+node_modules/
+renders/
+snapshots/
+capture/
+.hyperframes/
+
+# Capture intermediates; the edit keeps only the two final source clips.
+assets/video/raw/
+assets/video/review/
+assets/video/*-frames/

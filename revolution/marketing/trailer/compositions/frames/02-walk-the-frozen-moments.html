@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <template>
+      <style>
+        #root {
+          position: absolute;
+          inset: 0;
+          width: 1920px;
+          height: 1080px;
+          overflow: hidden;
+          container-type: size;
+          color: #ffffff;
+        }
+
+        #root,
+        #root * {
+          box-sizing: border-box;
+        }
+
+        [id="f02-walk-the-frozen-moments-ground"] {
+          position: absolute;
+          inset: 0;
+          width: 1920px;
+          height: 1080px;
+          background:
+            radial-gradient(
+              ellipse 42% 58% at 70% 18%,
+              rgba(231, 219, 190, 0.2) 0%,
+              rgba(78, 64, 29, 0.28) 34%,
+              rgba(107, 87, 39, 0.14) 55%,
+              rgba(13, 12, 10, 0) 75%
+            ),
+            radial-gradient(
+              ellipse 26% 34% at 12% 74%,
+              rgba(200, 160, 73, 0.16) 0%,
+              rgba(13, 12, 10, 0) 72%
+            ),
+            #0d0c0a;
+        }
+
+        [id="f02-walk-the-frozen-moments-wharf"] {
+          position: absolute;
+          top: 0;
+          right: 0;
+          width: 576px;
+          height: 896px;
+          overflow: hidden;
+          background: #0d0c0a;
+        }
+
+        [id="f02-walk-the-frozen-moments-wharf"] img {
+          position: absolute;
+          top: 0;
+          left: -780px;
+          width: 1920px;
+          height: 1080px;
+          max-width: none;
+          object-fit: fill;
+          opacity: 0.58;
+          filter: saturate(0.72) contrast(1.08);
+        }
+
+        [id="f02-walk-the-frozen-moments-wharf"]::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            linear-gradient(90deg, #0d0c0a 0%, rgba(13, 12, 10, 0.7) 12%, rgba(13, 12, 10, 0.08) 46%),
+            linear-gradient(0deg, #0d0c0a 0%, rgba(13, 12, 10, 0) 22%);
+        }
+
+        [id="f02-walk-the-frozen-moments-rule"] {
+          position: absolute;
+          top: 178px;
+          left: 77px;
+          width: 1204px;
+          height: 4px;
+          overflow: visible;
+        }
+
+        [id="f02-walk-the-frozen-moments-rule"] path {
+          fill: none;
+          stroke: rgba(255, 255, 255, 0.74);
+          stroke-width: 1;
+          stroke-linecap: square;
+          vector-effect: non-scaling-stroke;
+        }
+
+        [id="f02-walk-the-frozen-moments-headline"] {
+          position: absolute;
+          top: 262px;
+          left: 77px;
+          width: 1190px;
+          height: 324px;
+          font-family: Georgia, "Times New Roman", serif;
+          font-size: 138px;
+          font-weight: 400;
+          line-height: 0.93;
+          letter-spacing: -0.005em;
+          text-transform: uppercase;
+        }
+
+        [data-phrase="02-walk-the-frozen-moments-phrase"] {
+          display: block;
+          width: max-content;
+          max-width: 100%;
+          transform-origin: 0 50%;
+          will-change: transform, opacity;
+        }
+
+        [id="f02-walk-the-frozen-moments-line-one"] {
+          font-size: 0.78em;
+          line-height: 1;
+          letter-spacing: 0.018em;
+          margin-bottom: 22px;
+        }
+
+        [id="f02-walk-the-frozen-moments-line-two"] {
+          font-size: 1em;
+          line-height: 0.91;
+        }
+
+        [id="f02-walk-the-frozen-moments-date"] {
+          position: absolute;
+          top: 806px;
+          left: 77px;
+          width: 1190px;
+          height: 38px;
+          display: flex;
+          align-items: center;
+          gap: 22px;
+          color: rgba(255, 255, 255, 0.76);
+          font-family: "JetBrains Mono", "Courier New", monospace;
+          font-size: 20px;
+          font-weight: 400;
+          line-height: 1;
+          letter-spacing: 0.12em;
+          will-change: transform, opacity;
+        }
+
+        [id="f02-walk-the-frozen-moments-date"]::before {
+          content: "";
+          display: block;
+          width: 66px;
+          height: 1px;
+          background: rgba(255, 255, 255, 0.42);
+        }
+      </style>
+
+      <div
+        id="root"
+        data-composition-id="02-walk-the-frozen-moments"
+        data-duration="3.5"
+        data-width="1920"
+        data-height="1080"
+      >
+        <div
+          id="f02-walk-the-frozen-moments-ground"
+          class="clip"
+          data-start="0"
+          data-duration="3.5"
+          data-track-index="0"
+          aria-hidden="true"
+        ></div>
+
+        <div
+          id="f02-walk-the-frozen-moments-wharf"
+          class="clip"
+          data-start="0"
+          data-duration="3.5"
+          data-track-index="1"
+          aria-hidden="true"
+        >
+          <img src="assets/images/tea-party.png" alt="" />
+        </div>
+
+        <svg
+          id="f02-walk-the-frozen-moments-rule"
+          class="clip"
+          data-start="0"
+          data-duration="3.5"
+          data-track-index="2"
+          viewBox="0 0 1204 4"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path id="f02-walk-the-frozen-moments-rule-path" d="M 0 2 H 1204" />
+        </svg>
+
+        <div
+          id="f02-walk-the-frozen-moments-headline"
+          class="clip"
+          data-start="0"
+          data-duration="3.5"
+          data-track-index="3"
+          aria-label="Walk the frozen moments"
+        >
+          <span
+            id="f02-walk-the-frozen-moments-line-one"
+            data-phrase="02-walk-the-frozen-moments-phrase"
+          >WALK THE</span>
+          <span
+            id="f02-walk-the-frozen-moments-line-two"
+            data-phrase="02-walk-the-frozen-moments-phrase"
+          >FROZEN MOMENTS</span>
+        </div>
+
+        <div
+          id="f02-walk-the-frozen-moments-date"
+          class="clip"
+          data-start="0"
+          data-duration="3.5"
+          data-track-index="4"
+        >1773—1783</div>
+      </div>
+
+      <script>
+        window.__timelines = window.__timelines || {};
+
+        const rulePath = document.getElementById("f02-walk-the-frozen-moments-rule-path");
+        const ruleLength = rulePath.getTotalLength();
+        rulePath.style.strokeDasharray = String(ruleLength);
+        rulePath.style.strokeDashoffset = String(ruleLength);
+
+        const walkTl = gsap.timeline({ paused: true });
+
+        walkTl.fromTo(
+          rulePath,
+          { strokeDashoffset: ruleLength },
+          { strokeDashoffset: 0, duration: 1, ease: "power2.out" },
+          0.08,
+        );
+
+        const phrases = [
+          {
+            id: "f02-walk-the-frozen-moments-line-one",
+            text: "WALK THE",
+            lead: 0.08,
+            baseDuration: 0.3,
+            secondsPerCharacter: 0.014,
+            y: 28,
+          },
+          {
+            id: "f02-walk-the-frozen-moments-line-two",
+            text: "FROZEN MOMENTS",
+            lead: 0.12,
+            baseDuration: 0.34,
+            secondsPerCharacter: 0.014,
+            y: 34,
+          },
+        ];
+
+        let phraseCursor = 1.12;
+        const phrasePlan = phrases.map((phrase) => {
+          const start = phraseCursor + phrase.lead;
+          const duration = phrase.baseDuration + phrase.text.length * phrase.secondsPerCharacter;
+          phraseCursor = start + duration;
+          return { ...phrase, start, duration };
+        });
+
+        phrasePlan.forEach((phrase) => {
+          walkTl.fromTo(
+            document.getElementById(phrase.id),
+            { opacity: 0, y: phrase.y, scale: 0.975 },
+            {
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              duration: phrase.duration,
+              ease: "power3.out",
+            },
+            phrase.start,
+          );
+        });
+
+        walkTl.fromTo(
+          document.getElementById("f02-walk-the-frozen-moments-date"),
+          { opacity: 0, y: 12 },
+          { opacity: 1, y: 0, duration: 0.36, ease: "power2.out" },
+          2.4,
+        );
+
+        window.__timelines["02-walk-the-frozen-moments"] = walkTl;
+      </script>
+    </template>
+  </body>
+</html>
