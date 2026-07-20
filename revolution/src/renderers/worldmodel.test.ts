@@ -3,6 +3,7 @@ import type { LingbotWorld2Message, LingbotWorld2Model } from "@reactor-models/l
 import { BRANCH_ACTION_MAPPINGS } from "../branch-state";
 import {
   canDispatchWorldModelAction,
+  bindWorldModelInput,
   bindWorldModelKeys,
   createReactorWorldModel,
   formatSessionRetryAfter,
@@ -23,6 +24,7 @@ import {
   WorldModelScenePlayer,
   WorldModelSession,
 } from "./worldmodel";
+import { bindSemanticTouchControls } from "../engine/semantic-input";
 
 describe("Reactor world-model selection", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -893,6 +895,72 @@ describe("presentation and rollover gates", () => {
     expect(presented).toHaveBeenCalledWith("fallback");
   });
 
+  it("releases a failed local session before starting fallback from scene time zero", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const order: string[] = [];
+    const disconnect = vi.fn(async () => { order.push("disconnect"); });
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.disposed = false;
+    player.session = null;
+    player.unbindKeys = vi.fn();
+    player.opts = { onBranchTransientReset: vi.fn() };
+    player.telemetry = vi.fn();
+    player.reportStatus = vi.fn();
+    player.cancelVideoFrames = vi.fn();
+    player.startLive = vi.fn(async () => {
+      player.session = { disconnect };
+      throw new Error("session endpoint blocked");
+    });
+    player.startFallback = vi.fn(async () => { order.push("fallback"); });
+
+    await player.start();
+
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(disconnect).toHaveBeenCalledWith({
+      reason: "session endpoint blocked",
+      dispose: true,
+    });
+    expect(player.startFallback).toHaveBeenCalledWith(
+      false,
+      "Live connection failed: session endpoint blocked"
+    );
+    expect(order).toEqual(["disconnect", "fallback"]);
+    expect(player.mode).toBe("fallback");
+  });
+
+  it("releases the local runtime exactly once when a scene exits", async () => {
+    const clearPersistentInput = vi.fn().mockResolvedValue(undefined);
+    const disconnect = vi.fn().mockResolvedValue(undefined);
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.disposed = false;
+    player.opts = { onBranchTransientReset: vi.fn() };
+    player.emitLiveControls = vi.fn();
+    player.cancelPendingWaits = vi.fn();
+    player.cancelVideoFrames = vi.fn();
+    player.timers = new Set<number>();
+    player.unbindKeys = vi.fn();
+    player.controlTimers = { cancelAll: vi.fn() };
+    player.video = {
+      pause: vi.fn(),
+      removeEventListener: vi.fn(),
+      remove: vi.fn(),
+    };
+    player.poster = { remove: vi.fn() };
+    player.session = { clearPersistentInput, disconnect };
+
+    await player.dispose();
+    await player.dispose();
+
+    expect(clearPersistentInput).toHaveBeenCalledOnce();
+    expect(clearPersistentInput).toHaveBeenCalledWith("player-disposed");
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(disconnect).toHaveBeenCalledWith({
+      reason: "scene-disposed",
+      dispose: true,
+    });
+    expect(player.session).toBeNull();
+  });
+
   it("masks rollover until the successor run has a fresh frame and chunk", () => {
     const mask = vi.fn();
     const reveal = vi.fn();
@@ -1096,7 +1164,8 @@ describe("presentation and rollover gates", () => {
     const documentTarget = new EventTarget() as EventTarget & { visibilityState: string; pointerLockElement: null };
     documentTarget.visibilityState = "visible";
     documentTarget.pointerLockElement = null;
-    const windowTarget = new EventTarget();
+    const windowTarget = new EventTarget() as EventTarget & { setTimeout: typeof setTimeout };
+    windowTarget.setTimeout = setTimeout;
     vi.stubGlobal("document", documentTarget);
     vi.stubGlobal("window", windowTarget);
     const session = {
@@ -1130,6 +1199,12 @@ describe("presentation and rollover gates", () => {
     expect(onAction).toHaveBeenCalledOnce();
     expect(onAction).toHaveBeenCalledWith("E");
     expect(onActionRelease).toHaveBeenCalledWith("E");
+    const mouseMove = new Event("mousemove");
+    Object.defineProperties(mouseMove, {
+      movementX: { value: 8 }, movementY: { value: -4 },
+    });
+    documentTarget.dispatchEvent(mouseMove);
+    expect(session.setLook).toHaveBeenCalledWith("right", "up");
 
     windowTarget.dispatchEvent(new Event("blur"));
     expect(session.clearPersistentInput).toHaveBeenCalledWith("blur");
@@ -1153,6 +1228,86 @@ describe("presentation and rollover gates", () => {
     expect(session.setMovement).not.toHaveBeenCalled();
     expect(onAction).toHaveBeenCalledExactlyOnceWith("F");
     unbindCinematic();
+  });
+
+  it("feeds concurrent touch movement, look, and contextual choice IDs through the Reactor binding", () => {
+    class TouchSurface extends EventTarget {
+      setPointerCapture = vi.fn();
+      releasePointerCapture = vi.fn();
+    }
+    const pointer = (type: string, id: number, x: number, y: number) => {
+      const event = new Event(type, { cancelable: true });
+      Object.defineProperties(event, {
+        pointerId: { value: id }, pointerType: { value: "touch" }, button: { value: 0 },
+        clientX: { value: x }, clientY: { value: y },
+      });
+      return event;
+    };
+    const documentTarget = new EventTarget() as EventTarget & { visibilityState: string; pointerLockElement: null };
+    documentTarget.visibilityState = "visible";
+    documentTarget.pointerLockElement = null;
+    const windowTarget = new EventTarget() as EventTarget & typeof globalThis;
+    windowTarget.setTimeout = setTimeout as typeof globalThis.setTimeout;
+    vi.stubGlobal("document", documentTarget);
+    vi.stubGlobal("window", windowTarget);
+    const session = {
+      setMovement: vi.fn(), setLook: vi.fn(), clearPersistentInput: vi.fn(),
+    };
+    const onAction = vi.fn();
+    const onActionRelease = vi.fn();
+    const binding = bindWorldModelInput(session as unknown as WorldModelSession, () => false, {
+      isPresented: () => true, onAction, onActionRelease,
+    });
+    const movement = new TouchSurface();
+    const look = new TouchSurface();
+    const action = new TouchSurface();
+    const unbindTouch = bindSemanticTouchControls({
+      controller: binding.input,
+      movementSurface: movement,
+      lookSurface: look,
+      actions: [{ surface: action, actionId: "delaware-pole", isReady: () => true }],
+      movementRadius: 50,
+    });
+
+    movement.dispatchEvent(pointer("pointerdown", 1, 0, 0));
+    look.dispatchEvent(pointer("pointerdown", 2, 100, 100));
+    movement.dispatchEvent(pointer("pointermove", 1, 25, -25));
+    look.dispatchEvent(pointer("pointermove", 2, 110, 90));
+    action.dispatchEvent(pointer("pointerdown", 3, 0, 0));
+    expect(session.setMovement).toHaveBeenLastCalledWith("forward", "strafe_right");
+    expect(session.setLook).toHaveBeenLastCalledWith("right", "up");
+    expect(onAction).toHaveBeenCalledWith("delaware-pole");
+
+    movement.dispatchEvent(pointer("pointerup", 1, 25, -25));
+    look.dispatchEvent(pointer("lostpointercapture", 2, 110, 90));
+    action.dispatchEvent(pointer("pointerup", 3, 0, 0));
+    expect(session.setMovement).toHaveBeenLastCalledWith("idle", "idle");
+    expect(session.setLook).toHaveBeenLastCalledWith("idle", "idle");
+    expect(onActionRelease).toHaveBeenCalledWith("delaware-pole");
+    unbindTouch();
+    binding.dispose();
+  });
+
+  it("suppresses touch navigation for cinematic Reactor models without suppressing ready actions", () => {
+    const documentTarget = new EventTarget() as EventTarget & { visibilityState: string; pointerLockElement: null };
+    documentTarget.visibilityState = "visible";
+    documentTarget.pointerLockElement = null;
+    const windowTarget = new EventTarget();
+    vi.stubGlobal("document", documentTarget);
+    vi.stubGlobal("window", windowTarget);
+    const session = { setMovement: vi.fn(), setLook: vi.fn(), clearPersistentInput: vi.fn() };
+    const onAction = vi.fn();
+    const binding = bindWorldModelInput(session as unknown as WorldModelSession, () => false, {
+      navigationEnabled: () => false, onAction,
+    });
+    binding.input.setMovement("touch:1", { forward: 1, strafe: 1 }, "touch");
+    binding.input.applyLookDelta("touch:2", 0.1, 0.1, "touch");
+    binding.input.pressAction("touch:3", "cinematic-choice", "touch", true);
+    expect(binding.input.supportsNavigation).toBe(false);
+    expect(session.setMovement).not.toHaveBeenCalled();
+    expect(session.setLook).not.toHaveBeenCalled();
+    expect(onAction).toHaveBeenCalledWith("cinematic-choice");
+    binding.dispose();
   });
 
   it("does not advertise a generic action through the director handoff", () => {

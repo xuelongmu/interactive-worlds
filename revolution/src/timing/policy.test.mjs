@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   PERCEIVED_TIMING_POLICY,
+  finalVoiceKindForCue,
+  firstVoiceKindForCue,
   requiredVoiceGapMs,
 } from "./policy.ts";
 
@@ -22,4 +24,16 @@ test("only an explicit interruption removes required breathing room", () => {
     next: "narrator",
     interrupted: true,
   }), 0);
+});
+
+test("cue voice boundaries distinguish a leading cast line from final narration", () => {
+  const castThenNarrator = {
+    diegeticVo: "/cast.mp3",
+    diegeticSubtitle: "Make ready.",
+    subtitle: "The narrator follows.",
+  };
+  assert.equal(firstVoiceKindForCue(castThenNarrator), "diegetic");
+  assert.equal(finalVoiceKindForCue(castThenNarrator), "narrator");
+  assert.equal(firstVoiceKindForCue({ diegetic: true, subtitle: "Cast only." }), "diegetic");
+  assert.equal(finalVoiceKindForCue({ diegetic: true, subtitle: "Cast only." }), "diegetic");
 });

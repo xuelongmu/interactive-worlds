@@ -12,6 +12,13 @@ export interface VoiceSpacingPolicy {
   narratorToNarratorMs: number;
 }
 
+export interface VoiceBearingCue {
+  subtitle?: string;
+  vo?: string;
+  diegetic?: boolean;
+  diegeticVo?: string;
+}
+
 /** Perceived timing policy. Values live outside the engine so scene timing
  * remains independently auditable and configurable. */
 export const PERCEIVED_TIMING_POLICY = Object.freeze({
@@ -34,4 +41,14 @@ export function requiredVoiceGapMs(
     return policy.narratorToNarratorMs;
   }
   return 0;
+}
+
+export function firstVoiceKindForCue(cue: VoiceBearingCue): VoiceKind | null {
+  if (cue.diegeticVo || cue.diegetic) return "diegetic";
+  return cue.subtitle || cue.vo ? "narrator" : null;
+}
+
+export function finalVoiceKindForCue(cue: VoiceBearingCue): VoiceKind | null {
+  if (!cue.diegetic && (cue.subtitle || cue.vo)) return "narrator";
+  return cue.diegetic || cue.diegeticVo ? "diegetic" : null;
 }
