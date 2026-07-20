@@ -34,6 +34,7 @@ const hideExperienceUi = captureMode || searchParams.get("ui") === "0";
 
 if (captureMode) document.documentElement.dataset.capture = "true";
 if (hideExperienceUi) document.documentElement.dataset.experienceUi = "hidden";
+let titleTheme: HTMLAudioElement | null = null;
 
 async function disposeSoundDesign(): Promise<void> {
   stopNarrationObservation?.();
@@ -44,6 +45,7 @@ async function disposeSoundDesign(): Promise<void> {
 }
 
 async function play(sceneId: string, newStory = false) {
+  stopTitleTheme();
   if (director) await director.dispose();
   await disposeSoundDesign();
   if (newStory) resetStoryProgress();
@@ -64,6 +66,41 @@ async function play(sceneId: string, newStory = false) {
   stopNarrationObservation = observeNarrationDucking(app, nextSoundDesign);
   nextSoundDesign.ensure();
   await nextDirector.start(sceneId);
+}
+
+function stopTitleTheme() {
+  titleTheme?.pause();
+  if (titleTheme) titleTheme.currentTime = 0;
+  titleTheme = null;
+}
+
+function bindTitleTheme() {
+  const button = document.getElementById("title-theme") as HTMLButtonElement | null;
+  if (!button) return;
+  button.addEventListener("click", async () => {
+    if (titleTheme && !titleTheme.paused) {
+      titleTheme.pause();
+      button.textContent = "Play theme";
+      button.setAttribute("aria-pressed", "false");
+      return;
+    }
+    if (!titleTheme) {
+      titleTheme = new Audio("/assets/audio/music/main-title.mp3");
+      titleTheme.preload = "auto";
+      titleTheme.addEventListener("ended", () => {
+        button.textContent = "Play theme";
+        button.setAttribute("aria-pressed", "false");
+      });
+    }
+    try {
+      await titleTheme.play();
+      button.textContent = "Pause theme";
+      button.setAttribute("aria-pressed", "true");
+    } catch {
+      button.textContent = "Theme unavailable";
+      button.disabled = true;
+    }
+  });
 }
 
 function shellHeader(backTarget?: ShellView) {
@@ -96,12 +133,14 @@ function renderTitle() {
           </button>
           <button class="text-button" data-view="chapters">Chapters</button>
           <button class="text-button" data-view="settings">Settings</button>
+          <button class="text-button" id="title-theme" type="button" aria-pressed="false">Play theme</button>
         </div>
       </section>
       <p class="title-footnote">Headphones recommended · Progress saves on this device</p>
     </main>`;
 
   document.getElementById("begin")!.addEventListener("click", () => void play(resumeScene.id, complete));
+  bindTitleTheme();
   bindViewButtons();
 }
 
@@ -178,6 +217,7 @@ function bindViewButtons() {
 }
 
 function renderShell(view: DirectorExitTarget | ShellView = "title") {
+  if (view !== "title") stopTitleTheme();
   switch (view) {
     case "chapters": renderChapters(); break;
     case "settings": renderSettings(); break;

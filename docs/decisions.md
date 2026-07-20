@@ -38,10 +38,12 @@ full walkable beat — three dwell cues in the unpainted void (the enslaved,
 the Native nations, the loyalists) — factual register, no music. Not a
 footnote, not a lecture.
 
-**Music.** Generated candidates under the period-instrument constraint
-(fife, drum, strings). The main theme requires director approval by ear
-before propagating into chapter stings and swells. All other GDD §4 music
-rules stand (never under narration, never in battle, volley unscored).
+**Music.** **B — Ink and String** is the approved main theme. The exact audition
+take is identified by SHA-256
+`a9e526b4bc6745366ce25d767825caa5e5521edc3a2f98c628ee216776fdbc15`;
+derive chapter stings and earned swells from that take only. All other GDD §4
+rules stand: never under narration, never in battle, and the Lexington volley
+remains unscored.
 
 **Narrator.** Audition in progress (three candidates, three lines:
 LEX-010 / DEC-030 / DEL-041). Director picks by ear; until then #2's VO
@@ -118,6 +120,7 @@ main theme pick, casting round 2 picks.
 
 ## Open
 
-- **Historian engagement (#23):** external review remains the plan of
-  record for launch; the director is deciding how to source it (see issue
-  discussion). Script-writing does not wait on this.
+- **Historian engagement (#23):** an independent Revolutionary-era historian
+  remains the preferred eventual reviewer, but sourcing and outreach are
+  explicitly deferred for now. Script-writing and implementation do not wait
+  on this.

@@ -13,6 +13,8 @@ export interface SpatialAudioOptions {
 }
 
 const DUCK_DB = -6;
+const CONTEXT_RESUME_TIMEOUT_MS = 1_000;
+const PLAYBACK_END_GRACE_MS = 1_000;
 const dbToGain = (db: number) => Math.pow(10, db / 20);
 
 export class AudioEngine {
@@ -23,6 +25,7 @@ export class AudioEngine {
   private paused = false;
   private disposed = false;
   private playbackGeneration = 0;
+  private resumeAttempt: Promise<boolean> | null = null;
   /** invalidates in-flight playAmbience loads when stopAmbience runs */
   private ambienceGeneration = 0;
   private bufferCache = new Map<string, AudioBuffer | null>();
@@ -39,7 +42,12 @@ export class AudioEngine {
         this.buses.set(name, gain);
       }
     }
-    if (this.ctx.state === "suspended" && !this.paused) void this.ctx.resume();
+    if (this.ctx.state === "suspended" && !this.paused) {
+      // Autoplay policy and missing audio devices can reject or indefinitely
+      // stall resume(). Contain both cases so fire-and-forget callers cannot
+      // produce an unhandled rejection or block chapter startup.
+      void this.requestContextResume(this.ctx);
+    }
     return this.ctx;
   }
 
@@ -73,7 +81,15 @@ export class AudioEngine {
 
   async resume() {
     this.paused = false;
-    if (this.ctx?.state === "suspended") await this.ctx.resume();
+    if (this.ctx?.state === "suspended") await this.requestContextResume(this.ctx);
+  }
+
+  capturePlaybackGeneration(): number {
+    return this.playbackGeneration;
+  }
+
+  isPlaybackGenerationCurrent(generation: number): boolean {
+    return !this.disposed && generation === this.playbackGeneration;
   }
 
   private async load(url: string): Promise<AudioBuffer | null> {
@@ -135,8 +151,13 @@ export class AudioEngine {
         await this.waitWhileUnpaused(seconds * 1000, generation);
       }
     } finally {
-      this.duck(duckTargets, false);
-      this.onSubtitle(null);
+      // stopAll() already reset the old scene's buses and subtitle. A late
+      // onended from suspended/cancelled VO must not overwrite the restarted
+      // scene's ducking or subtitle state.
+      if (!this.disposed && generation === this.playbackGeneration) {
+        this.duck(duckTargets, false);
+        this.onSubtitle(null);
+      }
     }
   }
 
@@ -169,6 +190,47 @@ export class AudioEngine {
     this.activeSources.add(source);
     source.onended = () => this.activeSources.delete(source);
     source.start();
+  }
+
+  /** Awaited one-shot for editorial music beats. The promise resolves only
+   * after the cue ends, preserving the no-music-under-narration contract. */
+  async playOneShotAndWait(url: string, bus: BusName = "music") {
+    const generation = this.playbackGeneration;
+    const buffer = await this.load(url);
+    if (!buffer || this.disposed || generation !== this.playbackGeneration) return;
+    const ctx = this.ensure();
+    if (ctx.state !== "running" && !await this.requestContextResume(ctx)) return;
+    await new Promise<void>((resolveDone) => {
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(this.buses.get(bus)!);
+      this.activeSources.add(source);
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        source.onended = null;
+        this.activeSources.delete(source);
+        resolveDone();
+      };
+      const durationMs = Number.isFinite(buffer.duration) ? Math.max(0, buffer.duration * 1_000) : 0;
+      void this.waitWhileUnpaused(
+        durationMs + PLAYBACK_END_GRACE_MS,
+        generation,
+        () => settled
+      ).then(() => {
+        if (settled) return;
+        // A running-looking context can still stop advancing. Do not leave a
+        // latent sting that begins over narration if audio later recovers.
+        source.onended = null;
+        try { source.stop(); } catch { /* already stopped */ }
+        finish();
+      });
+      source.onended = () => {
+        finish();
+      };
+      source.start();
+    });
   }
 
   async playAmbience(urls: string[]) {
@@ -224,18 +286,48 @@ export class AudioEngine {
     this.ctx = null;
     this.buses.clear();
     this.bufferCache.clear();
+    this.resumeAttempt = null;
     this.paused = false;
     if (context && context.state !== "closed") await context.close();
   }
 
-  private async waitWhileUnpaused(durationMs: number, generation: number) {
+  private async waitWhileUnpaused(
+    durationMs: number,
+    generation: number,
+    cancelled: () => boolean = () => false
+  ) {
     let remaining = durationMs;
     let last = performance.now();
-    while (remaining > 0 && generation === this.playbackGeneration) {
+    while (
+      remaining > 0
+      && generation === this.playbackGeneration
+      && !cancelled()
+    ) {
       await new Promise((resolve) => setTimeout(resolve, Math.min(100, remaining)));
       const now = performance.now();
       if (!this.paused) remaining -= now - last;
       last = now;
     }
+  }
+
+  private requestContextResume(context: AudioContext): Promise<boolean> {
+    if (context.state === "running") return Promise.resolve(true);
+    if (context.state !== "suspended" || this.paused || this.disposed) return Promise.resolve(false);
+    if (this.resumeAttempt) return this.resumeAttempt;
+
+    let attempt!: Promise<boolean>;
+    attempt = Promise.race([
+      context.resume().then(
+        () => context.state === "running",
+        () => false
+      ),
+      new Promise<boolean>((resolve) => {
+        setTimeout(() => resolve(false), CONTEXT_RESUME_TIMEOUT_MS);
+      }),
+    ]).finally(() => {
+      if (this.resumeAttempt === attempt) this.resumeAttempt = null;
+    });
+    this.resumeAttempt = attempt;
+    return attempt;
   }
 }

@@ -37,6 +37,21 @@
       "/assets/audio/vo/DEL-BARK-3.mp3"
     ]
   },
+  "branching": {
+    "context": "delaware-duty-choice",
+    "actions": [
+      {
+        "choiceId": "delaware-duty.pole",
+        "heldPrompt": "The viewer's visible gloved hands brace a long wooden setting pole from the bow against the current.",
+        "releasedPrompt": "The pole is planted safely inside the boat and the bow holds its line through the ice."
+      },
+      {
+        "choiceId": "delaware-duty.clear-ice",
+        "heldPrompt": "The viewer's visible gloved hands use a short wooden boat hook to push a slab of river ice away from the hull.",
+        "releasedPrompt": "The ice slab drifts clear and the boat hook is brought safely back inside the hull."
+      }
+    ]
+  },
   "modelEvents": [
     { "at": 30, "name": "knox" },
     { "at": 60, "name": "storm",

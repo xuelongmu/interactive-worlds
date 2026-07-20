@@ -17,7 +17,8 @@
     { "id": "DEC-030", "trigger": { "type": "action", "name": "quill-pickup" },
       "subtitle": "The document closes with a pledge: their lives, their fortunes, and their honor. A signature below those words was treason, and the penalty for treason was death." },
     { "id": "DEC-061", "trigger": { "type": "action", "name": "sign-complete" },
-      "subtitle": "Fifty-six men signed. The youngest was twenty-six. The oldest, Franklin, was seventy. Merchants, farmers, lawyers, a printer." },
+      "subtitle": "Fifty-six men signed. The youngest was twenty-six. The oldest, Franklin, was seventy. Merchants, farmers, lawyers, a printer.",
+      "musicAfter": "/assets/audio/music/swell-declaration.mp3" },
     { "id": "DEC-070", "trigger": { "type": "action", "name": "quill-down" },
       "subtitle": "The names were kept secret for six months. No signer was ever tried in court, but many paid all the same — homes burned, fortunes lost, sons killed in the war they had voted for.",
       "then": "scene:delaware" }

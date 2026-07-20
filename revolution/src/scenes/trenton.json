@@ -23,9 +23,25 @@
       "subtitle": "It lasted about ninety minutes. Twenty-two Hessians were killed — Colonel Rall among them — and nearly nine hundred captured. The Americans lost not one man in the fighting. The ragtag militia army had just destroyed a garrison of professionals." },
     { "id": "TRE-050", "trigger": { "type": "timer", "seconds": 115 },
       "subtitle": "A week later, most of the men whose enlistments expired stayed. Washington offered ten dollars and asked them, regiment by regiment, to step forward. After a silence, they did. The revolution would go on.",
+      "musicAfter": "/assets/audio/music/swell-trenton.mp3",
       "then": "scene:saratoga" }
   ],
   "audio": { "ambience": ["/assets/audio/amb/trenton-sleet.mp3"] },
+  "branching": {
+    "context": "trenton-perspective-choice",
+    "actions": [
+      {
+        "choiceId": "trenton-perspective.stay-with-column",
+        "heldPrompt": "The viewer stays shoulder-to-shoulder behind the leading Continental column, visible hands steady on the musket stock.",
+        "releasedPrompt": "The viewer holds position with the column as it reforms toward the same town-square surrender."
+      },
+      {
+        "choiceId": "trenton-perspective.move-toward-guns",
+        "heldPrompt": "The viewer moves toward Knox's cannon through the sleet, visible hands keeping the musket lowered and controlled.",
+        "releasedPrompt": "The viewer stops near the gun line as both routes rejoin toward the same town-square surrender."
+      }
+    ]
+  },
   "modelEvents": [
     { "at": 25, "name": "guns-open",
       "prompt": "Same colonial town street in driving sleet at dawn: American cannon at the head of the street fire, muzzle flashes lighting the storm, smoke rolling between the houses, soldiers charging forward past the guns. Realistic, gray dawn light, chaotic." },

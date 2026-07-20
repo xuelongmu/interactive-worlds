@@ -1,4 +1,13 @@
-import type { BranchPresentationState } from "../branch-state";
+import type {
+  BranchAcknowledgement,
+  BranchChoiceId,
+  BranchMomentId,
+  BranchObjective,
+  BranchPresentationActions,
+  BranchPresentationContext,
+  BranchRequestId,
+  BranchSelectionAcknowledgement,
+} from "../branch-state";
 
 /** Normalized event vocabulary. Every renderer emits these; the cue engine
  *  consumes them. This is the seam that keeps scenes renderer-agnostic. */
@@ -45,6 +54,9 @@ export interface Cue {
   once?: boolean;
   /** bus names to duck while this cue plays */
   duck?: string[];
+  /** Sparse editorial music played only after this line finishes and before
+   * any `then:` transition. Never place battle or source music here. */
+  musicAfter?: string;
   lockControls?: boolean;
   /** follow-up action for the director, e.g. "cutscene:volley", "scene:declaration" */
   then?: string;
@@ -82,11 +94,64 @@ export interface ControlHandoffDetail {
   controlsEnabled: boolean;
   movement?: { binding: string; label: string };
   look?: { binding: string; label: string };
-  /** Canonical branch action. `null` is the explicit neutral/out-of-range state. */
-  action?: BranchPresentationState["action"];
-  /** Non-narrative acknowledgement supplied by the branch presentation contract. */
-  acknowledgement?: string;
   transitionKey: number;
+}
+
+export interface ContextualChoiceCommandError {
+  readonly momentId: BranchMomentId;
+  readonly choiceId: BranchChoiceId;
+  readonly requestId: BranchRequestId;
+  readonly message: string;
+  readonly visible: true;
+  readonly retryable: true;
+}
+
+/** Structurally matches the separately owned #50 HUD integration surface. */
+export interface ContextualChoiceSnapshot {
+  readonly sceneId: string;
+  readonly transitionKey: number;
+  readonly momentId: BranchMomentId | null;
+  readonly objective: BranchObjective | null;
+  readonly actions: BranchPresentationActions | null;
+  readonly ready: boolean;
+  readonly selectedChoiceId: BranchChoiceId | null;
+  readonly latchedChoiceId: BranchChoiceId | null;
+  readonly acknowledgement: BranchAcknowledgement | BranchSelectionAcknowledgement | null;
+  readonly commandError: ContextualChoiceCommandError | null;
+}
+
+export interface ContextualChoiceRequest {
+  readonly momentId: BranchMomentId;
+  readonly choiceId: BranchChoiceId;
+  readonly requestId: BranchRequestId;
+}
+
+export type ContextualChoiceRequestResult = Readonly<
+  | { status: "requested"; requestId: BranchRequestId }
+  | { status: "unavailable" | "duplicate" | "already-latched"; requestId: BranchRequestId }
+  | { status: "invalid"; requestId: BranchRequestId | null; message: string }
+>;
+
+export interface BeatNavigationRequest {
+  readonly type: "nextBeat" | "previousBeat";
+  readonly sceneId: string;
+  readonly transitionKey: number;
+}
+
+export type BeatNavigationResult = Readonly<
+  | { outcome: "navigated"; request: BeatNavigationRequest }
+  | { outcome: "clamped" | "error"; request: BeatNavigationRequest; message: string }
+>;
+
+export type BeatNavigationFeedback = Extract<BeatNavigationResult, { outcome: "clamped" | "error" }>;
+
+export interface BeatNavigationSnapshot {
+  readonly sceneId: string;
+  readonly transitionKey: number;
+  readonly active: boolean;
+  readonly nextAvailable: boolean;
+  readonly previousAvailable: boolean;
+  readonly feedback: BeatNavigationFeedback | null;
 }
 
 export interface RuntimePauseDetail {
@@ -138,6 +203,15 @@ export interface SceneManifest {
   };
   /** scripted world-model beats: seconds into the scene -> model-event name + steering prompt */
   modelEvents?: { at: number; name: string; prompt?: string }[];
+  /** Historically convergent E/F choice or later non-narrative callback. */
+  branching?: {
+    context: BranchPresentationContext;
+    actions?: readonly {
+      choiceId: BranchChoiceId;
+      heldPrompt: string;
+      releasedPrompt: string;
+    }[];
+  };
   /** Billable live preparation policy, intentionally independent from static
    * asset preloading. Authored activation lives with the scene manifest. */
   livePrewarm?: WorldModelPrewarmDirective[];

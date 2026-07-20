@@ -1,13 +1,17 @@
 import type {
   BarkDef,
+  BeatNavigationRequest,
+  BeatNavigationResult,
+  BeatNavigationSnapshot,
   ControlHandoffDetail,
+  ContextualChoiceRequest,
+  ContextualChoiceSnapshot,
   Cue,
   EngineEvent,
   ListenerPose,
   RuntimePauseDetail,
   SceneManifest,
 } from "./types";
-import type { BranchPresentationState } from "../branch-state";
 import { CueEngine } from "./cues";
 import { AudioEngine, type BusName } from "./audio";
 import { assetExists, preloadSceneAssets } from "./assets";
@@ -19,6 +23,18 @@ import { prewarmDirectiveAt, WorldModelPrewarmController } from "./worldmodel-pr
 import { splitChapterHeading } from "../shell";
 import { renderStallHint, StallHintTimer } from "./stall";
 import { PausableTimeouts } from "./timers";
+import {
+  BranchRuntimeController,
+  type BranchActionRequest,
+  type BranchRuntimeSnapshot,
+} from "./branch-runtime";
+import {
+  adjacentBeat,
+  beatAvailability,
+  canonicalNarrativeBeats,
+  executeBeatTransition,
+  type NarrativeBeat,
+} from "./beat-navigation";
 import {
   InteractionGate,
   configureLoadingSemantics,
@@ -39,9 +55,9 @@ interface Runner {
   setPaused(paused: boolean): void;
   /** current rendered frame, for splat -> world-model conditioning */
   captureFrame?(): Promise<Blob | null>;
-  /** Canonical action/acknowledgement for the active branch interaction. */
-  getBranchPresentation?(): BranchPresentationState;
   getAudioListenerPose?(): ListenerPose;
+  requestBranchAction?(request: BranchActionRequest): Promise<void>;
+  clearPersistentInput?(reason: string): void | Promise<void>;
 }
 
 export type DirectorExitTarget = "title" | "chapters" | "settings";
@@ -52,6 +68,9 @@ export interface DirectorOptions {
   onExit: (target?: DirectorExitTarget) => void;
   onEngineEvent?: EngineEventObserver;
   onControlHandoff?: (detail: ControlHandoffDetail) => void;
+  onContextualChoiceSnapshot?: (snapshot: ContextualChoiceSnapshot) => void;
+  onBeatNavigationSnapshot?: (snapshot: BeatNavigationSnapshot) => void;
+  onBeatNavigationResult?: (result: BeatNavigationResult) => void;
   onPauseState?: (detail: RuntimePauseDetail) => void;
   reviewMode?: boolean;
 }
@@ -59,6 +78,36 @@ export interface DirectorOptions {
 const CHAPTER_WORDS = [
   "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
 ];
+
+export const CHAPTER_STING_URL = "/assets/audio/music/chapter-sting.mp3";
+
+type DirectorAudio = Pick<
+  AudioEngine,
+  "capturePlaybackGeneration" | "isPlaybackGenerationCurrent" | "playVoice" | "playOneShotAndWait"
+>;
+
+/** Keep every editorial swell after its authored line and inside the cue
+ * queue, so `then:` transitions cannot race ahead of the music. */
+export async function playCueAudio(audio: DirectorAudio, cue: Cue) {
+  const generation = audio.capturePlaybackGeneration();
+  if (cue.diegeticVo) {
+    await audio.playVoice({
+      url: cue.diegeticVo,
+      subtitle: cue.diegeticSubtitle,
+      bus: "diegetic",
+      duck: [],
+    });
+    if (!audio.isPlaybackGenerationCurrent(generation)) return;
+  }
+  await audio.playVoice({
+    url: cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`,
+    subtitle: cue.subtitle,
+    bus: cue.diegetic ? "diegetic" : "narration",
+    duck: cue.diegetic ? [] : cue.duck as BusName[] | undefined,
+  });
+  if (!audio.isPlaybackGenerationCurrent(generation)) return;
+  if (cue.musicAfter) await audio.playOneShotAndWait(cue.musicAfter);
+}
 
 export function runnerHasMovementInput(
   runner: { hasMovementInput?(): boolean } | null
@@ -107,18 +156,9 @@ export function canPrewarmWorldModelTarget(
 export function controlHandoffForScene(
   sceneId: string,
   transitionKey: number,
-  detail: Omit<ControlHandoffDetail, "sceneId" | "transitionKey">,
-  presentation?: BranchPresentationState | null
+  detail: Omit<ControlHandoffDetail, "sceneId" | "transitionKey">
 ): ControlHandoffDetail {
-  const handoff = { sceneId, transitionKey, ...detail };
-  if (!presentation) return handoff;
-  return {
-    ...handoff,
-    action: presentation.action,
-    ...(presentation.acknowledgement === null
-      ? {}
-      : { acknowledgement: presentation.acknowledgement }),
-  };
+  return { sceneId, transitionKey, ...detail };
 }
 
 const SYSTEM_ACTIONS = new Set([
@@ -174,6 +214,12 @@ export class Director {
   private worldModelPrewarm = new WorldModelPrewarmController({
     onTelemetry: (event) => console.debug("[worldmodel:telemetry]", event),
   });
+  private branchRuntime: BranchRuntimeController;
+  private readonly narrativeBeats = canonicalNarrativeBeats(scenes);
+  private activeBeat: NarrativeBeat | null = null;
+  private beatTransitioning = false;
+  private beatFeedback: Extract<BeatNavigationResult, { outcome: "clamped" | "error" }> | null = null;
+  private beatNavigationPromise: Promise<BeatNavigationResult> | null = null;
 
   private stage: HTMLElement;
   private canvasHost: HTMLElement;
@@ -246,6 +292,9 @@ export class Director {
     this.stallEl = this.stage.querySelector(".stall-hint")!;
     this.pauseEl = this.stage.querySelector(".pause-overlay")!;
     this.reviewControlsEl = this.stage.querySelector(".review-controls");
+    this.branchRuntime = new BranchRuntimeController(window.localStorage, (snapshot) => {
+      this.publishContextualChoice(snapshot);
+    });
     configureLoadingSemantics(this.cardEl);
     setPauseDialogView(this.pauseEl, "menu");
     this.stallTimer = new StallHintTimer((visible) => {
@@ -265,7 +314,7 @@ export class Director {
 
   // ---- scene lifecycle -------------------------------------------------
 
-  private async runScene(id: string) {
+  private async runScene(id: string, startCueId?: string, skipTeardown = false) {
     if (this.reviewTransitioning) return;
     const manifest = sceneById.get(id);
     if (!manifest) throw new Error(`unknown scene "${id}"`);
@@ -273,10 +322,15 @@ export class Director {
     this.setReviewTransitioning(true);
 
     try {
+      if (!skipTeardown) await this.teardownScene(id);
       await this.fadeTo(1);
-      await this.teardownScene(id);
       this.current = manifest;
       this.controlTransitionKey += 1;
+      this.branchRuntime.enter(manifest.branching?.context ?? "out-of-range", (request) => {
+        const runner = this.runner;
+        if (!runner?.requestBranchAction) throw new Error("Branch action is not ready.");
+        return runner.requestBranchAction(request);
+      });
       this.emitControlHandoff({ renderer: manifest.renderer, controlsEnabled: false });
       setCurrentScene(manifest.id);
       const reviewSceneSelect = this.reviewControlsEl?.querySelector<HTMLSelectElement>("[data-review-scene]");
@@ -292,22 +346,9 @@ export class Director {
       this.cardEl.classList.add("visible");
 
       const cueEngine = new CueEngine(manifest.cues, {
-        play: async (cue) => {
-          // cast diegetic line first (the script order: shout, then narrator)
-          if (cue.diegeticVo) {
-            await this.audio.playVoice({
-              url: cue.diegeticVo,
-              subtitle: cue.diegeticSubtitle,
-              bus: "diegetic",
-              duck: [],
-            });
-          }
-          await this.audio.playVoice({
-            url: cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`,
-            subtitle: cue.subtitle,
-            bus: cue.diegetic ? "diegetic" : "narration",
-            duck: cue.diegetic ? [] : cue.duck as BusName[] | undefined,
-          });
+        play: (cue) => {
+          this.setActiveBeat(manifest.id, cue.id);
+          return playCueAudio(this.audio, cue);
         },
         // audio-first: the visual consequence lands on the last word — and a
         // failed VO load still advances the story
@@ -328,6 +369,14 @@ export class Director {
         },
       });
       this.cueEngine = cueEngine;
+      // The chapter sting owns the card by itself. Only after it ends may
+      // ambience and narration begin; the latter then continues over black
+      // while the renderer loads.
+      await this.audio.playOneShotAndWait(CHAPTER_STING_URL);
+      if (manifest.audio.ambience?.length) void this.audio.playAmbience(manifest.audio.ambience);
+      // narration over black is the loading screen — start the scene now
+      if (startCueId) cueEngine.startAt(startCueId);
+      else this.emitEngineEvent({ type: "scene-start" });
       this.updateTimer = window.setInterval(() => {
         if (!this.paused) {
           cueEngine.update(0.1);
@@ -335,10 +384,6 @@ export class Director {
           if (pose) this.audio.setListenerPose(pose);
         }
       }, 100);
-
-      if (manifest.audio.ambience?.length) void this.audio.playAmbience(manifest.audio.ambience);
-      // narration over black is the loading screen — start the scene now
-      this.emitEngineEvent({ type: "scene-start" });
 
       const minHold = new Promise((r) => setTimeout(r, 2500));
       await Promise.all([this.createRunner(manifest), minHold]);
@@ -349,6 +394,8 @@ export class Director {
       this.cardEl.classList.remove("visible");
       await this.fadeTo(0);
       this.sceneReady = true;
+      this.publishBeatNavigation();
+      this.publishContextualChoice();
       if (manifest.renderer === "splat") {
         this.emitControlHandoff({
           renderer: "splat",
@@ -368,6 +415,7 @@ export class Director {
       throw error;
     } finally {
       this.setReviewTransitioning(false);
+      this.publishBeatNavigation();
     }
   }
 
@@ -403,9 +451,155 @@ export class Director {
         this.current.id,
         this.controlTransitionKey,
         detail,
-        this.runner?.getBranchPresentation?.()
       )
     );
+  }
+
+  /** Edge-only #50 seam. The returned promise means the command was sent,
+   * never that the choice succeeded; confirmed snapshots are authoritative. */
+  async requestContextualChoice(request: ContextualChoiceRequest) {
+    return this.branchRuntime.request(request);
+  }
+
+  getContextualChoiceSnapshot(): ContextualChoiceSnapshot | null {
+    if (!this.current) return null;
+    return this.contextualChoiceSnapshot(this.branchRuntime.snapshot());
+  }
+
+  /** Full-story restart hook for the separately owned shell adapter. */
+  resetBranchChoices(): void {
+    this.branchRuntime.restartStory();
+  }
+
+  private contextualChoiceSnapshot(snapshot: BranchRuntimeSnapshot): ContextualChoiceSnapshot {
+    const { presentation } = snapshot;
+    const selectionAcknowledgement = snapshot.lastHandoff?.outcome === "latched"
+      ? snapshot.lastHandoff.acknowledgement
+      : null;
+    return {
+      sceneId: this.current?.id ?? "",
+      transitionKey: this.controlTransitionKey,
+      momentId: presentation.momentId,
+      objective: presentation.objective,
+      actions: presentation.actions,
+      ready: snapshot.ready && this.sceneReady && !this.paused && !this.beatTransitioning,
+      selectedChoiceId: presentation.selectedChoiceId,
+      latchedChoiceId: presentation.latchedChoiceId,
+      acknowledgement: selectionAcknowledgement ?? presentation.acknowledgement,
+      commandError: snapshot.commandError,
+    };
+  }
+
+  private publishContextualChoice(snapshot = this.branchRuntime.snapshot()): void {
+    if (!this.current) return;
+    this.opts.onContextualChoiceSnapshot?.(this.contextualChoiceSnapshot(snapshot));
+  }
+
+  getBeatNavigationSnapshot(): BeatNavigationSnapshot | null {
+    if (!this.current) return null;
+    const availability = beatAvailability(this.narrativeBeats, this.activeBeat);
+    return {
+      sceneId: this.current.id,
+      transitionKey: this.controlTransitionKey,
+      active: this.sceneReady && !this.paused && !this.disposed && !this.beatTransitioning,
+      nextAvailable: availability.next,
+      previousAvailable: availability.previous,
+      feedback: this.beatFeedback,
+    };
+  }
+
+  async nextBeat(request: BeatNavigationRequest): Promise<BeatNavigationResult> {
+    return this.navigateBeat("next", request);
+  }
+
+  async previousBeat(request: BeatNavigationRequest): Promise<BeatNavigationResult> {
+    return this.navigateBeat("previous", request);
+  }
+
+  private navigateBeat(
+    direction: "next" | "previous",
+    request: BeatNavigationRequest,
+  ): Promise<BeatNavigationResult> {
+    if (this.beatNavigationPromise) {
+      const result: BeatNavigationResult = {
+        outcome: "error",
+        request,
+        message: "A beat transition is already in progress.",
+      };
+      this.beatFeedback = result;
+      this.opts.onBeatNavigationResult?.(result);
+      this.publishBeatNavigation();
+      return Promise.resolve(result);
+    }
+    const expectedType = direction === "next" ? "nextBeat" : "previousBeat";
+    if (
+      request.type !== expectedType
+      || request.sceneId !== this.current?.id
+      || request.transitionKey !== this.controlTransitionKey
+    ) {
+      const result: BeatNavigationResult = {
+        outcome: "error",
+        request,
+        message: "The beat navigation request is stale.",
+      };
+      this.beatFeedback = result;
+      this.opts.onBeatNavigationResult?.(result);
+      this.publishBeatNavigation();
+      return Promise.resolve(result);
+    }
+    const target = adjacentBeat(this.narrativeBeats, this.activeBeat, direction);
+    if (!target) {
+      const result: BeatNavigationResult = {
+        outcome: "clamped",
+        request,
+        message: direction === "next" ? "This is the final beat." : "This is the first beat.",
+      };
+      this.beatFeedback = result;
+      this.opts.onBeatNavigationResult?.(result);
+      this.publishBeatNavigation();
+      return Promise.resolve(result);
+    }
+
+    this.beatTransitioning = true;
+    this.beatFeedback = null;
+    this.publishBeatNavigation();
+    this.publishContextualChoice();
+    const from = this.activeBeat;
+    this.beatNavigationPromise = executeBeatTransition(target, {
+      cleanup: () => this.teardownScene(target.sceneId),
+      enter: (beat) => this.runScene(beat.sceneId, beat.cueId, true),
+    }).then(() => {
+      const result: BeatNavigationResult = { outcome: "navigated", request };
+      this.opts.onBeatNavigationResult?.(result);
+      return result;
+    }).catch((error) => {
+      const result: BeatNavigationResult = {
+        outcome: "error",
+        request,
+        message: error instanceof Error ? error.message : String(error),
+      };
+      this.activeBeat = from;
+      this.beatFeedback = result;
+      this.opts.onBeatNavigationResult?.(result);
+      return result;
+    }).finally(() => {
+      this.beatTransitioning = false;
+      this.beatNavigationPromise = null;
+      this.publishBeatNavigation();
+      this.publishContextualChoice();
+    });
+    return this.beatNavigationPromise;
+  }
+
+  private setActiveBeat(sceneId: string, cueId: string): void {
+    this.activeBeat = this.narrativeBeats.find((beat) => beat.sceneId === sceneId && beat.cueId === cueId) ?? null;
+    this.beatFeedback = null;
+    this.publishBeatNavigation();
+  }
+
+  private publishBeatNavigation(): void {
+    const snapshot = this.getBeatNavigationSnapshot();
+    if (snapshot) this.opts.onBeatNavigationSnapshot?.(snapshot);
   }
 
   private prewarmWorldModel(directive: NonNullable<SceneManifest["livePrewarm"]>[number]) {
@@ -423,6 +617,8 @@ export class Director {
 
   private async teardownScene(preservePrewarmFor?: string) {
     this.sceneReady = false;
+    this.publishBeatNavigation();
+    this.branchRuntime.clearTransient();
     if (this.current) this.emitControlHandoff({ renderer: this.current.renderer, controlsEnabled: false });
     this.disarmStallHint();
     this.hideBeatGuidance();
@@ -435,6 +631,7 @@ export class Director {
     if (this.updateTimer !== null) { clearInterval(this.updateTimer); this.updateTimer = null; }
     for (const fn of this.teardownFns.splice(0)) fn();
     this.audio.stopAll();
+    await this.runner?.clearPersistentInput?.("scene-teardown");
     await this.runner?.dispose();
     this.runner = null;
     if (preservePrewarmFor) {
@@ -451,6 +648,7 @@ export class Director {
   async dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.publishBeatNavigation();
     document.removeEventListener("keydown", this.onPauseKeyDown);
     this.pauseEl.removeEventListener("click", this.onPauseAction);
     this.reviewControlsEl?.removeEventListener("click", this.onReviewAction);
@@ -520,6 +718,8 @@ export class Director {
   private async setPaused(paused: boolean) {
     if (this.paused === paused) return;
     this.paused = paused;
+    this.publishBeatNavigation();
+    this.publishContextualChoice();
     this.pauseEl.hidden = !paused;
     this.runner?.setPaused(paused);
     this.opts.onPauseState?.({
@@ -751,6 +951,11 @@ export class Director {
       onStatus: (status) => { this.statusEl.textContent = status; },
       onTelemetry: (event) => console.debug("[worldmodel:telemetry]", event),
       onControlHandoff: (detail) => this.emitControlHandoff(detail),
+      getBranchActions: () => this.branchRuntime.snapshot().presentation.actions,
+      onBranchActionRequest: (request) => { void this.requestContextualChoice(request); },
+      onBranchRuntimeEvent: (event) => { this.branchRuntime.handle(event); },
+      onBranchReadiness: (readiness) => { this.branchRuntime.setReadiness(readiness); },
+      onBranchTransientReset: () => { this.branchRuntime.clearTransient(); },
     });
     this.videoHost.classList.add("visible");
     this.runner = {
@@ -758,6 +963,8 @@ export class Director {
       setControlsLocked: (locked) => player.setControlsLocked(locked),
       canResumePointerInput: () => player.canResumePointerInput(),
       setPaused: (paused) => player.setPaused(paused),
+      requestBranchAction: (request) => player.requestBranchAction(request),
+      clearPersistentInput: (reason) => player.clearPersistentInput(reason),
     };
     await player.start();
   }
