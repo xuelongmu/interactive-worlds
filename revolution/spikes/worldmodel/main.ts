@@ -127,6 +127,71 @@ function resetMetrics() {
 
 let session: WorldModelSession | null = null;
 let unbindKeys: (() => void) | null = null;
+type CapturableVideo = HTMLVideoElement & { captureStream?: () => MediaStream };
+type LocalRecording = { recorder: MediaRecorder; chunks: Blob[] };
+let localRecording: LocalRecording | null = null;
+let cancelPendingLocalRecording: (() => void) | null = null;
+
+function startLocalRecording() {
+  cancelPendingLocalRecording?.();
+  cancelPendingLocalRecording = null;
+  if (localRecording) return;
+  const captureStream = (video as CapturableVideo).captureStream;
+  if (typeof MediaRecorder === "undefined" || typeof captureStream !== "function") {
+    log("local browser recording unavailable in this browser");
+    return;
+  }
+  try {
+    const stream = captureStream.call(video);
+    const mimeType = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]
+      .find((type) => MediaRecorder.isTypeSupported(type));
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const recording: LocalRecording = { recorder, chunks: [] };
+    recorder.addEventListener("dataavailable", (event) => {
+      if (event.data.size > 0) recording.chunks.push(event.data);
+    });
+    recorder.start(1000);
+    localRecording = recording;
+    log(`local browser recording started${mimeType ? ` (${mimeType})` : ""}`);
+  } catch (error) {
+    log(`local browser recording unavailable (${error})`);
+  }
+}
+
+function queueLocalRecording() {
+  const start = () => startLocalRecording();
+  if (!video.paused && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    start();
+    return;
+  }
+  video.addEventListener("playing", start, { once: true });
+  cancelPendingLocalRecording = () => video.removeEventListener("playing", start);
+}
+
+async function finishLocalRecording(): Promise<Blob> {
+  const recording = localRecording;
+  if (!recording) throw new Error("local browser recorder is not running");
+  const { recorder, chunks } = recording;
+  if (recorder.state !== "inactive") {
+    await new Promise<void>((resolve, reject) => {
+      recorder.addEventListener("stop", () => resolve(), { once: true });
+      recorder.addEventListener("error", () => reject(new Error("local browser recorder failed")), { once: true });
+      recorder.stop();
+    });
+  }
+  if (localRecording === recording) localRecording = null;
+  const blob = new Blob(chunks, { type: recorder.mimeType || "video/webm" });
+  if (blob.size === 0) throw new Error("local browser recording was empty");
+  return blob;
+}
+
+function discardLocalRecording() {
+  cancelPendingLocalRecording?.();
+  cancelPendingLocalRecording = null;
+  const recording = localRecording;
+  localRecording = null;
+  if (recording && recording.recorder.state !== "inactive") recording.recorder.stop();
+}
 
 function renderMetrics() {
   const timings = session?.getConnectionTimings();
@@ -200,6 +265,7 @@ async function teardown() {
   stopFramePump();
   unbindKeys?.();
   unbindKeys = null;
+  discardLocalRecording();
   audio.stopAmbience();
   const dying = session;
   session = null;
@@ -248,6 +314,7 @@ connectBtn.addEventListener("click", async () => {
     await session.connect();
     startFramePump();
     unbindKeys = bindWorldModelKeys(session);
+    queueLocalRecording();
     if (manifest.audio.ambience) void audio.playAmbience(manifest.audio.ambience);
     statusEl.textContent = "ready — drive with WASD/arrows";
     disconnectBtn.disabled = false;
@@ -291,7 +358,19 @@ recordBtn.addEventListener("click", async () => {
     URL.revokeObjectURL(url);
     log(`recording saved (${(blob.size / 1e6).toFixed(1)} MB) — move it to public/assets/video/`);
   } catch (error) {
-    log(`✗ recording failed: ${error}`);
+    log(`server recording unavailable (${error}); saving local browser take`);
+    try {
+      const blob = await finishLocalRecording();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "delaware-reactor-live.webm";
+      a.click();
+      URL.revokeObjectURL(url);
+      log(`local browser recording saved (${(blob.size / 1e6).toFixed(1)} MB)`);
+    } catch (localError) {
+      log(`✗ recording failed: ${localError}`);
+    }
   } finally {
     recordBtn.disabled = false;
     recordBtn.textContent = "Save recording (.mp4)";
