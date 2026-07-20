@@ -76,6 +76,14 @@ export class AudioEngine {
     if (this.ctx?.state === "suspended") await this.ctx.resume();
   }
 
+  capturePlaybackGeneration(): number {
+    return this.playbackGeneration;
+  }
+
+  isPlaybackGenerationCurrent(generation: number): boolean {
+    return !this.disposed && generation === this.playbackGeneration;
+  }
+
   private async load(url: string): Promise<AudioBuffer | null> {
     if (this.bufferCache.has(url)) return this.bufferCache.get(url)!;
     try {
@@ -135,8 +143,13 @@ export class AudioEngine {
         await this.waitWhileUnpaused(seconds * 1000, generation);
       }
     } finally {
-      this.duck(duckTargets, false);
-      this.onSubtitle(null);
+      // stopAll() already reset the old scene's buses and subtitle. A late
+      // onended from suspended/cancelled VO must not overwrite the restarted
+      // scene's ducking or subtitle state.
+      if (!this.disposed && generation === this.playbackGeneration) {
+        this.duck(duckTargets, false);
+        this.onSubtitle(null);
+      }
     }
   }
 
@@ -169,6 +182,26 @@ export class AudioEngine {
     this.activeSources.add(source);
     source.onended = () => this.activeSources.delete(source);
     source.start();
+  }
+
+  /** Awaited one-shot for editorial music beats. The promise resolves only
+   * after the cue ends, preserving the no-music-under-narration contract. */
+  async playOneShotAndWait(url: string, bus: BusName = "music") {
+    const generation = this.playbackGeneration;
+    const buffer = await this.load(url);
+    if (!buffer || this.disposed || generation !== this.playbackGeneration) return;
+    const ctx = this.ensure();
+    await new Promise<void>((resolveDone) => {
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(this.buses.get(bus)!);
+      this.activeSources.add(source);
+      source.onended = () => {
+        this.activeSources.delete(source);
+        resolveDone();
+      };
+      source.start();
+    });
   }
 
   async playAmbience(urls: string[]) {

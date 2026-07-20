@@ -95,6 +95,17 @@ export class CueEngine {
     return cue;
   }
 
+  /** Canonical review/navigation entry. Earlier beats are marked complete
+   * without replay, then the exact target begins through the normal queue. */
+  startAt(cueId: string): Cue {
+    const index = this.cues.findIndex((cue) => cue.id === cueId);
+    if (index < 0) throw new Error(`unknown cue "${cueId}"`);
+    for (const cue of this.cues.slice(0, index)) this.fired.add(cue.id);
+    const cue = this.cues[index];
+    this.fire(cue);
+    return cue;
+  }
+
   private fire(cue: Cue) {
     if (this.stopped) return;
     this.fired.add(cue.id); // cues are one-shot per scene run (script cues are all `once`)

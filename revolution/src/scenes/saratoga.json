@@ -26,9 +26,25 @@
       "subtitle": "He leads the assault that takes the key redoubt in the British line, and goes down with a musket ball through the leg that made him a hero." },
     { "id": "SAR-070", "trigger": { "type": "model-event", "name": "charge-end", "orAfterPrevious": 10 },
       "subtitle": "Ten days later, surrounded and starving, Burgoyne surrendered his entire army — nearly six thousand men. When the news reached Paris, France declared for the revolution: money, an army, and a fleet. Saratoga inspired a much-needed ally.",
+      "musicAfter": "/assets/audio/music/swell-alliance.mp3",
       "then": "scene:valley-forge" }
   ],
   "audio": { "ambience": ["/assets/audio/amb/command-tent.mp3"] },
+  "branching": {
+    "context": "saratoga-analysis-lens-choice",
+    "actions": [
+      {
+        "choiceId": "saratoga-analysis-lens.trace-river-road",
+        "heldPrompt": "The viewer turns attention along the Hudson river road and traces the constrained British route toward the fortification.",
+        "releasedPrompt": "The river road remains the chosen point of attention as the view returns to the same assault on the redoubt."
+      },
+      {
+        "choiceId": "saratoga-analysis-lens.inspect-supply-line",
+        "heldPrompt": "The viewer turns attention toward the thinning British supply line between the autumn woods and the river.",
+        "releasedPrompt": "The failing supply line remains the chosen point of attention as the view returns to the same assault on the redoubt."
+      }
+    ]
+  },
   "modelEvents": [
     { "at": 25, "name": "redoubt-taken",
       "prompt": "Same autumn battlefield: Continental soldiers swarm over the log wall of the earthen redoubt in musket smoke, fighting hand to hand at the top, an officer on horseback going down as his horse falls near the wall. Late golden afternoon light fading. Realistic, chaotic." },
