@@ -92,6 +92,17 @@ export class AudioEngine {
     return !this.disposed && generation === this.playbackGeneration;
   }
 
+  /** Wait on the same pause and teardown clock as voice/music playback.
+   * Returns false when restart, navigation, or disposal invalidates the
+   * captured scene generation before the gap completes. */
+  async waitForPlaybackGap(
+    durationMs: number,
+    generation = this.playbackGeneration,
+  ): Promise<boolean> {
+    await this.waitWhileUnpaused(Math.max(0, durationMs), generation);
+    return this.isPlaybackGenerationCurrent(generation);
+  }
+
   private async load(url: string): Promise<AudioBuffer | null> {
     if (this.bufferCache.has(url)) return this.bufferCache.get(url)!;
     try {
