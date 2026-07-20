@@ -37,7 +37,13 @@ let soundDesign: SoundDesignController | null = null;
 let stopNarrationObservation: (() => void) | null = null;
 let instructionHud: InstructionHudController | null = null;
 let disconnectChromeBridge: (() => void) | null = null;
-const reviewMode = import.meta.env.DEV && new URLSearchParams(window.location.search).get("review") === "1";
+const searchParams = new URLSearchParams(window.location.search);
+const reviewMode = import.meta.env.DEV && searchParams.get("review") === "1";
+const captureMode = import.meta.env.DEV && searchParams.get("capture") === "1";
+const hideExperienceUi = captureMode || searchParams.get("ui") === "0";
+
+if (captureMode) document.documentElement.dataset.capture = "true";
+if (hideExperienceUi) document.documentElement.dataset.experienceUi = "hidden";
 let titleTheme: HTMLAudioElement | null = null;
 
 async function disposeSoundDesign(): Promise<void> {

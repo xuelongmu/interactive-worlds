@@ -519,6 +519,12 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 }
 .review-controls button:hover,
 .review-controls button:focus-visible { border-color: #d0b879; }
+html[data-experience-ui="hidden"] .review-controls,
+html[data-experience-ui="hidden"] .subtitle-bar,
+html[data-experience-ui="hidden"] .beat-guidance,
+html[data-experience-ui="hidden"] .stall-hint {
+  display: none !important;
+}
 .pause-overlay {
   position: absolute;
   inset: 0;
