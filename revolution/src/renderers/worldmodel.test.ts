@@ -893,6 +893,72 @@ describe("presentation and rollover gates", () => {
     expect(presented).toHaveBeenCalledWith("fallback");
   });
 
+  it("releases a failed local session before starting fallback from scene time zero", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const order: string[] = [];
+    const disconnect = vi.fn(async () => { order.push("disconnect"); });
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.disposed = false;
+    player.session = null;
+    player.unbindKeys = vi.fn();
+    player.opts = { onBranchTransientReset: vi.fn() };
+    player.telemetry = vi.fn();
+    player.reportStatus = vi.fn();
+    player.cancelVideoFrames = vi.fn();
+    player.startLive = vi.fn(async () => {
+      player.session = { disconnect };
+      throw new Error("session endpoint blocked");
+    });
+    player.startFallback = vi.fn(async () => { order.push("fallback"); });
+
+    await player.start();
+
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(disconnect).toHaveBeenCalledWith({
+      reason: "session endpoint blocked",
+      dispose: true,
+    });
+    expect(player.startFallback).toHaveBeenCalledWith(
+      false,
+      "Live connection failed: session endpoint blocked"
+    );
+    expect(order).toEqual(["disconnect", "fallback"]);
+    expect(player.mode).toBe("fallback");
+  });
+
+  it("releases the local runtime exactly once when a scene exits", async () => {
+    const clearPersistentInput = vi.fn().mockResolvedValue(undefined);
+    const disconnect = vi.fn().mockResolvedValue(undefined);
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.disposed = false;
+    player.opts = { onBranchTransientReset: vi.fn() };
+    player.emitLiveControls = vi.fn();
+    player.cancelPendingWaits = vi.fn();
+    player.cancelVideoFrames = vi.fn();
+    player.timers = new Set<number>();
+    player.unbindKeys = vi.fn();
+    player.controlTimers = { cancelAll: vi.fn() };
+    player.video = {
+      pause: vi.fn(),
+      removeEventListener: vi.fn(),
+      remove: vi.fn(),
+    };
+    player.poster = { remove: vi.fn() };
+    player.session = { clearPersistentInput, disconnect };
+
+    await player.dispose();
+    await player.dispose();
+
+    expect(clearPersistentInput).toHaveBeenCalledOnce();
+    expect(clearPersistentInput).toHaveBeenCalledWith("player-disposed");
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(disconnect).toHaveBeenCalledWith({
+      reason: "scene-disposed",
+      dispose: true,
+    });
+    expect(player.session).toBeNull();
+  });
+
   it("masks rollover until the successor run has a fresh frame and chunk", () => {
     const mask = vi.fn();
     const reveal = vi.fn();

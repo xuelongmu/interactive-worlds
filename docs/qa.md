@@ -27,11 +27,31 @@ Static tests do not replace real-browser or Reactor-dashboard checks.
 From `revolution/`, run:
 
 ```powershell
+npm run qa:drills
 npm test
 npm run test:server
 npm run typecheck
 npm run build
 ```
+
+`npm run qa:drills` is the repeatable, deterministic local subset. It executes
+the focused production contracts for session-start fallback, mid-session
+disconnect continuity, deferred readiness, missing-VO subtitle-only playback,
+story-state reload/resume/reset/signature persistence, and local runtime
+teardown. A passing run means only those simulated contracts passed.
+
+| Issue #22 area | Local drill coverage | Release evidence still required |
+| --- | --- | --- |
+| Session creation blocked or failed | Fallback starts at scene time zero; a partially created local session disconnects before fallback | Browser request-blocking run and Reactor dashboard count |
+| Mid-session disconnect | Recorded fallback inherits the authored clock and prior events remain one-shot | Live remote termination, video/cue evidence, and dashboard cleanup |
+| Slow/deferred readiness | Presentation waits for readiness signals; title-card loading semantics remain status text without a spinner contract | Real Slow 3G browser transition |
+| Missing VO | Subtitle duration and ambience restoration continue when narration loading returns no buffer | Real asset `404` in a browser |
+| Story state | Reload-equivalent storage reads, every chapter resume target, Begin Again, and signature persistence | Full browser arc including the Treaty rendering |
+| Session hygiene | Failed start, scene exit, prewarm failure/expiry, pagehide, and repeated disconnect are locally asserted | Dashboard-confirmed tab close/crash and full-day zero-orphan audit |
+
+The command deliberately does not mark Chrome, Edge, Safari, Firefox, Reactor
+dashboard, billing, production, or full-day acceptance as passed. Those gates
+remain `NOT RUN` until the corresponding evidence below is captured.
 
 Use a deployment with its exact commit visible in the evidence. Confirm the
 Delaware conditioning image and fallback MP4 return their expected media types
