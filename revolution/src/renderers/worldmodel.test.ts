@@ -324,6 +324,31 @@ function makeSession(model = new FakeModel()) {
   return { model, session, telemetry };
 }
 
+async function makeBlockedInputCleanup() {
+  const { model, session } = makeSession();
+  await session.prepare(new Blob(), "scene");
+  await session.begin();
+  await session.setInputEnabled(true);
+  await session.setMovement("forward", "idle");
+
+  let releaseCleanup = () => {};
+  const cleanupBlocked = new Promise<void>((resolve) => { releaseCleanup = resolve; });
+  const setMoveLongitudinal = model.setMoveLongitudinal.bind(model);
+  vi.spyOn(model, "setMoveLongitudinal").mockImplementationOnce(async (input) => {
+    await cleanupBlocked;
+    await setMoveLongitudinal(input);
+  });
+
+  const transitions: Promise<void>[] = [];
+  const setInputEnabled = session.setInputEnabled.bind(session);
+  vi.spyOn(session, "setInputEnabled").mockImplementation((enabled) => {
+    const transition = setInputEnabled(enabled);
+    transitions.push(transition);
+    return transition;
+  });
+  return { model, session, transitions, releaseCleanup };
+}
+
 describe("WorldModelSession lifecycle", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -494,6 +519,75 @@ describe("WorldModelSession lifecycle", () => {
       "look-h:right",
       "look-v:down",
     ]);
+  });
+
+  it("keeps movement and E/F enabled when rapid resume overtakes pause cleanup", async () => {
+    vi.stubGlobal("document", { pointerLockElement: null, exitPointerLock: vi.fn() });
+    const { model, session, transitions, releaseCleanup } = await makeBlockedInputCleanup();
+    const player = Object.create(WorldModelScenePlayer.prototype) as any;
+    player.paused = false;
+    player.presented = true;
+    player.mode = "live";
+    player.disposed = false;
+    player.controlsLocked = false;
+    player.navigationEnabled = true;
+    player.runtimeFallbackStarted = false;
+    player.rollover = { recycling: false };
+    player.controlTimers = { pause: vi.fn(), resume: vi.fn() };
+    player.video = {
+      pause: vi.fn(),
+      play: vi.fn().mockResolvedValue(undefined),
+      requestPointerLock: vi.fn(),
+    };
+    player.opts = { onBranchTransientReset: vi.fn() };
+    player.session = session;
+    player.emitLiveControls = vi.fn();
+
+    player.setPaused(true);
+    await vi.waitFor(() => expect(model.setMoveLongitudinal).toHaveBeenCalledWith({
+      move_longitudinal: "idle",
+    }));
+    player.setPaused(false);
+    releaseCleanup();
+    await Promise.all(transitions);
+
+    expect((session as any).inputEnabled).toBe(true);
+    await session.setMovement("back", "idle");
+    expect(model.calls).toContain("move-long:back");
+    const mapping = BRANCH_ACTION_MAPPINGS[0];
+    await expect(session.requestBranchAction({
+      momentId: mapping.momentId,
+      choiceId: mapping.choiceId,
+      requestId: mapping.requestId,
+    }, "Hands hold the hatchet briefly.")).resolves.toBeUndefined();
+  });
+
+  it("keeps movement and E/F enabled when rollover reveal overtakes mask cleanup", async () => {
+    const { model, session, transitions, releaseCleanup } = await makeBlockedInputCleanup();
+    const gate = new WorldModelRolloverGate({
+      mask: () => { void session.setInputEnabled(false); },
+      reveal: () => { void session.setInputEnabled(true); },
+    });
+
+    gate.markGenerationComplete();
+    await vi.waitFor(() => expect(model.setMoveLongitudinal).toHaveBeenCalledWith({
+      move_longitudinal: "idle",
+    }));
+    gate.markGenerationStarted();
+    gate.markFrameDisplayed();
+    gate.markChunkProduced();
+    releaseCleanup();
+    await Promise.all(transitions);
+
+    expect((session as any).inputEnabled).toBe(true);
+    await session.setMovement("back", "idle");
+    expect(model.calls).toContain("move-long:back");
+    const mapping = BRANCH_ACTION_MAPPINGS[1];
+    await expect(session.requestBranchAction({
+      momentId: mapping.momentId,
+      choiceId: mapping.choiceId,
+      requestId: mapping.requestId,
+    }, "Hands hold the broom briefly.")).resolves.toBeUndefined();
   });
 
   it("normalizes only backend prompt acceptance into one correlated branch confirmation", async () => {

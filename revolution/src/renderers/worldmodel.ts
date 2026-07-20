@@ -402,6 +402,7 @@ export class WorldModelSession {
   private sawFirstFrame = false;
   private sawFirstChunk = false;
   private inputEnabled = false;
+  private inputEnableGeneration = 0;
   private movementEnabled = true;
   private inputFlush: Promise<void> | null = null;
   private desired: InputState = {
@@ -549,8 +550,10 @@ export class WorldModelSession {
 
   /** Input is retained while false and coalesced to the latest state on enable. */
   async setInputEnabled(enabled: boolean): Promise<void> {
+    const generation = ++this.inputEnableGeneration;
     if (!enabled && this.inputEnabled) {
       await this.clearPersistentInput("input-disabled");
+      if (generation !== this.inputEnableGeneration) return;
       this.inputEnabled = false;
       this.updateReadiness({ inputConfirmed: false });
       return;
