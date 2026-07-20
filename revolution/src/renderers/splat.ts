@@ -66,6 +66,10 @@ export class SplatScene {
   private keys = new Set<string>();
   private movementIntent: Readonly<SemanticMovementIntent> = { forward: 0, strafe: 0 };
   private yaw = 0;
+  private captureBaseYaw = 0;
+  private captureElapsed = 0;
+  private readonly captureMode = import.meta.env.DEV
+    && new URLSearchParams(window.location.search).get("capture") === "1";
   private pitch = 0;
   private insideZones = new Set<string>();
   private zoneBoxes: { def: ZoneDef; box: THREE.Box3 }[] = [];
@@ -109,6 +113,7 @@ export class SplatScene {
     this.eyeHeight = manifest.locomotion?.eyeHeight ?? 1.65;
     this.speed = manifest.locomotion?.speed ?? 1.4; // slow, deliberate walk
     this.yaw = manifest.entry?.yaw ?? 0;
+    this.captureBaseYaw = this.yaw;
     this.semanticInput = new SemanticInputController({
       onMovement: (intent) => { this.movementIntent = intent; },
       onLook: (intent) => {
@@ -275,6 +280,11 @@ export class SplatScene {
     const dt = Math.min(this.clock.getDelta(), 0.1);
 
     if (!this.controlsLocked) {
+      if (this.captureMode) {
+        this.captureElapsed += dt;
+        this.yaw = this.captureBaseYaw + this.captureElapsed * 0.16;
+        this.pitch = Math.sin(this.captureElapsed * 0.55) * 0.025;
+      }
       this.camera.position.add(resolveSplatMovement(this.movementIntent, this.yaw, this.speed, dt));
       this.camera.rotation.set(this.pitch, this.yaw, 0);
     }
