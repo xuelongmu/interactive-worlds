@@ -44,6 +44,12 @@ import {
   setPauseDialogView,
   trapFocus,
 } from "./pause";
+import {
+  PERCEIVED_TIMING_POLICY,
+  requiredVoiceGapMs,
+  type VoiceSpacingPolicy,
+} from "../timing/policy";
+import type { TimingHandoffSample } from "../timing/telemetry";
 
 /** What the director needs from any scene surface. */
 interface Runner {
@@ -72,6 +78,8 @@ export interface DirectorOptions {
   onBeatNavigationSnapshot?: (snapshot: BeatNavigationSnapshot) => void;
   onBeatNavigationResult?: (result: BeatNavigationResult) => void;
   onPauseState?: (detail: RuntimePauseDetail) => void;
+  onTimingSample?: (sample: TimingHandoffSample) => void;
+  voiceSpacing?: Partial<VoiceSpacingPolicy>;
   reviewMode?: boolean;
 }
 
@@ -83,12 +91,22 @@ export const CHAPTER_STING_URL = "/assets/audio/music/chapter-sting.mp3";
 
 type DirectorAudio = Pick<
   AudioEngine,
-  "capturePlaybackGeneration" | "isPlaybackGenerationCurrent" | "playVoice" | "playOneShotAndWait"
+  "capturePlaybackGeneration" | "isPlaybackGenerationCurrent" | "playVoice" | "playOneShotAndWait" | "waitForPlaybackGap"
 >;
+
+export interface CueAudioTimingOptions {
+  sceneId?: string;
+  voiceSpacing?: VoiceSpacingPolicy;
+  onTimingSample?: (sample: TimingHandoffSample) => void;
+}
 
 /** Keep every editorial swell after its authored line and inside the cue
  * queue, so `then:` transitions cannot race ahead of the music. */
-export async function playCueAudio(audio: DirectorAudio, cue: Cue) {
+export async function playCueAudio(
+  audio: DirectorAudio,
+  cue: Cue,
+  timing: CueAudioTimingOptions = {},
+) {
   const generation = audio.capturePlaybackGeneration();
   if (cue.diegeticVo) {
     await audio.playVoice({
@@ -98,6 +116,16 @@ export async function playCueAudio(audio: DirectorAudio, cue: Cue) {
       duck: [],
     });
     if (!audio.isPlaybackGenerationCurrent(generation)) return;
+    const gapMs = requiredVoiceGapMs({ previous: "diegetic", next: "narrator" }, timing.voiceSpacing);
+    if (!await audio.waitForPlaybackGap(gapMs, generation)) return;
+    if (!audio.isPlaybackGenerationCurrent(generation)) return;
+    timing.onTimingSample?.({
+      id: `${timing.sceneId ?? "unknown-scene"}:${cue.id}:diegetic-to-narrator`,
+      sceneId: timing.sceneId ?? "unknown-scene",
+      from: "voice-complete",
+      to: "audible-beat",
+      gapMs,
+    });
   }
   await audio.playVoice({
     url: cue.vo ?? `/assets/audio/vo/${cue.id}.mp3`,
@@ -220,6 +248,7 @@ export class Director {
   private beatTransitioning = false;
   private beatFeedback: Extract<BeatNavigationResult, { outcome: "clamped" | "error" }> | null = null;
   private beatNavigationPromise: Promise<BeatNavigationResult> | null = null;
+  private readonly voiceSpacing: VoiceSpacingPolicy;
 
   private stage: HTMLElement;
   private canvasHost: HTMLElement;
@@ -234,6 +263,12 @@ export class Director {
   private reviewControlsEl: HTMLElement | null;
 
   constructor(private opts: DirectorOptions) {
+    this.voiceSpacing = {
+      diegeticToNarratorMs: opts.voiceSpacing?.diegeticToNarratorMs
+        ?? PERCEIVED_TIMING_POLICY.diegeticToNarratorMs,
+      narratorToNarratorMs: opts.voiceSpacing?.narratorToNarratorMs
+        ?? PERCEIVED_TIMING_POLICY.narratorToNarratorMs,
+    };
     opts.container.innerHTML = `
       <div class="stage">
         <div class="canvas-host"></div>
@@ -348,8 +383,14 @@ export class Director {
       const cueEngine = new CueEngine(manifest.cues, {
         play: (cue) => {
           this.setActiveBeat(manifest.id, cue.id);
-          return playCueAudio(this.audio, cue);
+          return playCueAudio(this.audio, cue, {
+            sceneId: manifest.id,
+            voiceSpacing: this.voiceSpacing,
+            onTimingSample: this.opts.onTimingSample,
+          });
         },
+        waitForVoiceGap: (durationMs) => this.audio.waitForPlaybackGap(durationMs),
+        onTimingSample: this.opts.onTimingSample,
         // audio-first: the visual consequence lands on the last word — and a
         // failed VO load still advances the story
         after: async (cue) => {
@@ -367,6 +408,9 @@ export class Director {
           const livePrewarm = prewarmDirectiveAt(manifest, cue.id);
           if (livePrewarm) this.prewarmWorldModel(livePrewarm);
         },
+      }, {
+        sceneId: manifest.id,
+        voiceSpacing: this.voiceSpacing,
       });
       this.cueEngine = cueEngine;
       // The chapter sting owns the card by itself. Only after it ends may
