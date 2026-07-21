@@ -44,6 +44,24 @@ test("a conditioning-frame correction invalidates a Marble take", () => {
   );
 });
 
+test("a fixed external conditioning image declares its own content signature", () => {
+  const conditioned = {
+    ...entry,
+    image: "public/reference/curated-source.jpg",
+    imageSignature: "sha256:abc123",
+  };
+
+  assert.doesNotThrow(() => worldGenerationSignature(conditioned, []));
+  assert.notEqual(
+    worldGenerationSignature(conditioned, []),
+    worldGenerationSignature({ ...conditioned, imageSignature: "sha256:def456" }, []),
+  );
+  assert.throws(
+    () => worldGenerationSignature({ ...conditioned, imageSignature: undefined }, []),
+    /has no imageSignature/,
+  );
+});
+
 test("a missing configured frame fails instead of permitting text-only generation", () => {
   const conditioned = { ...entry, image: "public/reference/example.jpg" };
 
@@ -83,7 +101,6 @@ test("source-conditioned worlds require newly curated takes", () => {
     "griffins-wharf",
     "lexington",
     "surrender-field",
-    "treaty-paris",
     "valley-forge",
   ];
 

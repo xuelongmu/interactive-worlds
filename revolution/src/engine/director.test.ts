@@ -359,6 +359,7 @@ describe("Director editorial music sequencing", () => {
       isPlaybackGenerationCurrent: vi.fn(() => true),
       playVoice: vi.fn(() => new Promise<void>((resolve) => { finishNarration = resolve; })),
       playOneShotAndWait: vi.fn(async () => { order.push("music"); }),
+      waitForPlaybackGap: vi.fn().mockResolvedValue(true),
     };
     const cue = {
       id: "TEST-MUSIC",
@@ -387,6 +388,7 @@ describe("Director editorial music sequencing", () => {
       isPlaybackGenerationCurrent: vi.fn((captured: number) => captured === generation),
       playVoice: vi.fn(() => new Promise<void>((resolve) => { finishNarration = resolve; })),
       playOneShotAndWait: vi.fn().mockResolvedValue(undefined),
+      waitForPlaybackGap: vi.fn().mockResolvedValue(true),
     };
     const cue = {
       id: "TEST-RESTART-MUSIC",
@@ -403,6 +405,58 @@ describe("Director editorial music sequencing", () => {
     finishNarration();
     await playback;
 
+    expect(audio.playOneShotAndWait).not.toHaveBeenCalled();
+  });
+
+  it("waits the configured diegetic-to-narrator gap and emits telemetry", async () => {
+    const samples: unknown[] = [];
+    const audio = {
+      capturePlaybackGeneration: vi.fn(() => 3),
+      isPlaybackGenerationCurrent: vi.fn(() => true),
+      playVoice: vi.fn().mockResolvedValue(undefined),
+      playOneShotAndWait: vi.fn().mockResolvedValue(undefined),
+      waitForPlaybackGap: vi.fn().mockResolvedValue(true),
+    };
+    const cue = {
+      id: "TEST-CAST",
+      trigger: { type: "scene-start" as const },
+      diegeticVo: "/cast.mp3",
+      diegeticSubtitle: "Make ready.",
+      subtitle: "The narrator follows.",
+    };
+
+    await playCueAudio(audio, cue, {
+      sceneId: "test-scene",
+      voiceSpacing: { diegeticToNarratorMs: 900, narratorToNarratorMs: 400 },
+      onTimingSample: (sample) => samples.push(sample),
+    });
+
+    expect(audio.waitForPlaybackGap).toHaveBeenCalledWith(900, 3);
+    expect(audio.playVoice.mock.calls.map(([options]) => options.bus)).toEqual(["diegetic", "narration"]);
+    expect(samples).toEqual([expect.objectContaining({
+      id: "test-scene:TEST-CAST:diegetic-to-narrator",
+      gapMs: 900,
+    })]);
+  });
+
+  it("does not start narration when restart invalidates the cast-to-narrator gap", async () => {
+    const audio = {
+      capturePlaybackGeneration: vi.fn(() => 5),
+      isPlaybackGenerationCurrent: vi.fn(() => true),
+      playVoice: vi.fn().mockResolvedValue(undefined),
+      playOneShotAndWait: vi.fn().mockResolvedValue(undefined),
+      waitForPlaybackGap: vi.fn().mockResolvedValue(false),
+    };
+    const cue = {
+      id: "TEST-CAST-RESTART",
+      trigger: { type: "scene-start" as const },
+      diegeticVo: "/cast.mp3",
+      subtitle: "Cancelled narration.",
+    };
+
+    await playCueAudio(audio, cue);
+
+    expect(audio.playVoice).toHaveBeenCalledOnce();
     expect(audio.playOneShotAndWait).not.toHaveBeenCalled();
   });
 

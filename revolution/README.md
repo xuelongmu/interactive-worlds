@@ -18,6 +18,11 @@ npm run dev
 - `/spikes/worldmodel/` — **Spike 1**: live Lingbot World 2 session (Delaware boat)
 - `/spikes/splat/` — **Spike 2**: walkable splat + cue zones (Lexington)
 
+Append `?ui=0` to any experience URL to hide subtitles, guidance, hints, and
+review controls while keeping the pause menu available. In development,
+`?capture=1` also enables the clean-UI state and a slow automated camera move
+for splat scenes.
+
 Keys go in `revolution/.env` (or the parent workspace `.env`) — see
 `.env.example`. Only `REACTOR_API_KEY` is needed to run Spike 1; the rest are
 pipeline-time keys.

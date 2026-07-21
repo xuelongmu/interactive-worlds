@@ -5,7 +5,9 @@ dist/
 production.env
 # generated, reproducible via pipeline/
 public/assets/
-public/reference/
+public/reference/*
+!public/reference/treaty-paris-benjamin-west.jpg
+artifacts/world-backups/
 pipeline/.*-cache.json
 .artifacts/
 snapshots/
