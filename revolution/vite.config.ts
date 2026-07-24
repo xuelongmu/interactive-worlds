@@ -121,6 +121,7 @@ export default defineConfig({
         "spike-lexington-volley": resolve(root, "spikes/lexington-volley/index.html"),
         "spike-sandtable": resolve(root, "spikes/sandtable/index.html"),
         "spike-mechanics": resolve(root, "spikes/mechanics/index.html"),
+        "spike-signing": resolve(root, "spikes/signing/index.html"),
       },
     },
   },
