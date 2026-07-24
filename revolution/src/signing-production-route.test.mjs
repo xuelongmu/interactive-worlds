@@ -26,5 +26,6 @@ test("signing spike observes the authored Delaware handoff", () => {
   const source = readFileSync(new URL("spikes/signing/main.ts", root), "utf8");
   assert.match(source, /after:\s*async \(cue\)/);
   assert.match(source, /cue\.then !== "scene:delaware"/);
-  assert.match(source, /next scene: Delaware/);
+  assert.match(source, /new Director\(/);
+  assert.match(source, /await next\.start\("delaware"\)/);
 });

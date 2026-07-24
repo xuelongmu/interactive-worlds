@@ -14,8 +14,18 @@ const cueEngine = new CueEngine(manifest.cues, {
   after: async (cue) => {
     if (cue.then !== "scene:delaware") return;
     scene.dispose();
-    document.querySelector("#app")!.innerHTML = `<div style="position:absolute;inset:0;display:grid;place-items:center;background:#17120d;color:#f1e6cf;font:24px Georgia,serif"><div>Transitioning to Delaware…<small style="display:block;margin-top:12px;font-size:15px;opacity:.75">Declaration complete · next scene: Delaware</small></div></div>`;
-    status.textContent = "Next scene: Delaware";
+    status.textContent = "Loading Delaware…";
+    const [{ Director }, sound] = await Promise.all([
+      import("../../src/engine/director"),
+      import("../../src/sound/sound-design"),
+    ]);
+    const audio = new sound.SoundDesignController(new sound.BrowserSoundPlayback());
+    const next = new Director({
+      container: document.querySelector("#app")!,
+      onExit: () => { status.textContent = "Delaware complete"; },
+      ...sound.createSoundDirectorHooks(audio),
+    });
+    await next.start("delaware");
   },
 });
 
