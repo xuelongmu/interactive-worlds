@@ -7,7 +7,8 @@ import type { GameplaySceneOptions, GameplaySceneRunner } from "./gameplay";
 import { DeclarationSigningFlow } from "./declaration-flow";
 import { renderDryingSignature, type TimedSignatureStroke } from "./signature";
 
-const MODEL_ROOT = "/assets/models";
+const DESK_MODEL_ROOT = "/assets/models/tripo-p0/writing-desk/20260723T170548-0700-cleaned-v1";
+const OPTIONAL_MODEL_ROOT = "/assets/models";
 
 /** Declaration Actor scene: witness the room, approach the table, then sign. */
 export class DeclarationSigningScene implements GameplaySceneRunner {
@@ -168,9 +169,9 @@ export class DeclarationSigningScene implements GameplaySceneRunner {
 
   private async loadApprovedDesk(group: THREE.Group) {
     const loader = new GLTFLoader();
-    const desk = await this.loadModel(loader, "writing-desk.glb"); if (desk) { desk.scale.setScalar(0.9); desk.position.y = -0.06; group.add(desk); }
-    const inkwell = await this.loadModel(loader, "inkwell.glb"); if (inkwell) { inkwell.scale.setScalar(0.22); inkwell.position.set(-1.25, 0.22, 0.2); group.add(inkwell); }
-    const quill = await this.loadModel(loader, "quill.glb");
+    const desk = await this.loadModel(loader, "writing-desk.glb", DESK_MODEL_ROOT); if (desk) { desk.scale.setScalar(0.9); desk.position.y = -0.06; group.add(desk); }
+    const inkwell = await this.loadModel(loader, "inkwell.glb", OPTIONAL_MODEL_ROOT); if (inkwell) { inkwell.scale.setScalar(0.22); inkwell.position.set(-1.25, 0.22, 0.2); group.add(inkwell); }
+    const quill = await this.loadModel(loader, "quill.glb", OPTIONAL_MODEL_ROOT);
     if (quill && this.quill) {
       const fallback = this.quill;
       quill.scale.setScalar(0.35); quill.position.copy(fallback.position); quill.rotation.copy(fallback.rotation); quill.userData.quill = true;
@@ -178,8 +179,8 @@ export class DeclarationSigningScene implements GameplaySceneRunner {
     }
   }
 
-  private async loadModel(loader: GLTFLoader, filename: string) {
-    try { const head = await fetch(`${MODEL_ROOT}/${filename}`, { method: "HEAD" }); if (!head.ok || (head.headers.get("content-type") ?? "").includes("text/html")) return null; return (await loader.loadAsync(`${MODEL_ROOT}/${filename}`)).scene; }
+  private async loadModel(loader: GLTFLoader, filename: string, root: string) {
+    try { const url = `${root}/${filename}`; const head = await fetch(url, { method: "HEAD" }); if (!head.ok || (head.headers.get("content-type") ?? "").includes("text/html")) return null; return (await loader.loadAsync(url)).scene; }
     catch { return null; }
   }
 
