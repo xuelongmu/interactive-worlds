@@ -44,4 +44,6 @@ test("Declaration signing surface uses the authoritative reference texture", () 
   assert.equal(provenance.credit, "U.S. National Archives; public domain, no permission required");
   assert.equal(provenance.derived.dimensions, "1313x1600");
   assert.equal(provenance.derived.sha256, "29FE8C8DED7E7794FB59D12455DF3065B1D21550A0ED716CBBA4DE7BB13F2AEB");
+  assert.match(source, /canvas\.width = 1313; canvas\.height = 1600/);
+  assert.match(source, /PlaneGeometry\(2\.4, 2\.4 \/ DECLARATION_REFERENCE_ASPECT/);
 });

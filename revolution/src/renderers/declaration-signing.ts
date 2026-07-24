@@ -9,6 +9,7 @@ import { renderDryingSignature, type TimedSignatureStroke } from "./signature";
 
 const DESK_MODEL_ROOT = "/assets/models/tripo-p0/writing-desk/20260723T170548-0700-cleaned-v1";
 const OPTIONAL_MODEL_ROOT = "/assets/models";
+const DECLARATION_REFERENCE_ASPECT = 1313 / 1600;
 
 /** Declaration Actor scene: witness the room, approach the table, then sign. */
 export class DeclarationSigningScene implements GameplaySceneRunner {
@@ -145,7 +146,7 @@ export class DeclarationSigningScene implements GameplaySceneRunner {
   }
 
   private addWritingSurface(group: THREE.Group) {
-    const canvas = document.createElement("canvas"); canvas.width = 1200; canvas.height = 520;
+    const canvas = document.createElement("canvas"); canvas.width = 1313; canvas.height = 1600;
     const ctx = canvas.getContext("2d")!;
     ctx.fillStyle = "#ead9b6"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.strokeStyle = "rgba(83,57,32,.22)"; ctx.lineWidth = 3; ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
@@ -157,7 +158,7 @@ export class DeclarationSigningScene implements GameplaySceneRunner {
       ctx.moveTo(x * canvas.width, y * canvas.height); ctx.lineTo((x + 0.035) * canvas.width, (y - 0.012) * canvas.height); ctx.stroke();
     }
     const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
-    const parchment = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.48), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.92, side: THREE.DoubleSide }));
+    const parchment = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4 / DECLARATION_REFERENCE_ASPECT), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.92, side: THREE.DoubleSide }));
     parchment.rotation.x = -Math.PI / 2; parchment.position.set(0, 0.14, 0); parchment.userData.parchment = true; group.add(parchment);
     this.canvas = canvas; this.canvasContext = ctx; this.texture = texture; this.parchment = parchment;
     const reference = new Image();
