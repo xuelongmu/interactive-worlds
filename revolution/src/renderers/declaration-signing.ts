@@ -23,6 +23,7 @@ export class DeclarationSigningScene implements GameplaySceneRunner {
   private canvas: HTMLCanvasElement | null = null;
   private canvasContext: CanvasRenderingContext2D | null = null;
   private texture: THREE.CanvasTexture | null = null;
+  private referenceImage: HTMLImageElement | null = null;
   private camera: THREE.PerspectiveCamera | null = null;
   private locked = false;
   private paused = false;
@@ -159,6 +160,9 @@ export class DeclarationSigningScene implements GameplaySceneRunner {
     const parchment = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.48), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.92, side: THREE.DoubleSide }));
     parchment.rotation.x = -Math.PI / 2; parchment.position.set(0, 0.14, 0); parchment.userData.parchment = true; group.add(parchment);
     this.canvas = canvas; this.canvasContext = ctx; this.texture = texture; this.parchment = parchment;
+    const reference = new Image();
+    reference.onload = () => { this.referenceImage = reference; this.drawSignature(); };
+    reference.src = "/reference/declaration.jpg";
   }
 
   private addHand(group: THREE.Group) {
@@ -210,10 +214,7 @@ export class DeclarationSigningScene implements GameplaySceneRunner {
     if (!this.canvasContext || !this.texture) return;
     this.canvasContext.clearRect(0, 0, this.canvas!.width, this.canvas!.height);
     this.canvasContext.fillStyle = "#ead9b6"; this.canvasContext.fillRect(0, 0, this.canvas!.width, this.canvas!.height);
-    this.canvasContext.strokeStyle = "rgba(83,57,32,.22)"; this.canvasContext.lineWidth = 3; this.canvasContext.strokeRect(12, 12, this.canvas!.width - 24, this.canvas!.height - 24);
-    this.canvasContext.font = "18px Georgia"; this.canvasContext.fillStyle = "rgba(62,43,27,.72)"; this.canvasContext.fillText("IN CONGRESS, July 4, 1776", 54, 64);
-    this.canvasContext.font = "italic 16px Georgia"; this.canvasContext.fillText("We hold these truths to be self-evident…", 54, 105); this.canvasContext.fillText("The signatures continue below.", 54, 145);
-    for (let i = 0; i < 56; i++) { this.canvasContext.strokeStyle = "rgba(64,45,28,.42)"; this.canvasContext.lineWidth = 1; this.canvasContext.beginPath(); const x = 0.53 + (i % 7) * 0.06; const y = 0.56 + Math.floor(i / 7) * 0.047; this.canvasContext.moveTo(x * this.canvas!.width, y * this.canvas!.height); this.canvasContext.lineTo((x + 0.035) * this.canvas!.width, (y - 0.012) * this.canvas!.height); this.canvasContext.stroke(); }
+    if (this.referenceImage) this.canvasContext.drawImage(this.referenceImage, 0, 0, this.canvas!.width, this.canvas!.height);
     const strokes = this.flow.strokes.map((stroke, index) => ({ ...stroke, completedAt: this.timedStrokes[index]?.completedAt ?? this.phaseStartedAt }));
     renderDryingSignature(this.canvasContext, strokes, performance.now()); this.texture.needsUpdate = true;
   }

@@ -36,3 +36,12 @@ test("Declaration uses only the approved canonical desk rewrite", () => {
   assert.match(source, /OPTIONAL_MODEL_ROOT = "\/assets\/models"/);
   assert.doesNotMatch(source, /tripo-p0\/(?:quill|inkwell|parchment)\//);
 });
+
+test("Declaration signing surface uses the authoritative reference texture", () => {
+  const source = readFileSync(new URL("./renderers/declaration-signing.ts", import.meta.url), "utf8");
+  const provenance = JSON.parse(readFileSync(new URL("../public/reference/declaration-provenance.json", import.meta.url), "utf8"));
+  assert.match(source, /reference\.src = "\/reference\/declaration\.jpg"/);
+  assert.equal(provenance.credit, "U.S. National Archives; public domain, no permission required");
+  assert.equal(provenance.derived.dimensions, "1313x1600");
+  assert.equal(provenance.derived.sha256, "29FE8C8DED7E7794FB59D12455DF3065B1D21550A0ED716CBBA4DE7BB13F2AEB");
+});
