@@ -24,7 +24,7 @@ test("Declaration cue manifest preserves the silent dry and +8s narration beats"
   assert.deepEqual(cues[4].trigger, { type: "action", name: "quill-down" });
 });
 
-test("signing flow emits four actions, captures normalized vectors, and persists", () => {
+test("Finish drying reaches quill-down without a second user click", () => {
   let now = 1_000;
   const actions = [];
   const saves = [];
@@ -45,6 +45,7 @@ test("signing flow emits four actions, captures normalized vectors, and persists
   assert.equal(flow.canSetDown(), false);
   now += 8_000;
   assert.equal(flow.setDown(), true);
+  assert.equal(flow.phase, "complete");
   assert.deepEqual(actions, ["approach-table", "quill-pickup", "sign-complete", "quill-down"]);
   assert.equal(saves.length, 2);
 });

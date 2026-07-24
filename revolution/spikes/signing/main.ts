@@ -11,6 +11,12 @@ const log: string[] = [];
 const cueEngine = new CueEngine(manifest.cues, {
   play: async (cue) => { status.textContent = cue.subtitle ?? `cue ${cue.id}`; },
   action: (cue) => { log.unshift(cue.id); events.innerHTML = log.slice(0, 8).map((id) => `<li>${id}</li>`).join(""); },
+  after: async (cue) => {
+    if (cue.then !== "scene:delaware") return;
+    scene.dispose();
+    document.querySelector("#app")!.innerHTML = `<div style="position:absolute;inset:0;display:grid;place-items:center;background:#17120d;color:#f1e6cf;font:24px Georgia,serif"><div>Transitioning to Delaware…<small style="display:block;margin-top:12px;font-size:15px;opacity:.75">Declaration complete · next scene: Delaware</small></div></div>`;
+    status.textContent = "Next scene: Delaware";
+  },
 });
 
 const scene = new DeclarationSigningScene({

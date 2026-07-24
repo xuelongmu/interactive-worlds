@@ -21,3 +21,10 @@ test("Declaration signing spike is a production Vite input", () => {
     assert.match(html, /spike-signing-[A-Za-z0-9_-]+\.js/);
   }
 });
+
+test("signing spike observes the authored Delaware handoff", () => {
+  const source = readFileSync(new URL("spikes/signing/main.ts", root), "utf8");
+  assert.match(source, /after:\s*async \(cue\)/);
+  assert.match(source, /cue\.then !== "scene:delaware"/);
+  assert.match(source, /next scene: Delaware/);
+});

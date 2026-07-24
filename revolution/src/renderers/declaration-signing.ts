@@ -26,6 +26,7 @@ export class DeclarationSigningScene implements GameplaySceneRunner {
   private locked = false;
   private paused = false;
   private phaseStartedAt = performance.now();
+  private dryingTimer: number | null = null;
   private readonly timedStrokes: TimedSignatureStroke[];
   private drawing = false;
   private raycaster = new THREE.Raycaster();
@@ -105,10 +106,21 @@ export class DeclarationSigningScene implements GameplaySceneRunner {
     finish.addEventListener("click", () => {
       if (!this.flow.completeSignature()) return;
       finish.disabled = true; status.textContent = "The iron-gall ink is drying…"; this.phaseStartedAt = performance.now();
+      // Keep the historical eight-second drying beat, then complete the handoff
+      // automatically. The button remains available as an explicit early action
+      // only after the same prerequisite has elapsed.
+      this.dryingTimer = window.setTimeout(() => {
+        this.dryingTimer = null;
+        completeQuillDown();
+      }, 8_000);
     });
-    down.addEventListener("click", () => {
+    const completeQuillDown = () => {
       if (!this.flow.setDown()) return;
+      if (this.dryingTimer !== null) { window.clearTimeout(this.dryingTimer); this.dryingTimer = null; }
       this.options.onStatus?.("Declaration signed"); status.textContent = "Quill down."; finish.disabled = true; down.disabled = true;
+    };
+    down.addEventListener("click", () => {
+      completeQuillDown();
     });
     const tick = () => {
       if (!this.renderer || !this.camera || this.paused) return;
@@ -214,5 +226,5 @@ export class DeclarationSigningScene implements GameplaySceneRunner {
   private onResize = () => { if (!this.renderer || !this.camera) return; const width = this.root.clientWidth || window.innerWidth; const height = this.root.clientHeight || window.innerHeight; this.renderer.setSize(width, height); this.camera.aspect = width / height; this.camera.updateProjectionMatrix(); };
   setControlsLocked(locked: boolean) { this.locked = locked; }
   setPaused(paused: boolean) { this.paused = paused; }
-  dispose() { this.establishing?.dispose(); this.establishing = null; cancelAnimationFrame(this.animation); window.removeEventListener("resize", this.onResize); this.renderer?.dispose(); this.renderer?.domElement.remove(); this.renderer = null; this.texture?.dispose(); this.root.remove(); }
+  dispose() { this.establishing?.dispose(); this.establishing = null; cancelAnimationFrame(this.animation); if (this.dryingTimer !== null) window.clearTimeout(this.dryingTimer); this.dryingTimer = null; window.removeEventListener("resize", this.onResize); this.renderer?.dispose(); this.renderer?.domElement.remove(); this.renderer = null; this.texture?.dispose(); this.root.remove(); }
 }
