@@ -1,0 +1,9 @@
+{
+  "sourcePage": "https://www.archives.gov/founding-docs/downloads",
+  "sourceImage": "https://www.archives.gov/files/founding-docs/downloads/Declaration_Pg1of1_AC.jpg",
+  "retrieved": "2026-07-24",
+  "credit": "U.S. National Archives; public domain, no permission required",
+  "original": { "sha256": "C92C4A00392C4E70BEF72AF61ED1F848B81330BE40E4C8DD4896E3E4D0B89504", "bytes": 60478120, "dimensions": "7503x9140" },
+  "derived": { "path": "/reference/declaration.jpg", "sha256": "29FE8C8DED7E7794FB59D12455DF3065B1D21550A0ED716CBBA4DE7BB13F2AEB", "bytes": 429704, "dimensions": "1313x1600", "method": "ImageMagick resize max dimension 1600, metadata stripped, JPEG quality 82" }
+}
+
