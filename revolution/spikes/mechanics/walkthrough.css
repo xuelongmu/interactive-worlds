@@ -1,0 +1,163 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background: #0b0d10;
+  color: #edf0f2;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: #0b0d10; color: #edf0f2; }
+button, select { font: inherit; }
+button { cursor: pointer; }
+code, pre, kbd { font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace; }
+
+.mechanics-walkthrough {
+  width: min(1600px, 100%);
+  margin: 0 auto;
+  padding: 32px clamp(18px, 4vw, 56px) 72px;
+}
+
+.walkthrough-header,
+.section-heading,
+.walkthrough-controls {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.walkthrough-header {
+  padding: 24px 0 28px;
+  border-bottom: 1px solid #2b3138;
+}
+
+h1, h2, h3, p { margin-top: 0; }
+h1 { margin-bottom: 10px; font-size: clamp(34px, 5vw, 64px); letter-spacing: -0.04em; }
+h2 { margin-bottom: 4px; font-size: clamp(24px, 3vw, 36px); }
+h3 { margin-bottom: 4px; }
+.lede { max-width: 760px; color: #aeb7c0; line-height: 1.6; }
+.eyebrow { margin-bottom: 8px; color: #72d5b4; font: 700 12px/1.2 "Cascadia Code", monospace; letter-spacing: .12em; text-transform: uppercase; }
+.warning-badge,
+.simulation-label {
+  border: 1px solid #e6a04b;
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: #ffc47b;
+  font: 700 12px/1 "Cascadia Code", monospace;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+
+.walkthrough-controls {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  align-items: center;
+  margin: 18px 0 28px;
+  padding: 12px 14px;
+  border: 1px solid #303740;
+  border-radius: 12px;
+  background: rgba(17, 21, 25, .94);
+  backdrop-filter: blur(14px);
+}
+.walkthrough-controls p { margin: 0; color: #c9d0d6; }
+.walkthrough-controls > div,
+.moment-actions,
+.simulation-controls { display: flex; gap: 10px; flex-wrap: wrap; }
+
+button {
+  border: 1px solid #55cba4;
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: #123a31;
+  color: #dcfff4;
+  font-weight: 700;
+}
+button.secondary { border-color: #4b5662; background: #20262d; color: #d5dbe0; }
+button:hover:not(:disabled), button:focus-visible { border-color: #dffcef; background: #185244; }
+button:disabled { cursor: not-allowed; opacity: .42; }
+
+.stage-section,
+.moments-section,
+.observations-section,
+.simulation-section { margin-top: 42px; }
+.section-heading { margin-bottom: 16px; }
+.section-heading > p { max-width: 620px; color: #8f99a3; line-height: 1.5; }
+
+.mechanics-stage-host {
+  position: relative;
+  min-height: min(62vw, 720px);
+  max-height: 720px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid #39424b;
+  border-radius: 14px;
+  background: #030405;
+  isolation: isolate;
+}
+.mechanics-stage-host > .stage { position: absolute !important; inset: 0 !important; }
+.stage-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: #77828d;
+  font-family: "Cascadia Code", monospace;
+}
+
+.moment-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.moment-card,
+.observation-panel,
+.state-snapshot,
+.simulation-section {
+  border: 1px solid #2d343c;
+  border-radius: 12px;
+  background: #12161a;
+}
+.moment-card { padding: 18px; }
+.moment-heading { display: flex; gap: 12px; align-items: flex-start; }
+.moment-heading p { color: #87919b; }
+.moment-index { color: #72d5b4; font: 700 13px/1.7 "Cascadia Code", monospace; }
+.moment-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; }
+.moment-facts div { padding: 8px; border-radius: 8px; background: #0b0e11; }
+.moment-facts dt { color: #77828d; font-size: 11px; text-transform: uppercase; }
+.moment-facts dd { margin: 4px 0 0; font: 700 18px/1 "Cascadia Code", monospace; }
+details { color: #b8c0c8; }
+summary { cursor: pointer; font-weight: 700; }
+.cue-sequence { max-height: 180px; overflow: auto; padding-left: 22px; }
+.cue-sequence li { margin: 6px 0; }
+.cue-sequence span { display: block; color: #7f8993; font-size: 12px; }
+.branch-summary { margin: 14px 0; padding: 10px; border-left: 3px solid #485562; background: #0d1013; }
+.branch-summary > span { display: block; color: #75808b; font-size: 11px; text-transform: uppercase; }
+.branch-summary ul { margin: 8px 0 0; padding-left: 0; list-style: none; }
+.branch-summary li { margin: 5px 0; }
+kbd { display: inline-block; min-width: 24px; padding: 2px 5px; border: 1px solid #65717d; border-radius: 4px; text-align: center; }
+
+.observation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.observation-panel { min-height: 260px; padding: 14px; }
+.observation-panel h3 { color: #72d5b4; text-transform: uppercase; letter-spacing: .08em; }
+.observation-panel ol { max-height: 360px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+.observation-panel li { padding: 10px 0; border-top: 1px solid #252b31; }
+.observation-heading { color: #c9d1d8; font: 700 11px/1.4 "Cascadia Code", monospace; }
+.observation-panel pre,
+.state-snapshot pre,
+.simulation-section pre { overflow: auto; white-space: pre-wrap; word-break: break-word; color: #8fa0ad; font-size: 11px; }
+.empty-observation { color: #6e7882; }
+.state-snapshot { margin-top: 14px; padding: 14px; }
+
+.simulation-section { padding: 20px; border-color: #6c4d29; }
+.simulation-section > p { max-width: 880px; color: #b7a995; line-height: 1.55; }
+.simulation-controls { align-items: flex-end; }
+.simulation-controls label { display: grid; gap: 6px; color: #9ca6af; font-size: 12px; }
+select { min-width: min(520px, 80vw); border: 1px solid #4a545e; border-radius: 8px; padding: 9px; background: #0b0e11; color: #edf0f2; }
+.simulation-section pre { min-height: 110px; padding: 12px; border-radius: 8px; background: #080a0c; }
+
+.dev-unavailable { max-width: 720px; margin: 15vh auto; padding: 32px; }
+
+@media (max-width: 760px) {
+  .walkthrough-header, .section-heading, .walkthrough-controls { flex-direction: column; }
+  .observation-grid { grid-template-columns: 1fr; }
+  .mechanics-stage-host { min-height: 360px; aspect-ratio: auto; }
+  .warning-badge { white-space: normal; }
+}
