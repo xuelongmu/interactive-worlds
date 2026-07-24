@@ -5,9 +5,9 @@
 export const worlds = [
   {
     scene: "lexington",
-    // Prompt corrected after this scene's previous take; generate and curate a new pin.
-    worldId: null,
-    worldSignature: null,
+    // Source-conditioned take curated from the Doolittle/Earl-grounded frame.
+    worldId: "5c74350b-8ff6-4470-8fa0-bdacead34305",
+    worldSignature: "3424bfec9257f7b34340e7700cef87f39f44205c",
     // GPT Image 2 starting frame (pipeline/frames.mjs) — uploaded as the
     // image prompt; the text prompt rides along as guidance.
     image: "public/reference/lexington.jpg",

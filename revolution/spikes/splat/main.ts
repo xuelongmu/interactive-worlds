@@ -21,9 +21,32 @@ const manifest = structuredClone(lexington) as SceneManifest;
 const params = new URLSearchParams(location.search);
 const FALLBACK_SPLAT = "https://sparkjs.dev/assets/splats/butterfly.spz";
 
+type WorldMetadata = {
+  worldId?: string;
+  generationSignature?: string;
+};
+
 const splatUrl = params.get("splat") ?? undefined;
 const colliderUrl = params.get("collider") ?? undefined;
+const metadataUrl = params.get("meta") ?? (
+  !splatUrl && manifest.assets.splat
+    ? manifest.assets.splat.replace(/\.spz$/, ".meta.json")
+    : undefined
+);
+const captureX = finiteParam("x");
+const captureZ = finiteParam("z");
+const captureYaw = finiteParam("yaw");
+if (captureYaw !== undefined) {
+  manifest.entry = { ...manifest.entry, yaw: captureYaw };
+}
 let usingFallback = false;
+
+function finiteParam(name: string): number | undefined {
+  const raw = params.get(name);
+  if (raw === null) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : undefined;
+}
 
 /** Vite's SPA fallback answers 200 + text/html for missing files, so a bare
  *  ok-check lies; require a non-HTML content-type to count as present. */
@@ -48,6 +71,16 @@ if (!splatUrl && !(await assetExists(manifest.assets.splat!))) {
 }
 if (manifest.assets.collider && !(await assetExists(manifest.assets.collider))) {
   delete manifest.assets.collider;
+}
+
+let worldMetadata: WorldMetadata | null = null;
+if (!usingFallback && metadataUrl) {
+  try {
+    const response = await fetch(metadataUrl);
+    if (response.ok) worldMetadata = await response.json() as WorldMetadata;
+  } catch {
+    // SplatScene owns the runtime metadata warning and fallback behavior.
+  }
 }
 
 const banner = document.getElementById("banner")!;
@@ -105,6 +138,8 @@ const scene = new SplatScene({
   colliderUrl,
   onEvent: (event) => cueEngine.handleEvent(event),
 });
+if (captureX !== undefined) scene.camera.position.x = captureX;
+if (captureZ !== undefined) scene.camera.position.z = captureZ;
 
 scene.onUpdate = (dt) => {
   cueEngine.update(dt);
@@ -116,8 +151,18 @@ if (usingFallback) scene.splatMesh?.position.set(0, 1.5, -4);
 
 setInterval(() => {
   const p = scene.position;
+  const { x: pitch, y: yaw } = scene.camera.rotation;
+  const worldIdentity = worldMetadata?.worldId
+    ? `${worldMetadata.worldId}<br/>signature: ${worldMetadata.generationSignature ?? "missing"}`
+    : usingFallback ? "placeholder" : splatUrl ? "custom URL (unverified)" : "metadata missing";
+  const deterministicPose = captureX !== undefined || captureZ !== undefined || captureYaw !== undefined
+    ? "URL capture pose (visual verification required)"
+    : "interactive walk";
   hud.innerHTML = `<b>${manifest.title}</b><br/>
-    pos: ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}<br/>
+    world: ${worldIdentity}<br/>
+    mode: ${deterministicPose}<br/>
+    pos: ${p.x.toFixed(3)}, ${p.y.toFixed(3)}, ${p.z.toFixed(3)}<br/>
+    yaw: ${yaw.toFixed(5)} · pitch: ${pitch.toFixed(5)}<br/>
     click to capture mouse · <b>WASD</b> walk · <b>Z</b> zone debug ${scene.debugVisible ? '<span class="ok">(on)</span>' : ""}<br/>
     cues fired:<br/>${cueLog.slice(0, 6).map((c) => `&nbsp;&nbsp;${c}`).join("<br/>") || "&nbsp;&nbsp;—"}`;
 }, 250);
