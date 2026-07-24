@@ -163,7 +163,7 @@ export class DeclarationSigningScene implements GameplaySceneRunner {
     this.canvas = canvas; this.canvasContext = ctx; this.texture = texture; this.parchment = parchment;
     const reference = new Image();
     reference.onload = () => { this.referenceImage = reference; this.drawSignature(); };
-    reference.src = "/reference/declaration.jpg";
+    reference.src = "/historical/declaration.jpg";
   }
 
   private addHand(group: THREE.Group) {
